@@ -1,0 +1,16 @@
+.gradle/
+.gradle-home/
+.android-home/
+.kotlin/
+.toolchains/
+.gradle-bootstrap/
+local.properties
+**/build/
+*.iml
+.idea/
+captures/
+promp.md
+/*.xml
+/*.png
+/*.jpg
+!AotearoaGuandanLogo.png

@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.GuanDanScore" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/green_700</item>
+        <item name="colorSecondary">@color/gold</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:navigationBarColor">@color/green_900</item>
+    </style>
+</resources>

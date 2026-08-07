@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mainScroll"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/cream">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="掼蛋牌力" android:textColor="@color/green_900" android:textSize="30sp" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="拍清牌角 · 确认 27 张 · 计算最优拆牌" android:textColor="#59645E" android:layout_marginBottom="16dp" />
+        <ImageView android:id="@+id/photo" android:layout_width="match_parent" android:layout_height="300dp" android:background="#E3E7E1" android:scaleType="fitCenter" android:adjustViewBounds="false" android:contentDescription="手牌照片" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp">
+            <com.google.android.material.button.MaterialButton android:id="@+id/camera" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:text="拍照" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/gallery" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:layout_marginStart="8dp" android:text="相册" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+            <com.google.android.material.button.MaterialButton android:id="@+id/randomHand" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:text="随机发牌" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/saveImage" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:layout_marginStart="8dp" android:text="保存图片" android:enabled="false" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+            <com.google.android.material.button.MaterialButton android:id="@+id/onlineRecognition" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:text="联网识图" android:enabled="false" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/aiSettings" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:layout_marginStart="8dp" android:text="AI 设置" />
+        </LinearLayout>
+        <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="10dp" android:text="请拍摄或选择一张照片" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="本局打：" android:textStyle="bold" />
+            <Spinner android:id="@+id/level" android:layout_width="100dp" android:layout_height="48dp" />
+            <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/addCard" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="52dp" android:text="+ 补录" />
+        </LinearLayout>
+        <com.google.android.material.chip.ChipGroup android:id="@+id/cards" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingBottom="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/calculate" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="8dp" android:text="计算综合牌力" android:enabled="false" />
+        <com.google.android.material.card.MaterialCardView android:id="@+id/resultCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+                <TextView android:id="@+id/spi" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/green_900" android:textSize="28sp" android:textStyle="bold" />
+                <TextView android:id="@+id/summary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="16sp" />
+                <TextView android:id="@+id/breakdown" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:lineSpacingExtra="4dp" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/sortedImage" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="12dp" android:text="生成并保存最优拆牌图" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</ScrollView>
