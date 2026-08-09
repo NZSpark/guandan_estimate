@@ -36,7 +36,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var ui: ActivityMainBinding
-    private val recognizer = CardRecognizer()
+    private val recognizer by lazy { CardRecognizer(this) }
     private val aiClient = AiRecognitionClient()
     private lateinit var aiSettingsStore: AiSettingsStore
     private val imageRenderer by lazy { HandImageRenderer(this) }

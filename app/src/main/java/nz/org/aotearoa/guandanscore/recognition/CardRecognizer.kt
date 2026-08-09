@@ -1,5 +1,6 @@
 package nz.org.aotearoa.guandanscore.recognition
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.PointF
@@ -15,9 +16,18 @@ import kotlin.math.hypot
 
 data class RecognitionResult(val cards: List<Card>, val warnings: List<String>)
 
-class CardRecognizer {
+class CardRecognizer(context: Context) {
     private val client = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    private data class Candidate(val rank: Rank, val suit: Suit, val x: Float, val y: Float, val area: Int, val exact: Boolean)
+    private val templates = CardTemplateMatcher(context)
+    private data class Candidate(
+        val rank: Rank,
+        val suit: Suit,
+        val x: Float,
+        val y: Float,
+        val area: Int,
+        val exact: Boolean,
+        val confidence: Double
+    )
     private data class Pass(
         val bitmap: Bitmap,
         val map: (Float, Float) -> PointF,
@@ -45,14 +55,28 @@ class CardRecognizer {
             client.process(InputImage.fromBitmap(pass.bitmap, 0)).addOnSuccessListener { text ->
                 text.textBlocks.flatMap { it.lines }.flatMap { it.elements }.forEach { e ->
                     val box = e.boundingBox ?: return@forEach
-                    val normalized = normalize(e.text)
-                    val rank = Rank.parse(normalized) ?: return@forEach
                     if (box.height() !in 10..(pass.bitmap.height * .25).toInt()) return@forEach
+                    val normalized = normalize(e.text)
+                    val ocrRank = Rank.parse(normalized)
+                    val template = templates.match(pass.bitmap, box)
+                    val rank = when {
+                        ocrRank == null && template != null && template.confidence >= .48 -> template.rank
+                        ocrRank != null && template != null && template.confidence >= .72 -> template.rank
+                        else -> ocrRank
+                    } ?: return@forEach
                     val p = pass.map(box.centerX().toFloat(), box.centerY().toFloat())
                     val suit = if (rank.value > 14) Suit.JOKER else explicitSuit(e.text)
+                        ?: template?.takeIf { it.rank == rank && it.suit != Suit.JOKER && it.confidence >= .46 }?.suit
                         ?: classifySuit(pass.bitmap, box.centerX(), box.bottom, box.height())
                     val sourceArea = (box.width() * box.height() / pass.areaScale).toInt()
-                    found += Candidate(rank, suit, p.x, p.y, sourceArea, normalized == rank.label || normalized == "SJ" || normalized == "BJ")
+                    val exact = normalized == rank.label || normalized == "SJ" || normalized == "BJ"
+                    val confidence = when {
+                        exact && template?.rank == rank -> .98
+                        exact -> .86
+                        template?.rank == rank -> template.confidence
+                        else -> .55
+                    }
+                    found += Candidate(rank, suit, p.x, p.y, sourceArea, exact, confidence)
                 }
                 finishOne()
             }.addOnFailureListener { errors += it; finishOne() }
@@ -100,9 +124,9 @@ class CardRecognizer {
         // Stage 1: merge observations into visible card-corner locations and count them.
         data class RankHit(val rank:Rank,val x:Float,val y:Float,val area:Int,val exact:Boolean,val suitVotes:Map<Suit,Int>)
         val hits=clusters.map { group ->
-            val winning=group.groupBy { it.rank }.maxWith(compareBy<Map.Entry<Rank,List<Candidate>>> { it.value.size }
+            val winning=group.groupBy { it.rank }.maxWith(compareBy<Map.Entry<Rank,List<Candidate>>> { entry -> entry.value.sumOf { it.confidence } }
                 .thenBy { e->e.value.count(Candidate::exact) }.thenBy { e->e.value.maxOf(Candidate::area) })
-            val representative=winning.value.maxWith(compareBy<Candidate>{it.exact}.thenBy{it.area})
+            val representative=winning.value.maxWith(compareBy<Candidate>{it.confidence}.thenBy{it.area})
             RankHit(winning.key,representative.x,representative.y,representative.area,representative.exact,
                 winning.value.groupingBy(Candidate::suit).eachCount())
         }.sortedWith(compareByDescending<RankHit>{it.exact}.thenByDescending{it.area})
