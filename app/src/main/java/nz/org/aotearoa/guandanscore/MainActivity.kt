@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private val recognizer = CardRecognizer()
     private val aiClient = AiRecognitionClient()
     private lateinit var aiSettingsStore: AiSettingsStore
-    private val imageRenderer = HandImageRenderer()
+    private val imageRenderer by lazy { HandImageRenderer(this) }
     private val worker = Executors.newSingleThreadExecutor()
     private val hand = mutableListOf<Card>()
     private var cameraUri: Uri? = null

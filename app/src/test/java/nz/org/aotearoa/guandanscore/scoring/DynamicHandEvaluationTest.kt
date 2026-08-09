@@ -15,18 +15,18 @@ class DynamicHandEvaluationTest {
         assertEquals(15, HandResult.theoreticalMaxRounds(27))
     }
 
-    @Test fun threeHighSinglesMatchEndgameExample() {
+    @Test fun threeHighSinglesUseV3Mapping() {
         val cards = listOf(
             Card(0, Rank.BIG_JOKER, Suit.JOKER),
             Card(1, Rank.SMALL_JOKER, Suit.JOKER),
             Card(2, Rank.ACE, Suit.SPADE)
         )
         val result = HandScorer(Rank.TWO).score(cards)
-        assertEquals(47, result.total)
+        assertEquals(525, result.total)
         assertEquals(3, result.rounds)
-        assertEquals(47.0 / 3.0, result.spi, 0.001)
-        assertEquals(47.0 / 3.0 / 3.0 * 100.0, result.nspi, 0.001)
-        assertEquals("弱势", result.grade)
+        assertEquals(175.0, result.spi, 0.001)
+        assertEquals(175.0 / 3.0 * 100.0, result.nspi, 0.001)
+        assertEquals("均衡", result.grade)
     }
 
     @Test fun fiveCardStraightFlushIsStrong() {

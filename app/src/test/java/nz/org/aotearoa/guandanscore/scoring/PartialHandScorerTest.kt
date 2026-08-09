@@ -10,9 +10,9 @@ import org.junit.Test
 class PartialHandScorerTest {
     @Test fun singleCardCanBeScored() {
         val result = HandScorer(Rank.TWO).score(listOf(Card(0, Rank.ACE, Suit.SPADE)))
-        assertEquals(14, result.total)
+        assertEquals(155, result.total)
         assertEquals(1, result.rounds)
-        assertEquals(14.0, result.spi, 0.001)
+        assertEquals(155.0, result.spi, 0.001)
     }
 
     @Test fun partialHandUsesOptimalPartition() {
