@@ -93,7 +93,12 @@ card_picture/
 ├── card_png/      # App实际使用的54张标准PNG牌面及背景图
 └── card_gif/      # 同套牌面的GIF版本
 testcases/         # 手工验证图片
+model_training/    # 独立的真实照片标注、训练、评估与TFLite导出工具
 ```
+
+## 离线模型训练
+
+`model_training/` 提供独立于 Android 构建的牌角标注和训练工具。它以 `testcases/` 中的真实照片为输入，训练点数与花色双输出模型，并导出 `.tflite` 和模型 manifest。详细流程参见 [model_training/README.md](./model_training/README.md)。训练模型通过独立验证后再接入 App；现有本地 OCR、模板匹配和联网识图功能保持可用。
 
 ## 测试
 

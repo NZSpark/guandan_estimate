@@ -1,0 +1,7781 @@
+{
+  "version": 1,
+  "images": {
+    "IMG_20260809_130447.jpg": [
+      {
+        "quad": [
+          [
+            2030.9122235604414,
+            2724.437737026818
+          ],
+          [
+            2361.8736084263387,
+            2604.524191785551
+          ],
+          [
+            2419.0751090328235,
+            2760.874960109943
+          ],
+          [
+            2088.113724166926,
+            2880.78850535121
+          ]
+        ],
+        "rank": "2",
+        "suit": "CLUB",
+        "needs_review": false,
+        "source": "manual"
+      },
+      {
+        "quad": [
+          [
+            2257,
+            2417
+          ],
+          [
+            2324,
+            2553
+          ],
+          [
+            2016,
+            2705
+          ],
+          [
+            1948,
+            2616
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "needs_review": false,
+        "source": "manual"
+      },
+      {
+        "quad": [
+          [
+            1859,
+            2477
+          ],
+          [
+            2130,
+            2303
+          ],
+          [
+            2227,
+            2417
+          ],
+          [
+            1910,
+            2586
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "needs_review": false,
+        "source": "manual"
+      },
+      {
+        "quad": [
+          [
+            1745,
+            2384
+          ],
+          [
+            2003,
+            2147
+          ],
+          [
+            2117,
+            2257
+          ],
+          [
+            1847,
+            2506
+          ]
+        ],
+        "rank": "5",
+        "suit": "HEART",
+        "needs_review": false,
+        "source": "manual"
+      },
+      {
+        "quad": [
+          [
+            357,
+            967
+          ],
+          [
+            438,
+            1090
+          ],
+          [
+            225,
+            1226
+          ],
+          [
+            146,
+            1103
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.685
+      },
+      {
+        "quad": [
+          [
+            1567,
+            987
+          ],
+          [
+            2041,
+            1143
+          ],
+          [
+            1875,
+            1644
+          ],
+          [
+            1402,
+            1488
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.696
+      },
+      {
+        "quad": [
+          [
+            855,
+            1169
+          ],
+          [
+            1281,
+            1096
+          ],
+          [
+            1327,
+            1362
+          ],
+          [
+            902,
+            1435
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.711
+      },
+      {
+        "quad": [
+          [
+            1165,
+            1129
+          ],
+          [
+            1593,
+            1210
+          ],
+          [
+            1516,
+            1611
+          ],
+          [
+            1090,
+            1530
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.712
+      },
+      {
+        "quad": [
+          [
+            1974,
+            1354
+          ],
+          [
+            2077,
+            1133
+          ],
+          [
+            2487,
+            1323
+          ],
+          [
+            2383,
+            1544
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.685
+      },
+      {
+        "quad": [
+          [
+            865,
+            1271
+          ],
+          [
+            880,
+            1477
+          ],
+          [
+            387,
+            1514
+          ],
+          [
+            373,
+            1307
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.683
+      },
+      {
+        "quad": [
+          [
+            565,
+            1448
+          ],
+          [
+            604,
+            1634
+          ],
+          [
+            105,
+            1738
+          ],
+          [
+            67,
+            1551
+          ]
+        ],
+        "rank": "5",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      },
+      {
+        "quad": [
+          [
+            1887,
+            1664
+          ],
+          [
+            2023,
+            1469
+          ],
+          [
+            2387,
+            1725
+          ],
+          [
+            2252,
+            1919
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.714
+      },
+      {
+        "quad": [
+          [
+            1090,
+            1473
+          ],
+          [
+            1455,
+            1571
+          ],
+          [
+            1338,
+            2006
+          ],
+          [
+            973,
+            1909
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            1534,
+            1713
+          ],
+          [
+            1621,
+            1518
+          ],
+          [
+            2033,
+            1702
+          ],
+          [
+            1946,
+            1897
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.696
+      },
+      {
+        "quad": [
+          [
+            1303,
+            1708
+          ],
+          [
+            1344,
+            1522
+          ],
+          [
+            1783,
+            1617
+          ],
+          [
+            1745,
+            1804
+          ]
+        ],
+        "rank": "7",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.679
+      },
+      {
+        "quad": [
+          [
+            873,
+            1648
+          ],
+          [
+            879.2439282782001,
+            1758.1201896337104
+          ],
+          [
+            511.34856698628283,
+            1777.5618144174296
+          ],
+          [
+            505.10463870808275,
+            1667.4416247837191
+          ]
+        ],
+        "rank": "2",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      },
+      {
+        "quad": [
+          [
+            1721,
+            1899
+          ],
+          [
+            1860,
+            1706
+          ],
+          [
+            2217,
+            1966
+          ],
+          [
+            2077,
+            2158
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.714
+      },
+      {
+        "quad": [
+          [
+            260.8346583534925,
+            1885.2419424169118
+          ],
+          [
+            478.7324685724707,
+            2484.4609205191014
+          ],
+          [
+            353.9920565248731,
+            2531.10530536596
+          ],
+          [
+            136.0942463058949,
+            1931.8863272637702
+          ]
+        ],
+        "rank": "5",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            1437,
+            1858
+          ],
+          [
+            1484,
+            1785
+          ],
+          [
+            1631,
+            1881
+          ],
+          [
+            1585,
+            1954
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.69
+      },
+      {
+        "quad": [
+          [
+            1372,
+            2108
+          ],
+          [
+            1449,
+            1913
+          ],
+          [
+            1865,
+            2077
+          ],
+          [
+            1788,
+            2270
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.688
+      },
+      {
+        "quad": [
+          [
+            1001,
+            2047
+          ],
+          [
+            1013,
+            1921
+          ],
+          [
+            1271,
+            1948
+          ],
+          [
+            1257,
+            2073
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.701
+      },
+      {
+        "quad": [
+          [
+            1542,
+            1962
+          ],
+          [
+            2087,
+            2069
+          ],
+          [
+            1986,
+            2582
+          ],
+          [
+            1441,
+            2475
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.739
+      },
+      {
+        "quad": [
+          [
+            1165,
+            2187
+          ],
+          [
+            1216,
+            2077
+          ],
+          [
+            1445,
+            2187
+          ],
+          [
+            1392,
+            2296
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.683
+      },
+      {
+        "quad": [
+          [
+            2033,
+            2541
+          ],
+          [
+            2290,
+            2393
+          ],
+          [
+            2485,
+            2732
+          ],
+          [
+            2227,
+            2882
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      }
+    ],
+    "IMG_20260809_132353.jpg": [
+      {
+        "quad": [
+          [
+            1028,
+            1046
+          ],
+          [
+            1052,
+            1204
+          ],
+          [
+            671,
+            1267
+          ],
+          [
+            644,
+            1109
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.691
+      },
+      {
+        "quad": [
+          [
+            1086,
+            1490
+          ],
+          [
+            1532,
+            1540
+          ],
+          [
+            1504,
+            1796
+          ],
+          [
+            1058,
+            1745
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.732
+      },
+      {
+        "quad": [
+          [
+            1025,
+            1494
+          ],
+          [
+            1042,
+            1607
+          ],
+          [
+            813,
+            1640
+          ],
+          [
+            796,
+            1526
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.704
+      },
+      {
+        "quad": [
+          [
+            2244,
+            1676
+          ],
+          [
+            2369,
+            1504
+          ],
+          [
+            2681,
+            1731
+          ],
+          [
+            2556,
+            1905
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.702
+      },
+      {
+        "quad": [
+          [
+            1532,
+            1597
+          ],
+          [
+            1954,
+            1741
+          ],
+          [
+            1822,
+            2132
+          ],
+          [
+            1400,
+            1988
+          ]
+        ],
+        "rank": "4",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.7
+      },
+      {
+        "quad": [
+          [
+            618,
+            1629
+          ],
+          [
+            1153,
+            1692
+          ],
+          [
+            1096,
+            2160
+          ],
+          [
+            563,
+            2098
+          ]
+        ],
+        "rank": "7",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.723
+      },
+      {
+        "quad": [
+          [
+            1972,
+            1753
+          ],
+          [
+            2169,
+            1852
+          ],
+          [
+            2059,
+            2067
+          ],
+          [
+            1863,
+            1968
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            2000,
+            1792
+          ],
+          [
+            2618,
+            1765
+          ],
+          [
+            2637,
+            2201
+          ],
+          [
+            2019,
+            2225
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.725
+      },
+      {
+        "quad": [
+          [
+            620,
+            1775
+          ],
+          [
+            697,
+            1964
+          ],
+          [
+            265,
+            2142
+          ],
+          [
+            188,
+            1954
+          ]
+        ],
+        "rank": "5",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            1107,
+            1907
+          ],
+          [
+            1135,
+            1796
+          ],
+          [
+            1364,
+            1854
+          ],
+          [
+            1336,
+            1964
+          ]
+        ],
+        "rank": "A",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.699
+      },
+      {
+        "quad": [
+          [
+            1048,
+            2092
+          ],
+          [
+            1109,
+            1917
+          ],
+          [
+            1520,
+            2063
+          ],
+          [
+            1459,
+            2235
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.704
+      },
+      {
+        "quad": [
+          [
+            912,
+            1966
+          ],
+          [
+            953,
+            2183
+          ],
+          [
+            482,
+            2272
+          ],
+          [
+            442,
+            2055
+          ]
+        ],
+        "rank": "10",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            1368,
+            2195
+          ],
+          [
+            1425,
+            2019
+          ],
+          [
+            1818,
+            2144
+          ],
+          [
+            1763,
+            2319
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.687
+      },
+      {
+        "quad": [
+          [
+            1597,
+            2197
+          ],
+          [
+            1702,
+            2019
+          ],
+          [
+            2041,
+            2217
+          ],
+          [
+            1935,
+            2396
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.695
+      },
+      {
+        "quad": [
+          [
+            523,
+            2057
+          ],
+          [
+            1005,
+            2148
+          ],
+          [
+            920,
+            2602
+          ],
+          [
+            438,
+            2511
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.726
+      },
+      {
+        "quad": [
+          [
+            1583,
+            2152
+          ],
+          [
+            1931,
+            2280
+          ],
+          [
+            1775,
+            2704
+          ],
+          [
+            1427,
+            2574
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            1785,
+            2448
+          ],
+          [
+            1901,
+            2250
+          ],
+          [
+            2203,
+            2424
+          ],
+          [
+            2087,
+            2623
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.708
+      },
+      {
+        "quad": [
+          [
+            308,
+            2353
+          ],
+          [
+            452,
+            2460
+          ],
+          [
+            282,
+            2689
+          ],
+          [
+            136,
+            2582
+          ]
+        ],
+        "rank": "8",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.694
+      },
+      {
+        "quad": [
+          [
+            391,
+            2414
+          ],
+          [
+            551,
+            2562
+          ],
+          [
+            328,
+            2801
+          ],
+          [
+            168,
+            2653
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      }
+    ],
+    "IMG_20260809_133713.jpg": [
+      {
+        "quad": [
+          [
+            880,
+            1147
+          ],
+          [
+            999,
+            1358
+          ],
+          [
+            606,
+            1579
+          ],
+          [
+            486,
+            1370
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.693
+      },
+      {
+        "quad": [
+          [
+            553,
+            1261
+          ],
+          [
+            608,
+            1366
+          ],
+          [
+            393,
+            1475
+          ],
+          [
+            340,
+            1372
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.697
+      },
+      {
+        "quad": [
+          [
+            1631,
+            1658
+          ],
+          [
+            1796,
+            1498
+          ],
+          [
+            2041,
+            1745
+          ],
+          [
+            1877,
+            1907
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.726
+      },
+      {
+        "quad": [
+          [
+            1498,
+            1917
+          ],
+          [
+            1666,
+            1753
+          ],
+          [
+            1917,
+            2010
+          ],
+          [
+            1751,
+            2175
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.723
+      },
+      {
+        "quad": [
+          [
+            1066,
+            1889
+          ],
+          [
+            1467,
+            1990
+          ],
+          [
+            1342,
+            2489
+          ],
+          [
+            940,
+            2387
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            1334,
+            2177
+          ],
+          [
+            1516,
+            2019
+          ],
+          [
+            1755,
+            2292
+          ],
+          [
+            1575,
+            2452
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.726
+      },
+      {
+        "quad": [
+          [
+            574,
+            2181
+          ],
+          [
+            582,
+            2083
+          ],
+          [
+            888,
+            2114
+          ],
+          [
+            878,
+            2209
+          ]
+        ],
+        "rank": "A",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            1901,
+            2235
+          ],
+          [
+            2079,
+            2104
+          ],
+          [
+            2266,
+            2359
+          ],
+          [
+            2089,
+            2491
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            1453,
+            2237
+          ],
+          [
+            1869,
+            2118
+          ],
+          [
+            1966,
+            2454
+          ],
+          [
+            1550,
+            2574
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.729
+      },
+      {
+        "quad": [
+          [
+            598,
+            2310
+          ],
+          [
+            618,
+            2169
+          ],
+          [
+            884,
+            2205
+          ],
+          [
+            863,
+            2349
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.705
+      },
+      {
+        "quad": [
+          [
+            1735,
+            2466
+          ],
+          [
+            1962,
+            2353
+          ],
+          [
+            2077,
+            2582
+          ],
+          [
+            1850,
+            2697
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            774,
+            2365
+          ],
+          [
+            803,
+            2507
+          ],
+          [
+            503,
+            2566
+          ],
+          [
+            474,
+            2426
+          ]
+        ],
+        "rank": "K",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            2112,
+            2466
+          ],
+          [
+            2209,
+            2631
+          ],
+          [
+            1856,
+            2837
+          ],
+          [
+            1761,
+            2673
+          ]
+        ],
+        "rank": "8",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.698
+      },
+      {
+        "quad": [
+          [
+            794,
+            2475
+          ],
+          [
+            827,
+            2616
+          ],
+          [
+            553,
+            2679
+          ],
+          [
+            521,
+            2535
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            2475,
+            2685
+          ],
+          [
+            2734,
+            2623
+          ],
+          [
+            2734,
+            2886
+          ],
+          [
+            2533,
+            2947
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            2477,
+            2657
+          ],
+          [
+            2564,
+            2766
+          ],
+          [
+            2400,
+            2896
+          ],
+          [
+            2312,
+            2787
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.684
+      },
+      {
+        "quad": [
+          [
+            2126,
+            2726
+          ],
+          [
+            2402,
+            2673
+          ],
+          [
+            2452,
+            2943
+          ],
+          [
+            2177,
+            2995
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            1775,
+            2702
+          ],
+          [
+            2262,
+            2710
+          ],
+          [
+            2256,
+            2999
+          ],
+          [
+            1771,
+            2991
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.737
+      },
+      {
+        "quad": [
+          [
+            2535,
+            2748
+          ],
+          [
+            2712,
+            3004
+          ],
+          [
+            2276,
+            3308
+          ],
+          [
+            2100,
+            3052
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.684
+      }
+    ],
+    "IMG_20260809_134039.jpg": [
+      {
+        "quad": [
+          [
+            2491,
+            681
+          ],
+          [
+            2734,
+            721
+          ],
+          [
+            2734,
+            924
+          ],
+          [
+            2464,
+            884
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            389,
+            1048
+          ],
+          [
+            417,
+            1259
+          ],
+          [
+            0,
+            1332
+          ],
+          [
+            0,
+            1119
+          ]
+        ],
+        "rank": "5",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.668
+      },
+      {
+        "quad": [
+          [
+            746,
+            1259
+          ],
+          [
+            758,
+            1060
+          ],
+          [
+            1283,
+            1094
+          ],
+          [
+            1271,
+            1295
+          ]
+        ],
+        "rank": "2",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.688
+      },
+      {
+        "quad": [
+          [
+            732,
+            1484
+          ],
+          [
+            760,
+            1289
+          ],
+          [
+            1287,
+            1364
+          ],
+          [
+            1259,
+            1559
+          ]
+        ],
+        "rank": "2",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.689
+      },
+      {
+        "quad": [
+          [
+            174,
+            1388
+          ],
+          [
+            369,
+            1358
+          ],
+          [
+            399,
+            1538
+          ],
+          [
+            203,
+            1569
+          ]
+        ],
+        "rank": "J",
+        "suit": "SPADE",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.53
+      },
+      {
+        "quad": [
+          [
+            1548,
+            1597
+          ],
+          [
+            1717,
+            1376
+          ],
+          [
+            2092,
+            1664
+          ],
+          [
+            1923,
+            1883
+          ]
+        ],
+        "rank": "J",
+        "suit": "SPADE",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.528
+      },
+      {
+        "quad": [
+          [
+            326,
+            1451
+          ],
+          [
+            482,
+            1463
+          ],
+          [
+            466,
+            1682
+          ],
+          [
+            310,
+            1670
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.696
+      },
+      {
+        "quad": [
+          [
+            1143,
+            1571
+          ],
+          [
+            1273,
+            1496
+          ],
+          [
+            1374,
+            1672
+          ],
+          [
+            1244,
+            1747
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.688
+      },
+      {
+        "quad": [
+          [
+            253,
+            1575
+          ],
+          [
+            432,
+            1591
+          ],
+          [
+            409,
+            1842
+          ],
+          [
+            233,
+            1826
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.698
+      },
+      {
+        "quad": [
+          [
+            1542,
+            1759
+          ],
+          [
+            1587,
+            1621
+          ],
+          [
+            1848,
+            1706
+          ],
+          [
+            1804,
+            1842
+          ]
+        ],
+        "rank": "9",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.659
+      },
+      {
+        "quad": [
+          [
+            1441,
+            1948
+          ],
+          [
+            1627,
+            1737
+          ],
+          [
+            1974,
+            2041
+          ],
+          [
+            1790,
+            2252
+          ]
+        ],
+        "rank": "J",
+        "suit": "SPADE",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.528
+      },
+      {
+        "quad": [
+          [
+            596,
+            1972
+          ],
+          [
+            596,
+            2059
+          ],
+          [
+            328,
+            2061
+          ],
+          [
+            328,
+            1974
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.662
+      },
+      {
+        "quad": [
+          [
+            829,
+            2136
+          ],
+          [
+            890,
+            2008
+          ],
+          [
+            1190,
+            2154
+          ],
+          [
+            1129,
+            2282
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.691
+      },
+      {
+        "quad": [
+          [
+            1818,
+            2124
+          ],
+          [
+            2010,
+            2321
+          ],
+          [
+            1741,
+            2584
+          ],
+          [
+            1550,
+            2387
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            1257,
+            2148
+          ],
+          [
+            1844,
+            2179
+          ],
+          [
+            1818,
+            2710
+          ],
+          [
+            1230,
+            2679
+          ]
+        ],
+        "rank": "J",
+        "suit": "SPADE",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.548
+      },
+      {
+        "quad": [
+          [
+            932,
+            2339
+          ],
+          [
+            1013,
+            2207
+          ],
+          [
+            1232,
+            2343
+          ],
+          [
+            1153,
+            2475
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.682
+      },
+      {
+        "quad": [
+          [
+            1836,
+            2493
+          ],
+          [
+            2063,
+            2296
+          ],
+          [
+            2345,
+            2620
+          ],
+          [
+            2118,
+            2817
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            1646,
+            2631
+          ],
+          [
+            1856,
+            2432
+          ],
+          [
+            2160,
+            2750
+          ],
+          [
+            1950,
+            2951
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            1662,
+            2635
+          ],
+          [
+            1779,
+            2722
+          ],
+          [
+            1646,
+            2904
+          ],
+          [
+            1528,
+            2817
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.674
+      },
+      {
+        "quad": [
+          [
+            1745,
+            2823
+          ],
+          [
+            1885,
+            2775
+          ],
+          [
+            1960,
+            2993
+          ],
+          [
+            1820,
+            3040
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.67
+      },
+      {
+        "quad": [
+          [
+            1684,
+            3064
+          ],
+          [
+            2012,
+            2882
+          ],
+          [
+            2314,
+            3421
+          ],
+          [
+            1986,
+            3603
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.658
+      }
+    ],
+    "IMG_20260809_134541.jpg": [
+      {
+        "quad": [
+          [
+            576,
+            1232
+          ],
+          [
+            614,
+            1398
+          ],
+          [
+            178,
+            1498
+          ],
+          [
+            142,
+            1332
+          ]
+        ],
+        "rank": "8",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.693
+      },
+      {
+        "quad": [
+          [
+            1208,
+            1376
+          ],
+          [
+            1232,
+            1261
+          ],
+          [
+            1654,
+            1346
+          ],
+          [
+            1629,
+            1461
+          ]
+        ],
+        "rank": "3",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            1257,
+            1354
+          ],
+          [
+            1674,
+            1526
+          ],
+          [
+            1473,
+            2012
+          ],
+          [
+            1056,
+            1840
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.708
+      },
+      {
+        "quad": [
+          [
+            1852,
+            1601
+          ],
+          [
+            1978,
+            1419
+          ],
+          [
+            2316,
+            1654
+          ],
+          [
+            2193,
+            1836
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            365,
+            1425
+          ],
+          [
+            1066,
+            1567
+          ],
+          [
+            951,
+            2144
+          ],
+          [
+            247,
+            2004
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.735
+      },
+      {
+        "quad": [
+          [
+            1972,
+            1670
+          ],
+          [
+            2189,
+            1804
+          ],
+          [
+            1988,
+            2124
+          ],
+          [
+            1773,
+            1988
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.694
+      },
+      {
+        "quad": [
+          [
+            1007,
+            1832
+          ],
+          [
+            1188,
+            1729
+          ],
+          [
+            1313,
+            1950
+          ],
+          [
+            1133,
+            2051
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.704
+      },
+      {
+        "quad": [
+          [
+            2217,
+            1909
+          ],
+          [
+            2408,
+            1747
+          ],
+          [
+            2661,
+            2045
+          ],
+          [
+            2471,
+            2207
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.715
+      },
+      {
+        "quad": [
+          [
+            1147,
+            1808
+          ],
+          [
+            1546,
+            1824
+          ],
+          [
+            1534,
+            2130
+          ],
+          [
+            1133,
+            2114
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            2138,
+            1935
+          ],
+          [
+            2241,
+            1850
+          ],
+          [
+            2361,
+            1996
+          ],
+          [
+            2258,
+            2081
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.693
+      },
+      {
+        "quad": [
+          [
+            310,
+            1901
+          ],
+          [
+            450,
+            2081
+          ],
+          [
+            126,
+            2331
+          ],
+          [
+            0,
+            2150
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            1692,
+            2017
+          ],
+          [
+            1931,
+            1935
+          ],
+          [
+            2023,
+            2211
+          ],
+          [
+            1785,
+            2290
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.697
+      },
+      {
+        "quad": [
+          [
+            1473,
+            2144
+          ],
+          [
+            1583,
+            1966
+          ],
+          [
+            1935,
+            2183
+          ],
+          [
+            1824,
+            2361
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            1962,
+            2146
+          ],
+          [
+            2126,
+            1966
+          ],
+          [
+            2420,
+            2233
+          ],
+          [
+            2256,
+            2414
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.715
+      },
+      {
+        "quad": [
+          [
+            687,
+            2015
+          ],
+          [
+            774,
+            2203
+          ],
+          [
+            353,
+            2396
+          ],
+          [
+            268,
+            2205
+          ]
+        ],
+        "rank": "5",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      },
+      {
+        "quad": [
+          [
+            1755,
+            2304
+          ],
+          [
+            1935,
+            2134
+          ],
+          [
+            2213,
+            2426
+          ],
+          [
+            2033,
+            2596
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            1980,
+            2539
+          ],
+          [
+            2195,
+            2369
+          ],
+          [
+            2438,
+            2677
+          ],
+          [
+            2223,
+            2847
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      }
+    ],
+    "IMG_20260809_135345.jpg": [
+      {
+        "quad": [
+          [
+            2734,
+            28
+          ],
+          [
+            2734,
+            193
+          ],
+          [
+            2254,
+            205
+          ],
+          [
+            2252,
+            43
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.723
+      },
+      {
+        "quad": [
+          [
+            898,
+            1167
+          ],
+          [
+            959,
+            999
+          ],
+          [
+            1378,
+            1151
+          ],
+          [
+            1317,
+            1317
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            922,
+            1394
+          ],
+          [
+            953,
+            1218
+          ],
+          [
+            1413,
+            1297
+          ],
+          [
+            1382,
+            1475
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      },
+      {
+        "quad": [
+          [
+            754,
+            1279
+          ],
+          [
+            821,
+            1479
+          ],
+          [
+            395,
+            1625
+          ],
+          [
+            326,
+            1427
+          ]
+        ],
+        "rank": "6",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            1700,
+            1556
+          ],
+          [
+            1779,
+            1370
+          ],
+          [
+            2189,
+            1544
+          ],
+          [
+            2110,
+            1731
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.697
+      },
+      {
+        "quad": [
+          [
+            1084,
+            1404
+          ],
+          [
+            1096,
+            1542
+          ],
+          [
+            855,
+            1565
+          ],
+          [
+            843,
+            1427
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.692
+      },
+      {
+        "quad": [
+          [
+            904,
+            1727
+          ],
+          [
+            942,
+            1559
+          ],
+          [
+            1409,
+            1666
+          ],
+          [
+            1370,
+            1834
+          ]
+        ],
+        "rank": "3",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            1832,
+            1591
+          ],
+          [
+            2106,
+            1700
+          ],
+          [
+            1968,
+            2043
+          ],
+          [
+            1694,
+            1935
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.7
+      },
+      {
+        "quad": [
+          [
+            859,
+            1636
+          ],
+          [
+            918,
+            1830
+          ],
+          [
+            474,
+            1964
+          ],
+          [
+            417,
+            1767
+          ]
+        ],
+        "rank": "5",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.699
+      },
+      {
+        "quad": [
+          [
+            2114,
+            1706
+          ],
+          [
+            2371,
+            1818
+          ],
+          [
+            2231,
+            2142
+          ],
+          [
+            1974,
+            2033
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.701
+      },
+      {
+        "quad": [
+          [
+            2426,
+            1903
+          ],
+          [
+            2627,
+            1713
+          ],
+          [
+            2734,
+            2021
+          ],
+          [
+            2718,
+            2211
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.711
+      },
+      {
+        "quad": [
+          [
+            1173,
+            1800
+          ],
+          [
+            1601,
+            1777
+          ],
+          [
+            1615,
+            2045
+          ],
+          [
+            1188,
+            2069
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.727
+      },
+      {
+        "quad": [
+          [
+            817,
+            1856
+          ],
+          [
+            1798,
+            1998
+          ],
+          [
+            1698,
+            2679
+          ],
+          [
+            719,
+            2537
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.74
+      },
+      {
+        "quad": [
+          [
+            1601,
+            1980
+          ],
+          [
+            2132,
+            2171
+          ],
+          [
+            1933,
+            2728
+          ],
+          [
+            1402,
+            2537
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.734
+      },
+      {
+        "quad": [
+          [
+            936,
+            1990
+          ],
+          [
+            979,
+            2193
+          ],
+          [
+            523,
+            2292
+          ],
+          [
+            478,
+            2089
+          ]
+        ],
+        "rank": "7",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.694
+      },
+      {
+        "quad": [
+          [
+            1907,
+            2000
+          ],
+          [
+            2477,
+            2092
+          ],
+          [
+            2400,
+            2558
+          ],
+          [
+            1832,
+            2466
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.741
+      },
+      {
+        "quad": [
+          [
+            401,
+            2286
+          ],
+          [
+            442,
+            2414
+          ],
+          [
+            140,
+            2509
+          ],
+          [
+            99,
+            2381
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            1994,
+            2485
+          ],
+          [
+            2195,
+            2316
+          ],
+          [
+            2420,
+            2584
+          ],
+          [
+            2219,
+            2752
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            2669,
+            2381
+          ],
+          [
+            2671,
+            2319
+          ],
+          [
+            2734,
+            2331
+          ],
+          [
+            2734,
+            2393
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.726
+      },
+      {
+        "quad": [
+          [
+            399,
+            2357
+          ],
+          [
+            535,
+            2475
+          ],
+          [
+            345,
+            2695
+          ],
+          [
+            209,
+            2576
+          ]
+        ],
+        "rank": "8",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.7
+      },
+      {
+        "quad": [
+          [
+            2191,
+            2704
+          ],
+          [
+            2507,
+            2590
+          ],
+          [
+            2641,
+            2965
+          ],
+          [
+            2325,
+            3076
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            2128,
+            2724
+          ],
+          [
+            2319,
+            2716
+          ],
+          [
+            2329,
+            2963
+          ],
+          [
+            2138,
+            2971
+          ]
+        ],
+        "rank": "A",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.685
+      }
+    ],
+    "IMG_20260809_140521.jpg": [
+      {
+        "quad": [
+          [
+            499,
+            1208
+          ],
+          [
+            612,
+            1376
+          ],
+          [
+            300,
+            1585
+          ],
+          [
+            186,
+            1417
+          ]
+        ],
+        "rank": "6",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            683,
+            1516
+          ],
+          [
+            695,
+            1386
+          ],
+          [
+            1117,
+            1427
+          ],
+          [
+            1105,
+            1556
+          ]
+        ],
+        "rank": "3",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            492,
+            1400
+          ],
+          [
+            604,
+            1435
+          ],
+          [
+            551,
+            1609
+          ],
+          [
+            440,
+            1575
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.684
+      },
+      {
+        "quad": [
+          [
+            2132,
+            1591
+          ],
+          [
+            2290,
+            1433
+          ],
+          [
+            2552,
+            1696
+          ],
+          [
+            2393,
+            1854
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.701
+      },
+      {
+        "quad": [
+          [
+            618,
+            1447
+          ],
+          [
+            730,
+            1619
+          ],
+          [
+            401,
+            1832
+          ],
+          [
+            290,
+            1662
+          ]
+        ],
+        "rank": "6",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.704
+      },
+      {
+        "quad": [
+          [
+            1530,
+            1621
+          ],
+          [
+            1591,
+            1465
+          ],
+          [
+            1966,
+            1609
+          ],
+          [
+            1905,
+            1765
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            973,
+            1595
+          ],
+          [
+            973,
+            1486
+          ],
+          [
+            1376,
+            1490
+          ],
+          [
+            1376,
+            1599
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            813,
+            1532
+          ],
+          [
+            888,
+            1609
+          ],
+          [
+            732,
+            1763
+          ],
+          [
+            657,
+            1688
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.689
+      },
+      {
+        "quad": [
+          [
+            1747,
+            1698
+          ],
+          [
+            1865,
+            1544
+          ],
+          [
+            2148,
+            1757
+          ],
+          [
+            2031,
+            1913
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.704
+      },
+      {
+        "quad": [
+          [
+            1117,
+            1672
+          ],
+          [
+            1188,
+            1579
+          ],
+          [
+            1364,
+            1713
+          ],
+          [
+            1293,
+            1806
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.684
+      },
+      {
+        "quad": [
+          [
+            1625,
+            1735
+          ],
+          [
+            1753,
+            1650
+          ],
+          [
+            1871,
+            1822
+          ],
+          [
+            1743,
+            1909
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.699
+      },
+      {
+        "quad": [
+          [
+            1433,
+            1842
+          ],
+          [
+            1512,
+            1680
+          ],
+          [
+            1865,
+            1850
+          ],
+          [
+            1785,
+            2012
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.729
+      },
+      {
+        "quad": [
+          [
+            750,
+            1812
+          ],
+          [
+            760,
+            1682
+          ],
+          [
+            1184,
+            1713
+          ],
+          [
+            1173,
+            1842
+          ]
+        ],
+        "rank": "3",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.708
+      },
+      {
+        "quad": [
+          [
+            1891,
+            1860
+          ],
+          [
+            2033,
+            1686
+          ],
+          [
+            2321,
+            1921
+          ],
+          [
+            2179,
+            2094
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            1007,
+            1858
+          ],
+          [
+            1009,
+            1751
+          ],
+          [
+            1407,
+            1757
+          ],
+          [
+            1404,
+            1865
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.712
+      },
+      {
+        "quad": [
+          [
+            1792,
+            1883
+          ],
+          [
+            1883,
+            1777
+          ],
+          [
+            2073,
+            1942
+          ],
+          [
+            1982,
+            2049
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.689
+      },
+      {
+        "quad": [
+          [
+            578,
+            1802
+          ],
+          [
+            999,
+            1822
+          ],
+          [
+            981,
+            2201
+          ],
+          [
+            559,
+            2183
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.73
+      },
+      {
+        "quad": [
+          [
+            466,
+            1818
+          ],
+          [
+            545,
+            1899
+          ],
+          [
+            407,
+            2029
+          ],
+          [
+            330,
+            1946
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      },
+      {
+        "quad": [
+          [
+            2065,
+            1986
+          ],
+          [
+            2229,
+            1854
+          ],
+          [
+            2410,
+            2081
+          ],
+          [
+            2246,
+            2213
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            2365,
+            1992
+          ],
+          [
+            2515,
+            1854
+          ],
+          [
+            2716,
+            2071
+          ],
+          [
+            2566,
+            2209
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.691
+      },
+      {
+        "quad": [
+          [
+            1686,
+            2059
+          ],
+          [
+            1838,
+            1903
+          ],
+          [
+            2104,
+            2160
+          ],
+          [
+            1954,
+            2316
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.715
+      },
+      {
+        "quad": [
+          [
+            2089,
+            2120
+          ],
+          [
+            2527,
+            2012
+          ],
+          [
+            2610,
+            2351
+          ],
+          [
+            2173,
+            2458
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.736
+      },
+      {
+        "quad": [
+          [
+            1921,
+            2312
+          ],
+          [
+            2134,
+            2167
+          ],
+          [
+            2331,
+            2456
+          ],
+          [
+            2118,
+            2600
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      },
+      {
+        "quad": [
+          [
+            1986,
+            2466
+          ],
+          [
+            2235,
+            2379
+          ],
+          [
+            2341,
+            2679
+          ],
+          [
+            2089,
+            2766
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.726
+      },
+      {
+        "quad": [
+          [
+            1293,
+            3455
+          ],
+          [
+            1552,
+            3340
+          ],
+          [
+            1708,
+            3646
+          ],
+          [
+            1449,
+            3646
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      }
+    ],
+    "IMG_20260809_141448.jpg": [
+      {
+        "quad": [
+          [
+            1238,
+            1350
+          ],
+          [
+            1263,
+            1248
+          ],
+          [
+            1638,
+            1338
+          ],
+          [
+            1613,
+            1439
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.731
+      },
+      {
+        "quad": [
+          [
+            914,
+            1307
+          ],
+          [
+            942,
+            1496
+          ],
+          [
+            519,
+            1561
+          ],
+          [
+            490,
+            1372
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.694
+      },
+      {
+        "quad": [
+          [
+            1382,
+            1398
+          ],
+          [
+            1646,
+            1471
+          ],
+          [
+            1567,
+            1761
+          ],
+          [
+            1301,
+            1688
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            888,
+            1542
+          ],
+          [
+            1301,
+            1481
+          ],
+          [
+            1325,
+            1656
+          ],
+          [
+            912,
+            1717
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.736
+      },
+      {
+        "quad": [
+          [
+            1937,
+            1696
+          ],
+          [
+            2057,
+            1534
+          ],
+          [
+            2335,
+            1739
+          ],
+          [
+            2215,
+            1901
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.699
+      },
+      {
+        "quad": [
+          [
+            1524,
+            1733
+          ],
+          [
+            1607,
+            1567
+          ],
+          [
+            1968,
+            1747
+          ],
+          [
+            1883,
+            1915
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.727
+      },
+      {
+        "quad": [
+          [
+            936,
+            1611
+          ],
+          [
+            957,
+            1804
+          ],
+          [
+            519,
+            1852
+          ],
+          [
+            499,
+            1660
+          ]
+        ],
+        "rank": "7",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.698
+      },
+      {
+        "quad": [
+          [
+            1277,
+            1741
+          ],
+          [
+            1486,
+            1672
+          ],
+          [
+            1571,
+            1927
+          ],
+          [
+            1360,
+            1996
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.699
+      },
+      {
+        "quad": [
+          [
+            1717,
+            1895
+          ],
+          [
+            1834,
+            1737
+          ],
+          [
+            2124,
+            1952
+          ],
+          [
+            2004,
+            2110
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            1950,
+            1741
+          ],
+          [
+            2428,
+            1867
+          ],
+          [
+            2323,
+            2272
+          ],
+          [
+            1842,
+            2146
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.733
+      },
+      {
+        "quad": [
+          [
+            892,
+            1781
+          ],
+          [
+            924,
+            1907
+          ],
+          [
+            705,
+            1962
+          ],
+          [
+            673,
+            1834
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.694
+      },
+      {
+        "quad": [
+          [
+            1070,
+            1921
+          ],
+          [
+            1090,
+            1814
+          ],
+          [
+            1486,
+            1895
+          ],
+          [
+            1463,
+            2002
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.733
+      },
+      {
+        "quad": [
+          [
+            1380,
+            2023
+          ],
+          [
+            1467,
+            1850
+          ],
+          [
+            1836,
+            2037
+          ],
+          [
+            1749,
+            2209
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.723
+      },
+      {
+        "quad": [
+          [
+            953,
+            2089
+          ],
+          [
+            991,
+            2197
+          ],
+          [
+            774,
+            2276
+          ],
+          [
+            736,
+            2169
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.702
+      },
+      {
+        "quad": [
+          [
+            276,
+            2122
+          ],
+          [
+            345,
+            2244
+          ],
+          [
+            95,
+            2383
+          ],
+          [
+            28,
+            2260
+          ]
+        ],
+        "rank": "5",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.731
+      },
+      {
+        "quad": [
+          [
+            1613,
+            2300
+          ],
+          [
+            1767,
+            2126
+          ],
+          [
+            2061,
+            2387
+          ],
+          [
+            1905,
+            2562
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            300,
+            2191
+          ],
+          [
+            438,
+            2296
+          ],
+          [
+            276,
+            2505
+          ],
+          [
+            140,
+            2398
+          ]
+        ],
+        "rank": "8",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.696
+      },
+      {
+        "quad": [
+          [
+            2152,
+            2400
+          ],
+          [
+            2396,
+            2276
+          ],
+          [
+            2558,
+            2590
+          ],
+          [
+            2314,
+            2716
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.715
+      },
+      {
+        "quad": [
+          [
+            1830,
+            2545
+          ],
+          [
+            2063,
+            2404
+          ],
+          [
+            2250,
+            2712
+          ],
+          [
+            2019,
+            2852
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            2201,
+            2572
+          ],
+          [
+            2481,
+            2493
+          ],
+          [
+            2572,
+            2819
+          ],
+          [
+            2292,
+            2898
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.723
+      }
+    ],
+    "IMG_20260809_142518.jpg": [
+      {
+        "quad": [
+          [
+            1467,
+            1642
+          ],
+          [
+            1494,
+            1510
+          ],
+          [
+            1810,
+            1577
+          ],
+          [
+            1781,
+            1706
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.678
+      },
+      {
+        "quad": [
+          [
+            1021,
+            1571
+          ],
+          [
+            1058,
+            1711
+          ],
+          [
+            736,
+            1794
+          ],
+          [
+            699,
+            1654
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.695
+      },
+      {
+        "quad": [
+          [
+            1548,
+            1759
+          ],
+          [
+            1609,
+            1621
+          ],
+          [
+            1905,
+            1751
+          ],
+          [
+            1844,
+            1889
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.687
+      },
+      {
+        "quad": [
+          [
+            1419,
+            1808
+          ],
+          [
+            1457,
+            1670
+          ],
+          [
+            1767,
+            1757
+          ],
+          [
+            1729,
+            1895
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.688
+      },
+      {
+        "quad": [
+          [
+            705,
+            1711
+          ],
+          [
+            790,
+            1854
+          ],
+          [
+            478,
+            2035
+          ],
+          [
+            395,
+            1889
+          ]
+        ],
+        "rank": "5",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            1763,
+            1895
+          ],
+          [
+            1863,
+            1759
+          ],
+          [
+            2114,
+            1942
+          ],
+          [
+            2017,
+            2077
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            1267,
+            1889
+          ],
+          [
+            1518,
+            1761
+          ],
+          [
+            1660,
+            2039
+          ],
+          [
+            1409,
+            2167
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            1790,
+            1783
+          ],
+          [
+            1814,
+            1990
+          ],
+          [
+            1467,
+            2029
+          ],
+          [
+            1443,
+            1822
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.662
+      },
+      {
+        "quad": [
+          [
+            999,
+            1796
+          ],
+          [
+            1190,
+            1958
+          ],
+          [
+            902,
+            2298
+          ],
+          [
+            709,
+            2136
+          ]
+        ],
+        "rank": "6",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.727
+      },
+      {
+        "quad": [
+          [
+            948,
+            1883
+          ],
+          [
+            1003,
+            2069
+          ],
+          [
+            626,
+            2181
+          ],
+          [
+            572,
+            1994
+          ]
+        ],
+        "rank": "10",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            2051,
+            2083
+          ],
+          [
+            2199,
+            1956
+          ],
+          [
+            2396,
+            2183
+          ],
+          [
+            2246,
+            2312
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            1631,
+            2134
+          ],
+          [
+            1700,
+            1982
+          ],
+          [
+            1994,
+            2118
+          ],
+          [
+            1923,
+            2270
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            2331,
+            2185
+          ],
+          [
+            2505,
+            2094
+          ],
+          [
+            2614,
+            2302
+          ],
+          [
+            2440,
+            2393
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            1842,
+            2260
+          ],
+          [
+            1974,
+            2112
+          ],
+          [
+            2205,
+            2321
+          ],
+          [
+            2073,
+            2466
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            1204,
+            2217
+          ],
+          [
+            1206,
+            2126
+          ],
+          [
+            1394,
+            2134
+          ],
+          [
+            1390,
+            2223
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.702
+      },
+      {
+        "quad": [
+          [
+            499,
+            2132
+          ],
+          [
+            555,
+            2227
+          ],
+          [
+            365,
+            2345
+          ],
+          [
+            306,
+            2252
+          ]
+        ],
+        "rank": "5",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            2108,
+            2256
+          ],
+          [
+            2284,
+            2171
+          ],
+          [
+            2385,
+            2385
+          ],
+          [
+            2211,
+            2468
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            2250,
+            2385
+          ],
+          [
+            2454,
+            2270
+          ],
+          [
+            2602,
+            2531
+          ],
+          [
+            2398,
+            2647
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      },
+      {
+        "quad": [
+          [
+            2371,
+            2590
+          ],
+          [
+            2552,
+            2693
+          ],
+          [
+            2389,
+            2977
+          ],
+          [
+            2209,
+            2876
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.67
+      },
+      {
+        "quad": [
+          [
+            2663,
+            3464
+          ],
+          [
+            2734,
+            3612
+          ],
+          [
+            2560,
+            3646
+          ],
+          [
+            2424,
+            3646
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      }
+    ],
+    "IMG_20260809_143617.jpg": [
+      {
+        "quad": [
+          [
+            1190,
+            1486
+          ],
+          [
+            1198,
+            1327
+          ],
+          [
+            1601,
+            1352
+          ],
+          [
+            1591,
+            1508
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.677
+      },
+      {
+        "quad": [
+          [
+            880,
+            1372
+          ],
+          [
+            930,
+            1540
+          ],
+          [
+            555,
+            1656
+          ],
+          [
+            505,
+            1486
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.712
+      },
+      {
+        "quad": [
+          [
+            1595,
+            1561
+          ],
+          [
+            1656,
+            1407
+          ],
+          [
+            2000,
+            1542
+          ],
+          [
+            1940,
+            1698
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.694
+      },
+      {
+        "quad": [
+          [
+            1392,
+            1565
+          ],
+          [
+            1423,
+            1411
+          ],
+          [
+            1802,
+            1484
+          ],
+          [
+            1771,
+            1640
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.682
+      },
+      {
+        "quad": [
+          [
+            914,
+            1565
+          ],
+          [
+            932,
+            1433
+          ],
+          [
+            1348,
+            1492
+          ],
+          [
+            1327,
+            1623
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            675,
+            1455
+          ],
+          [
+            790,
+            1686
+          ],
+          [
+            367,
+            1899
+          ],
+          [
+            251,
+            1668
+          ]
+        ],
+        "rank": "10",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            1323,
+            1536
+          ],
+          [
+            1548,
+            1597
+          ],
+          [
+            1481,
+            1850
+          ],
+          [
+            1257,
+            1792
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            857,
+            1538
+          ],
+          [
+            926,
+            1633
+          ],
+          [
+            764,
+            1749
+          ],
+          [
+            695,
+            1656
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.685
+      },
+      {
+        "quad": [
+          [
+            2268,
+            1717
+          ],
+          [
+            2412,
+            1554
+          ],
+          [
+            2669,
+            1783
+          ],
+          [
+            2525,
+            1946
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            1048,
+            1577
+          ],
+          [
+            1109,
+            1674
+          ],
+          [
+            930,
+            1783
+          ],
+          [
+            869,
+            1686
+          ]
+        ],
+        "rank": "9",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.682
+      },
+      {
+        "quad": [
+          [
+            1599,
+            1591
+          ],
+          [
+            1706,
+            1589
+          ],
+          [
+            1711,
+            1765
+          ],
+          [
+            1605,
+            1769
+          ]
+        ],
+        "rank": "4",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.677
+      },
+      {
+        "quad": [
+          [
+            1015,
+            1650
+          ],
+          [
+            2019,
+            1733
+          ],
+          [
+            1974,
+            2280
+          ],
+          [
+            971,
+            2195
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.748
+      },
+      {
+        "quad": [
+          [
+            803,
+            1708
+          ],
+          [
+            1192,
+            1755
+          ],
+          [
+            1141,
+            2183
+          ],
+          [
+            752,
+            2136
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            2023,
+            1883
+          ],
+          [
+            2164,
+            1723
+          ],
+          [
+            2432,
+            1962
+          ],
+          [
+            2290,
+            2122
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            2373,
+            1907
+          ],
+          [
+            2560,
+            1798
+          ],
+          [
+            2697,
+            2033
+          ],
+          [
+            2511,
+            2144
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.708
+      },
+      {
+        "quad": [
+          [
+            1826,
+            2077
+          ],
+          [
+            1956,
+            1903
+          ],
+          [
+            2254,
+            2122
+          ],
+          [
+            2126,
+            2296
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.714
+      },
+      {
+        "quad": [
+          [
+            2130,
+            2021
+          ],
+          [
+            2641,
+            2029
+          ],
+          [
+            2637,
+            2345
+          ],
+          [
+            2126,
+            2337
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.729
+      },
+      {
+        "quad": [
+          [
+            1923,
+            2248
+          ],
+          [
+            2098,
+            2124
+          ],
+          [
+            2256,
+            2347
+          ],
+          [
+            2081,
+            2471
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            2205,
+            2264
+          ],
+          [
+            2349,
+            2231
+          ],
+          [
+            2391,
+            2420
+          ],
+          [
+            2248,
+            2452
+          ]
+        ],
+        "rank": "A",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.681
+      },
+      {
+        "quad": [
+          [
+            1960,
+            2361
+          ],
+          [
+            2183,
+            2239
+          ],
+          [
+            2343,
+            2537
+          ],
+          [
+            2120,
+            2659
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            2438,
+            2422
+          ],
+          [
+            2588,
+            2618
+          ],
+          [
+            2252,
+            2876
+          ],
+          [
+            2102,
+            2681
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.687
+      }
+    ],
+    "IMG_20260809_145725.jpg": [
+      {
+        "quad": [
+          [
+            973,
+            1058
+          ],
+          [
+            1007,
+            1200
+          ],
+          [
+            701,
+            1277
+          ],
+          [
+            665,
+            1135
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            1023,
+            1315
+          ],
+          [
+            1072,
+            1457
+          ],
+          [
+            748,
+            1571
+          ],
+          [
+            699,
+            1429
+          ]
+        ],
+        "rank": "5",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.703
+      },
+      {
+        "quad": [
+          [
+            1664,
+            1447
+          ],
+          [
+            1713,
+            1315
+          ],
+          [
+            2021,
+            1429
+          ],
+          [
+            1972,
+            1561
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.688
+      },
+      {
+        "quad": [
+          [
+            0,
+            1591
+          ],
+          [
+            306,
+            1382
+          ],
+          [
+            580,
+            1960
+          ],
+          [
+            138,
+            2169
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      },
+      {
+        "quad": [
+          [
+            1735,
+            1486
+          ],
+          [
+            1966,
+            1512
+          ],
+          [
+            1931,
+            1806
+          ],
+          [
+            1698,
+            1777
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.69
+      },
+      {
+        "quad": [
+          [
+            624,
+            1518
+          ],
+          [
+            726,
+            1676
+          ],
+          [
+            405,
+            1883
+          ],
+          [
+            304,
+            1725
+          ]
+        ],
+        "rank": "5",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            2081,
+            1658
+          ],
+          [
+            2203,
+            1528
+          ],
+          [
+            2430,
+            1741
+          ],
+          [
+            2310,
+            1871
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            1338,
+            1674
+          ],
+          [
+            1354,
+            1581
+          ],
+          [
+            1696,
+            1646
+          ],
+          [
+            1680,
+            1739
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.731
+      },
+      {
+        "quad": [
+          [
+            1757,
+            1729
+          ],
+          [
+            1836,
+            1589
+          ],
+          [
+            2126,
+            1755
+          ],
+          [
+            2045,
+            1895
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            1883,
+            1856
+          ],
+          [
+            1972,
+            1706
+          ],
+          [
+            2264,
+            1881
+          ],
+          [
+            2175,
+            2029
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            679,
+            1733
+          ],
+          [
+            796,
+            1899
+          ],
+          [
+            474,
+            2130
+          ],
+          [
+            355,
+            1964
+          ]
+        ],
+        "rank": "5",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            1131,
+            1913
+          ],
+          [
+            1182,
+            1779
+          ],
+          [
+            1528,
+            1907
+          ],
+          [
+            1479,
+            2043
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            752,
+            1788
+          ],
+          [
+            1224,
+            1856
+          ],
+          [
+            1163,
+            2282
+          ],
+          [
+            689,
+            2213
+          ]
+        ],
+        "rank": "7",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.729
+      },
+      {
+        "quad": [
+          [
+            1459,
+            1808
+          ],
+          [
+            1842,
+            1842
+          ],
+          [
+            1800,
+            2302
+          ],
+          [
+            1417,
+            2268
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.731
+      },
+      {
+        "quad": [
+          [
+            1715,
+            2071
+          ],
+          [
+            1814,
+            1911
+          ],
+          [
+            2110,
+            2098
+          ],
+          [
+            2010,
+            2256
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            2282,
+            2116
+          ],
+          [
+            2481,
+            2006
+          ],
+          [
+            2631,
+            2280
+          ],
+          [
+            2432,
+            2389
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            2108,
+            2156
+          ],
+          [
+            2290,
+            2059
+          ],
+          [
+            2398,
+            2258
+          ],
+          [
+            2213,
+            2355
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            1929,
+            2244
+          ],
+          [
+            2067,
+            2083
+          ],
+          [
+            2323,
+            2306
+          ],
+          [
+            2185,
+            2464
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            415,
+            2162
+          ],
+          [
+            499,
+            2268
+          ],
+          [
+            308,
+            2416
+          ],
+          [
+            225,
+            2310
+          ]
+        ],
+        "rank": "5",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.731
+      },
+      {
+        "quad": [
+          [
+            537,
+            2258
+          ],
+          [
+            687,
+            2363
+          ],
+          [
+            533,
+            2584
+          ],
+          [
+            383,
+            2479
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            314,
+            2351
+          ],
+          [
+            450,
+            2438
+          ],
+          [
+            340,
+            2610
+          ],
+          [
+            205,
+            2523
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.72
+      },
+      {
+        "quad": [
+          [
+            707,
+            2377
+          ],
+          [
+            853,
+            2479
+          ],
+          [
+            717,
+            2673
+          ],
+          [
+            572,
+            2572
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            1579,
+            3372
+          ],
+          [
+            1796,
+            3206
+          ],
+          [
+            2051,
+            3541
+          ],
+          [
+            1832,
+            3646
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.725
+      }
+    ],
+    "IMG_20260809_150846.jpg": [
+      {
+        "quad": [
+          [
+            1421,
+            1344
+          ],
+          [
+            1869,
+            1400
+          ],
+          [
+            1808,
+            1875
+          ],
+          [
+            1360,
+            1818
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            1145,
+            1514
+          ],
+          [
+            1192,
+            1407
+          ],
+          [
+            1556,
+            1565
+          ],
+          [
+            1510,
+            1672
+          ]
+        ],
+        "rank": "2",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            1194,
+            1636
+          ],
+          [
+            1467,
+            1633
+          ],
+          [
+            1471,
+            2073
+          ],
+          [
+            1198,
+            2075
+          ]
+        ],
+        "rank": "8",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            2015,
+            1676
+          ],
+          [
+            2144,
+            1842
+          ],
+          [
+            1844,
+            2077
+          ],
+          [
+            1715,
+            1911
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.684
+      },
+      {
+        "quad": [
+          [
+            849,
+            1694
+          ],
+          [
+            1210,
+            1719
+          ],
+          [
+            1182,
+            2126
+          ],
+          [
+            821,
+            2102
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.714
+      },
+      {
+        "quad": [
+          [
+            2110,
+            1830
+          ],
+          [
+            2489,
+            1749
+          ],
+          [
+            2562,
+            2092
+          ],
+          [
+            2183,
+            2171
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.734
+      },
+      {
+        "quad": [
+          [
+            1597,
+            1889
+          ],
+          [
+            1656,
+            1798
+          ],
+          [
+            1804,
+            1897
+          ],
+          [
+            1745,
+            1986
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.708
+      },
+      {
+        "quad": [
+          [
+            604,
+            1897
+          ],
+          [
+            634,
+            1988
+          ],
+          [
+            387,
+            2075
+          ],
+          [
+            355,
+            1984
+          ]
+        ],
+        "rank": "A",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            144,
+            1974
+          ],
+          [
+            312,
+            2106
+          ],
+          [
+            122,
+            2351
+          ],
+          [
+            0,
+            2219
+          ]
+        ],
+        "rank": "4",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            1761,
+            2152
+          ],
+          [
+            1923,
+            2019
+          ],
+          [
+            2106,
+            2237
+          ],
+          [
+            1942,
+            2371
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            655,
+            2021
+          ],
+          [
+            772,
+            2150
+          ],
+          [
+            565,
+            2337
+          ],
+          [
+            448,
+            2209
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.724
+      },
+      {
+        "quad": [
+          [
+            2329,
+            2193
+          ],
+          [
+            2576,
+            2124
+          ],
+          [
+            2645,
+            2373
+          ],
+          [
+            2396,
+            2442
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            306,
+            2144
+          ],
+          [
+            501,
+            2266
+          ],
+          [
+            336,
+            2531
+          ],
+          [
+            140,
+            2408
+          ]
+        ],
+        "rank": "8",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            525,
+            2205
+          ],
+          [
+            918,
+            2239
+          ],
+          [
+            894,
+            2519
+          ],
+          [
+            501,
+            2483
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.729
+      },
+      {
+        "quad": [
+          [
+            2033,
+            2239
+          ],
+          [
+            2596,
+            2337
+          ],
+          [
+            2521,
+            2770
+          ],
+          [
+            1958,
+            2673
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.738
+      },
+      {
+        "quad": [
+          [
+            434,
+            2262
+          ],
+          [
+            563,
+            2314
+          ],
+          [
+            495,
+            2489
+          ],
+          [
+            363,
+            2436
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.685
+      },
+      {
+        "quad": [
+          [
+            2471,
+            2533
+          ],
+          [
+            2677,
+            2693
+          ],
+          [
+            2446,
+            2991
+          ],
+          [
+            2239,
+            2831
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.676
+      },
+      {
+        "quad": [
+          [
+            2069,
+            2748
+          ],
+          [
+            2379,
+            2839
+          ],
+          [
+            2237,
+            3324
+          ],
+          [
+            1927,
+            3233
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.689
+      }
+    ],
+    "IMG_20260809_151752.jpg": [
+      {
+        "quad": [
+          [
+            2497,
+            1023
+          ],
+          [
+            2588,
+            859
+          ],
+          [
+            2902,
+            1032
+          ],
+          [
+            2813,
+            1196
+          ]
+        ],
+        "rank": "3",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.695
+      },
+      {
+        "quad": [
+          [
+            2627,
+            1226
+          ],
+          [
+            2702,
+            1030
+          ],
+          [
+            3072,
+            1169
+          ],
+          [
+            2999,
+            1366
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            1721,
+            1218
+          ],
+          [
+            1751,
+            1086
+          ],
+          [
+            2144,
+            1175
+          ],
+          [
+            2114,
+            1305
+          ]
+        ],
+        "rank": "2",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            2312,
+            1307
+          ],
+          [
+            2387,
+            1143
+          ],
+          [
+            2730,
+            1301
+          ],
+          [
+            2653,
+            1465
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            1996,
+            1232
+          ],
+          [
+            2221,
+            1224
+          ],
+          [
+            2231,
+            1492
+          ],
+          [
+            2006,
+            1500
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.697
+      },
+      {
+        "quad": [
+          [
+            1790,
+            1230
+          ],
+          [
+            1893,
+            1299
+          ],
+          [
+            1812,
+            1425
+          ],
+          [
+            1708,
+            1356
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.691
+      },
+      {
+        "quad": [
+          [
+            853,
+            1240
+          ],
+          [
+            1058,
+            1388
+          ],
+          [
+            843,
+            1684
+          ],
+          [
+            640,
+            1538
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.703
+      },
+      {
+        "quad": [
+          [
+            2487,
+            1471
+          ],
+          [
+            2584,
+            1275
+          ],
+          [
+            2949,
+            1455
+          ],
+          [
+            2852,
+            1654
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.708
+      },
+      {
+        "quad": [
+          [
+            1666,
+            1279
+          ],
+          [
+            2304,
+            1392
+          ],
+          [
+            2213,
+            1895
+          ],
+          [
+            1575,
+            1779
+          ]
+        ],
+        "rank": "4",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.73
+      },
+      {
+        "quad": [
+          [
+            1662,
+            1323
+          ],
+          [
+            1700,
+            1481
+          ],
+          [
+            1303,
+            1579
+          ],
+          [
+            1265,
+            1421
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.693
+      },
+      {
+        "quad": [
+          [
+            2175,
+            1579
+          ],
+          [
+            2246,
+            1409
+          ],
+          [
+            2612,
+            1561
+          ],
+          [
+            2541,
+            1731
+          ]
+        ],
+        "rank": "3",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.705
+      },
+      {
+        "quad": [
+          [
+            675,
+            1411
+          ],
+          [
+            1307,
+            1538
+          ],
+          [
+            1212,
+            2017
+          ],
+          [
+            580,
+            1891
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.73
+      },
+      {
+        "quad": [
+          [
+            2341,
+            1666
+          ],
+          [
+            2436,
+            1469
+          ],
+          [
+            2817,
+            1656
+          ],
+          [
+            2722,
+            1850
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.703
+      },
+      {
+        "quad": [
+          [
+            1105,
+            1475
+          ],
+          [
+            1901,
+            1471
+          ],
+          [
+            1903,
+            1940
+          ],
+          [
+            1107,
+            1942
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.746
+      },
+      {
+        "quad": [
+          [
+            403,
+            1492
+          ],
+          [
+            657,
+            1656
+          ],
+          [
+            466,
+            1954
+          ],
+          [
+            213,
+            1790
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.72
+      },
+      {
+        "quad": [
+          [
+            355,
+            1769
+          ],
+          [
+            608,
+            1854
+          ],
+          [
+            523,
+            2114
+          ],
+          [
+            268,
+            2031
+          ]
+        ],
+        "rank": "8",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.722
+      },
+      {
+        "quad": [
+          [
+            578,
+            1838
+          ],
+          [
+            823,
+            1954
+          ],
+          [
+            697,
+            2221
+          ],
+          [
+            452,
+            2104
+          ]
+        ],
+        "rank": "8",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            936,
+            1889
+          ],
+          [
+            1188,
+            2047
+          ],
+          [
+            999,
+            2347
+          ],
+          [
+            746,
+            2189
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      },
+      {
+        "quad": [
+          [
+            565,
+            2177
+          ],
+          [
+            930,
+            2264
+          ],
+          [
+            865,
+            2531
+          ],
+          [
+            503,
+            2442
+          ]
+        ],
+        "rank": "Q",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      },
+      {
+        "quad": [
+          [
+            780,
+            2217
+          ],
+          [
+            1153,
+            2274
+          ],
+          [
+            1111,
+            2550
+          ],
+          [
+            738,
+            2493
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      }
+    ],
+    "IMG_20260809_154323.jpg": [
+      {
+        "quad": [
+          [
+            924,
+            1149
+          ],
+          [
+            975,
+            940
+          ],
+          [
+            1737,
+            1123
+          ],
+          [
+            1688,
+            1329
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            1212,
+            1244
+          ],
+          [
+            1617,
+            1009
+          ],
+          [
+            1937,
+            1563
+          ],
+          [
+            1534,
+            1798
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.725
+      },
+      {
+        "quad": [
+          [
+            539,
+            1028
+          ],
+          [
+            612,
+            1255
+          ],
+          [
+            172,
+            1394
+          ],
+          [
+            99,
+            1167
+          ]
+        ],
+        "rank": "10",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.706
+      },
+      {
+        "quad": [
+          [
+            2436,
+            1279
+          ],
+          [
+            2592,
+            1127
+          ],
+          [
+            2734,
+            1336
+          ],
+          [
+            2639,
+            1488
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.711
+      },
+      {
+        "quad": [
+          [
+            1086,
+            1204
+          ],
+          [
+            1139,
+            1441
+          ],
+          [
+            699,
+            1542
+          ],
+          [
+            647,
+            1303
+          ]
+        ],
+        "rank": "5",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.71
+      },
+      {
+        "quad": [
+          [
+            480,
+            1340
+          ],
+          [
+            572,
+            1514
+          ],
+          [
+            197,
+            1713
+          ],
+          [
+            105,
+            1536
+          ]
+        ],
+        "rank": "5",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.725
+      },
+      {
+        "quad": [
+          [
+            2160,
+            1340
+          ],
+          [
+            2734,
+            1384
+          ],
+          [
+            2718,
+            1812
+          ],
+          [
+            2128,
+            1767
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.729
+      },
+      {
+        "quad": [
+          [
+            1228,
+            1567
+          ],
+          [
+            1376,
+            1443
+          ],
+          [
+            1532,
+            1627
+          ],
+          [
+            1384,
+            1753
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.705
+      },
+      {
+        "quad": [
+          [
+            938,
+            1627
+          ],
+          [
+            1141,
+            1469
+          ],
+          [
+            1429,
+            1836
+          ],
+          [
+            1226,
+            1996
+          ]
+        ],
+        "rank": "7",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.711
+      },
+      {
+        "quad": [
+          [
+            387,
+            1565
+          ],
+          [
+            511,
+            1757
+          ],
+          [
+            158,
+            1984
+          ],
+          [
+            36,
+            1792
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.714
+      },
+      {
+        "quad": [
+          [
+            1096,
+            1788
+          ],
+          [
+            1220,
+            1569
+          ],
+          [
+            1771,
+            1879
+          ],
+          [
+            1648,
+            2098
+          ]
+        ],
+        "rank": "4",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.703
+      },
+      {
+        "quad": [
+          [
+            1781,
+            1783
+          ],
+          [
+            1960,
+            1666
+          ],
+          [
+            2110,
+            1895
+          ],
+          [
+            1931,
+            2012
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            257,
+            1832
+          ],
+          [
+            399,
+            1970
+          ],
+          [
+            201,
+            2173
+          ],
+          [
+            59,
+            2035
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            1625,
+            1944
+          ],
+          [
+            1824,
+            1842
+          ],
+          [
+            1946,
+            2081
+          ],
+          [
+            1747,
+            2183
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            1477,
+            2100
+          ],
+          [
+            1615,
+            1942
+          ],
+          [
+            1842,
+            2140
+          ],
+          [
+            1702,
+            2298
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.705
+      },
+      {
+        "quad": [
+          [
+            413,
+            1978
+          ],
+          [
+            551,
+            2104
+          ],
+          [
+            383,
+            2292
+          ],
+          [
+            243,
+            2167
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.707
+      },
+      {
+        "quad": [
+          [
+            2250,
+            2268
+          ],
+          [
+            2276,
+            2406
+          ],
+          [
+            1800,
+            2495
+          ],
+          [
+            1775,
+            2357
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.719
+      },
+      {
+        "quad": [
+          [
+            2290,
+            2310
+          ],
+          [
+            2329,
+            2657
+          ],
+          [
+            1133,
+            2787
+          ],
+          [
+            1094,
+            2440
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.721
+      }
+    ],
+    "IMG_20260809_160106.jpg": [
+      {
+        "quad": [
+          [
+            1111,
+            1412
+          ],
+          [
+            1182,
+            1250
+          ],
+          [
+            1540,
+            1404
+          ],
+          [
+            1470,
+            1566
+          ]
+        ],
+        "rank": "3",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            557,
+            1271
+          ],
+          [
+            623,
+            1498
+          ],
+          [
+            183,
+            1623
+          ],
+          [
+            117,
+            1397
+          ]
+        ],
+        "rank": "10",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            1171,
+            1429
+          ],
+          [
+            1274,
+            1485
+          ],
+          [
+            1178,
+            1658
+          ],
+          [
+            1075,
+            1602
+          ]
+        ],
+        "rank": "A",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      },
+      {
+        "quad": [
+          [
+            672,
+            1510
+          ],
+          [
+            719,
+            1734
+          ],
+          [
+            275,
+            1824
+          ],
+          [
+            228,
+            1600
+          ]
+        ],
+        "rank": "10",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.703
+      },
+      {
+        "quad": [
+          [
+            926,
+            1570
+          ],
+          [
+            960,
+            1737
+          ],
+          [
+            578,
+            1813
+          ],
+          [
+            544,
+            1649
+          ]
+        ],
+        "rank": "7",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.692
+      },
+      {
+        "quad": [
+          [
+            303,
+            1696
+          ],
+          [
+            431,
+            1882
+          ],
+          [
+            96,
+            2112
+          ],
+          [
+            0,
+            1926
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.711
+      },
+      {
+        "quad": [
+          [
+            1914,
+            1914
+          ],
+          [
+            2050,
+            1747
+          ],
+          [
+            2317,
+            1969
+          ],
+          [
+            2178,
+            2133
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.716
+      },
+      {
+        "quad": [
+          [
+            1585,
+            1935
+          ],
+          [
+            1687,
+            1783
+          ],
+          [
+            1978,
+            1982
+          ],
+          [
+            1875,
+            2133
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.726
+      },
+      {
+        "quad": [
+          [
+            977,
+            1905
+          ],
+          [
+            996,
+            1843
+          ],
+          [
+            1222,
+            1916
+          ],
+          [
+            1203,
+            1975
+          ]
+        ],
+        "rank": "3",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.736
+      },
+      {
+        "quad": [
+          [
+            1777,
+            2027
+          ],
+          [
+            1922,
+            1873
+          ],
+          [
+            2176,
+            2116
+          ],
+          [
+            2029,
+            2270
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.715
+      },
+      {
+        "quad": [
+          [
+            1152,
+            2016
+          ],
+          [
+            1182,
+            1922
+          ],
+          [
+            1527,
+            2033
+          ],
+          [
+            1498,
+            2127
+          ]
+        ],
+        "rank": "2",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.727
+      },
+      {
+        "quad": [
+          [
+            1335,
+            2135
+          ],
+          [
+            1417,
+            1975
+          ],
+          [
+            1730,
+            2131
+          ],
+          [
+            1649,
+            2291
+          ]
+        ],
+        "rank": "J",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.713
+      },
+      {
+        "quad": [
+          [
+            414,
+            1990
+          ],
+          [
+            580,
+            2159
+          ],
+          [
+            294,
+            2441
+          ],
+          [
+            128,
+            2272
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.704
+      },
+      {
+        "quad": [
+          [
+            1634,
+            2091
+          ],
+          [
+            1766,
+            2001
+          ],
+          [
+            1884,
+            2174
+          ],
+          [
+            1751,
+            2263
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.718
+      },
+      {
+        "quad": [
+          [
+            2131,
+            2112
+          ],
+          [
+            2342,
+            2035
+          ],
+          [
+            2432,
+            2281
+          ],
+          [
+            2219,
+            2355
+          ]
+        ],
+        "rank": "Q",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            1015,
+            2163
+          ],
+          [
+            1058,
+            2076
+          ],
+          [
+            1239,
+            2165
+          ],
+          [
+            1199,
+            2251
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.686
+      },
+      {
+        "quad": [
+          [
+            1807,
+            2214
+          ],
+          [
+            1963,
+            2099
+          ],
+          [
+            2101,
+            2285
+          ],
+          [
+            1946,
+            2400
+          ]
+        ],
+        "rank": "Q",
+        "suit": "CLUB",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.709
+      },
+      {
+        "quad": [
+          [
+            1538,
+            2295
+          ],
+          [
+            1658,
+            2121
+          ],
+          [
+            1956,
+            2327
+          ],
+          [
+            1835,
+            2500
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            303,
+            2225
+          ],
+          [
+            625,
+            2304
+          ],
+          [
+            527,
+            2709
+          ],
+          [
+            205,
+            2633
+          ]
+        ],
+        "rank": "J",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.691
+      },
+      {
+        "quad": [
+          [
+            109,
+            2313
+          ],
+          [
+            322,
+            2434
+          ],
+          [
+            173,
+            2701
+          ],
+          [
+            0,
+            2579
+          ]
+        ],
+        "rank": "4",
+        "suit": "HEART",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.72
+      },
+      {
+        "quad": [
+          [
+            1775,
+            2492
+          ],
+          [
+            1967,
+            2332
+          ],
+          [
+            2204,
+            2613
+          ],
+          [
+            2012,
+            2773
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.717
+      },
+      {
+        "quad": [
+          [
+            2185,
+            2492
+          ],
+          [
+            2449,
+            2404
+          ],
+          [
+            2547,
+            2705
+          ],
+          [
+            2285,
+            2793
+          ]
+        ],
+        "rank": "J",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.728
+      },
+      {
+        "quad": [
+          [
+            2336,
+            2709
+          ],
+          [
+            2492,
+            2927
+          ],
+          [
+            2138,
+            3181
+          ],
+          [
+            1982,
+            2963
+          ]
+        ],
+        "rank": "A",
+        "suit": "DIAMOND",
+        "source": "auto",
+        "needs_review": true,
+        "confidence": 0.688
+      }
+    ]
+  }
+}

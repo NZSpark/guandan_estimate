@@ -9,6 +9,10 @@ local.properties
 *.iml
 .idea/
 captures/
+model_training/.venv/
+model_training/output/
+model_training/__pycache__/
+testcases/IMG_*.jpg
 promp.md
 /*.xml
 /*.png
