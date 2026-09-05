@@ -14,12 +14,32 @@ import org.json.JSONObject
 import java.util.UUID
 
 data class AiSettings(
-    val provider: String = "OpenAI",
-    val endpoint: String = "https://api.openai.com/v1/responses",
-    val model: String = "gpt-5.6-sol",
+    val provider: String = "Google Gemini",
+    val endpoint: String = "https://generativelanguage.googleapis.com/v1beta/models",
+    val model: String = "gemini-3.6-flash",
     val apiKey: String = "",
     val id: String = UUID.randomUUID().toString()
 )
+
+object AiPresets {
+    fun gemini() = AiSettings(
+        provider = "Google Gemini",
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models",
+        model = "gemini-3.6-flash",
+        apiKey = "",
+        id = "preset_gemini"
+    )
+
+    fun openAi() = AiSettings(
+        provider = "OpenAI",
+        endpoint = "https://api.openai.com/v1/responses",
+        model = "gpt-5.6-sol",
+        apiKey = "",
+        id = "preset_openai"
+    )
+
+    fun defaults(): List<AiSettings> = listOf(gemini(), openAi())
+}
 
 class AiSettingsStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("ai_provider_settings", Context.MODE_PRIVATE)
@@ -33,12 +53,19 @@ class AiSettingsStore(private val context: Context) {
 
     fun loadAll(): List<AiSettings> {
         val raw = prefs.getString("profiles", null)
-        if (raw.isNullOrBlank()) return listOf(legacyProfile())
+        if (raw.isNullOrBlank()) {
+            val legacy = legacyProfile()
+            return if (legacy.apiKey.isNotBlank() || legacy.provider != "Google Gemini") {
+                listOf(legacy, AiPresets.gemini()).distinctBy { it.provider }
+            } else {
+                AiPresets.defaults()
+            }
+        }
         return try {
             val array = JSONArray(raw)
-            (0 until array.length()).mapNotNull { i -> array.optJSONObject(i)?.let(::decodeProfile) }
-                .ifEmpty { listOf(AiSettings()) }
-        } catch (_: Exception) { listOf(legacyProfile()) }
+            val list = (0 until array.length()).mapNotNull { i -> array.optJSONObject(i)?.let(::decodeProfile) }
+            list.ifEmpty { AiPresets.defaults() }
+        } catch (_: Exception) { AiPresets.defaults() }
     }
 
     fun save(settings: AiSettings) {
@@ -54,7 +81,7 @@ class AiSettingsStore(private val context: Context) {
     }
 
     fun delete(id: String) {
-        val remaining = loadAll().filterNot { it.id == id }.ifEmpty { listOf(AiSettings()) }
+        val remaining = loadAll().filterNot { it.id == id }.ifEmpty { AiPresets.defaults() }
         persist(remaining, remaining.first().id)
     }
 
@@ -67,15 +94,15 @@ class AiSettingsStore(private val context: Context) {
     }
 
     private fun decodeProfile(o: JSONObject) = AiSettings(
-        provider=o.optString("provider","OpenAI"), endpoint=o.optString("endpoint","https://api.openai.com/v1/responses"),
-        model=o.optString("model","gpt-5.6-sol"), apiKey=decrypt(o.optString("api_key","")),
+        provider=o.optString("provider","Google Gemini"), endpoint=o.optString("endpoint","https://generativelanguage.googleapis.com/v1beta/models"),
+        model=o.optString("model","gemini-3.6-flash"), apiKey=decrypt(o.optString("api_key","")),
         id=o.optString("id").ifBlank { UUID.randomUUID().toString() }
     )
 
     private fun legacyProfile() = AiSettings(
-        provider=prefs.getString("provider","OpenAI") ?: "OpenAI",
-        endpoint=prefs.getString("endpoint","https://api.openai.com/v1/responses") ?: "https://api.openai.com/v1/responses",
-        model=prefs.getString("model","gpt-5.6-sol") ?: "gpt-5.6-sol",
+        provider=prefs.getString("provider","Google Gemini") ?: "Google Gemini",
+        endpoint=prefs.getString("endpoint","https://generativelanguage.googleapis.com/v1beta/models") ?: "https://generativelanguage.googleapis.com/v1beta/models",
+        model=prefs.getString("model","gemini-3.6-flash") ?: "gemini-3.6-flash",
         apiKey=decrypt(prefs.getString("api_key","").orEmpty())
     )
 

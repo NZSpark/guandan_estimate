@@ -17,6 +17,7 @@ import android.widget.AdapterView
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -27,6 +28,7 @@ import nz.org.aotearoa.guandanscore.imaging.HandImageRenderer
 import nz.org.aotearoa.guandanscore.model.*
 import nz.org.aotearoa.guandanscore.recognition.CardRecognizer
 import nz.org.aotearoa.guandanscore.recognition.AiRecognitionClient
+import nz.org.aotearoa.guandanscore.recognition.AiPresets
 import nz.org.aotearoa.guandanscore.recognition.AiSettings
 import nz.org.aotearoa.guandanscore.recognition.AiSettingsStore
 import nz.org.aotearoa.guandanscore.scoring.HandScorer
@@ -127,36 +129,49 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAiSettings() {
-        val profiles = aiSettingsStore.loadAll()
+        val profiles = aiSettingsStore.loadAll().toMutableList()
         val current = aiSettingsStore.load()
         fun field(hint: String, value: String, secret: Boolean = false) = EditText(this).apply {
             this.hint = hint; setText(value); setSingleLine(true)
             if (secret) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
+        val options = profiles.map { "${it.provider} · ${it.model}" } + listOf("＋ 新增 Google Gemini", "＋ 新增 OpenAI", "＋ 自定义 Provider")
         val selector = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                profiles.map { "${it.provider} · ${it.model}" } + "＋ 新建 Provider")
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, options)
         }
         val provider = field("Provider 名称", current.provider)
         val endpoint = field("HTTPS API 地址", current.endpoint)
         val model = field("模型", current.model)
         val key = field("API Key（仅本机加密保存）", current.apiKey, true)
-        fun showProfile(profile: AiSettings?) {
-            provider.setText(profile?.provider ?: "")
-            endpoint.setText(profile?.endpoint ?: "https://api.openai.com/v1/responses")
-            model.setText(profile?.model ?: "gpt-5.6-sol")
-            key.setText(profile?.apiKey ?: "")
+        val hint = TextView(this).apply {
+            text = "提示：使用 Google 账号登录 aistudio.google.com 即可免费获取 Gemini API Key。"
+            textSize = 12f
+            setPadding(12, 10, 12, 4)
+            setTextColor(0xff666666.toInt())
+        }
+        fun showProfile(p: AiSettings) {
+            provider.setText(p.provider)
+            endpoint.setText(p.endpoint)
+            model.setText(p.model)
+            key.setText(p.apiKey)
         }
         selector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) =
-                showProfile(profiles.getOrNull(position))
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                when {
+                    position < profiles.size -> showProfile(profiles[position])
+                    position == profiles.size -> showProfile(AiPresets.gemini().copy(id = java.util.UUID.randomUUID().toString()))
+                    position == profiles.size + 1 -> showProfile(AiPresets.openAi().copy(id = java.util.UUID.randomUUID().toString()))
+                    else -> showProfile(AiSettings(provider = "", endpoint = "https://", model = "", apiKey = "", id = java.util.UUID.randomUUID().toString()))
+                }
+            }
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(40, 8, 40, 0)
-            addView(selector); addView(provider); addView(endpoint); addView(model); addView(key)
+            addView(selector); addView(provider); addView(endpoint); addView(model); addView(key); addView(hint)
         }
-        selector.setSelection(profiles.indexOfFirst { it.id == current.id }.coerceAtLeast(0))
+        val currentIndex = profiles.indexOfFirst { it.id == current.id }
+        selector.setSelection(if (currentIndex >= 0) currentIndex else 0)
         AlertDialog.Builder(this).setTitle("AI Provider 设置").setView(form)
             .setNegativeButton("取消", null).setNeutralButton("删除所选") { _, _ ->
                 profiles.getOrNull(selector.selectedItemPosition)?.let {

@@ -11,8 +11,8 @@
 
 - 拍照或从系统相册选择手牌照片。
 - 三阶段本地识别：牌张定位与计数、点数识别、点数下方花色图形识别。
-- 可配置联网 AI 识图，支持保存和切换多个 OpenAI Responses API 兼容 Provider。
-- 默认 Provider 为 OpenAI，默认模型为 `gpt-5.6-sol`。
+- 可配置联网 AI 识图，原生支持 Google Gemini（默认推荐）以及 OpenAI Responses / Chat Completions 协议兼容 Provider。
+- 内置 Google Gemini（默认模型 `gemini-2.5-flash`，兼容 `gemini-3.8-flash` 等）与 OpenAI（默认模型 `gpt-5.6-sol`）快捷预设。
 - 点选识别结果进行校正、删除或补录。
 - 支持对任意 `1～27` 张已确认手牌计算最优拆牌。
 - 显示总分、计划出牌轮数、SPI、NSPI、动态等级及逐组拆牌明细。
@@ -44,12 +44,15 @@ NSPI = SPI ÷ T_max(N) × 100
 
 ## AI Provider 设置
 
-“AI 设置”支持保存多个 Provider 配置：
+“AI 设置”支持保存多个 Provider 配置并一键切换：
 
-- Provider 名称
-- HTTPS Responses API 地址
-- 模型名称
-- API Key
+- **Google Gemini（推荐）**：使用 Google 账号登录 [Google AI Studio](https://aistudio.google.com/) 免费创建 API Key，填入即可使用超高精度的 Gemini 识图能力（默认模型 `gemini-2.5-flash`，接口 `https://generativelanguage.googleapis.com/v1beta/models`）。
+- **OpenAI / 自定义 Provider**：支持 OpenAI Responses API 以及标准 Chat Completions API 协议。
+- **配置项**：
+  - Provider 名称
+  - HTTPS API 地址
+  - 模型名称
+  - API Key
 
 API Key 不会写入源码或 APK 资源，而是使用 Android Keystore 加密后保存在设备本地。不要在 Git、截图、Issue 或聊天记录中提交真实密钥。生产应用更推荐通过自有后端代理 API 请求，避免在客户端持有长期密钥。
 
