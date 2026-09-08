@@ -15,26 +15,28 @@ class DynamicHandEvaluationTest {
         assertEquals(15, HandResult.theoreticalMaxRounds(27))
     }
 
-    @Test fun threeHighSinglesUseV3Mapping() {
+    @Test fun threeHighSinglesWeightControlAndResidualGrade() {
         val cards = listOf(
             Card(0, Rank.BIG_JOKER, Suit.JOKER),
             Card(1, Rank.SMALL_JOKER, Suit.JOKER),
             Card(2, Rank.ACE, Suit.SPADE)
         )
         val result = HandScorer(Rank.TWO).score(cards)
-        assertEquals(525, result.total)
+        assertEquals(525, result.total) // 191 + 179 + 155
         assertEquals(3, result.rounds)
-        assertEquals(175.0, result.spi, 0.001)
-        assertEquals(175.0 / 3.0 * 100.0, result.nspi, 0.001)
-        assertEquals("均衡", result.grade)
+        assertEquals(553.65, result.numerator, 0.001) // 单张大王 α=1.15
+        assertEquals(184.55, result.spi, 0.001)
+        assertEquals(184.55 / 3.0 * 100.0, result.nspi, 0.001)
+        assertEquals("碾压级", result.grade) // 残局 3 张，SPI ≥ 180
     }
 
-    @Test fun fiveCardStraightFlushIsStrong() {
+    @Test fun fiveCardStraightFlushIsOneHitKill() {
         val cards = listOf(Rank.ACE,Rank.TWO,Rank.THREE,Rank.FOUR,Rank.FIVE)
             .mapIndexed { i,r -> Card(i,r,Suit.SPADE) }
         val result = HandScorer(Rank.SIX).score(cards)
         assertEquals(430, result.total)
         assertEquals(1, result.rounds)
-        assertEquals("强势", result.grade)
+        assertEquals(494.5, result.numerator, 0.001) // 同花顺 α=1.15
+        assertEquals("碾压级", result.grade) // 残局 5 张，SPI ≥ 180
     }
 }

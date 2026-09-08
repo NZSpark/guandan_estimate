@@ -230,7 +230,8 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     lastResult = result
                     ui.spi.text = "SPI %.2f · NSPI %.1f · %s".format(result.spi, result.nspi, result.grade)
-                    ui.summary.text = "${snapshot.size} 张 · 总分 ${result.total} ÷ ${result.rounds} 轮 · T_max ${result.tMax}"
+                    val penaltyNote = if (result.waste > 0) "（含散牌惩罚 P${result.waste * 15}）" else ""
+                    ui.summary.text = "${snapshot.size} 张 · SPI分子 ${"%.2f".format(result.numerator)}$penaltyNote ÷ ${result.rounds} 轮 · T_max ${result.tMax}"
                     ui.breakdown.text = result.melds.sortedByDescending { it.score }.joinToString("\n") { it.label }
                     ui.sortedImage.isEnabled = snapshot.size == 27
                     ui.resultCard.visibility = View.VISIBLE; ui.calculate.isEnabled = true; ui.calculate.text = "重新计算"

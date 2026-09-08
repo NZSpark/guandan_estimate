@@ -12,7 +12,7 @@ class HandScorerTest {
         while (cards.size < 27) { val r = fillers[(cards.size-4) % fillers.size]; cards += Card(cards.size, r, Suit.entries[(cards.size-4)/fillers.size]) }
         val result = HandScorer(Rank.SIX).score(cards)
         assertTrue(result.melds.any { it.type == MeldType.BOMB && it.score == 192 })
-        assertEquals(result.total.toDouble()/result.rounds, result.spi, .0001)
+        assertEquals(result.numerator / result.rounds, result.spi, .0001)
     }
 
     @Test fun `rocket has fixed score`() {
@@ -21,6 +21,6 @@ class HandScorerTest {
         val ranks = Rank.entries.filter { it.value <= 14 }
         var n = 0
         while (cards.size < 27) { cards += Card(cards.size, ranks[n % ranks.size], Suit.entries[(n / ranks.size) % 4]); n++ }
-        assertTrue(HandScorer(Rank.FIVE).score(cards).melds.any { it.type == MeldType.ROCKET && it.score == 1700 })
+        assertTrue(HandScorer(Rank.FIVE).score(cards).melds.any { it.type == MeldType.ROCKET && it.score == 1000 })
     }
 }
