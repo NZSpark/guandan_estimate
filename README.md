@@ -134,3 +134,18 @@ model_training/    # 独立的真实照片标注、训练、评估与TFLite导�
 ## License
 
 当前仓库尚未指定开源许可证。未经许可，不代表授予复制、修改或分发权利。
+
+## Agent Harness（AI 协作框架）
+
+仓库内置一套文件驱动、跨工具兼容的 Agent Harness，供 AI 编码工具（pi / Claude Code / Codex 等）跨会话连续工作。
+
+入口：
+
+- [`AGENTS.md`](./AGENTS.md) —— 唯一入口：启动协议、工具适配、写入规则。
+- [`harness/CRITICAL.md`](./harness/CRITICAL.md) —— 不可违反的硬约束。
+- [`harness/state.md`](./harness/state.md) —— 当前任务与进度。
+- [`harness/index.md`](./harness/index.md) —— 任务路由表与 Token 预算。
+- [`harness/DECISIONS.md`](./harness/DECISIONS.md) —— 架构与规则决策记录。
+- [`skills/`](./skills) —— 可复用工作流：`harness-cleanup`、`add-scoring-test`、`ai-recognition-debug`。
+
+评分公式仍以两份规则文档为唯一真源，Harness 只做索引与流程约束，不复制公式。
