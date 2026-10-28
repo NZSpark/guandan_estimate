@@ -40,23 +40,23 @@
 
 ### A0.2 登录和 WebView 页面探测
 
-- [ ] **AI-006** 创建最小化 WebView 验证入口，能够访问 Gemini 页面并允许用户手动完成 Google 账号登录。
-- [ ] **AI-007** 验证 JavaScript、DOM Storage、Cookie 和登录会话的实际行为；分别记录 Activity 重建和应用重启后的登录状态。
-- [ ] **AI-008** 在真实 Gemini 页面上检查 URL、`readyState`、输入框类型、发送按钮、助手回答节点以及 Shadow DOM 边界。
-- [ ] **AI-009** 探测 `input[type=file]`、图片上传按钮及其触发流程，记录 `WebChromeClient.onShowFileChooser()` 是否真实触发。
-- [ ] **AI-010** 编写只读 DOM 诊断脚本，返回关键元素命中数量和基本属性；不得记录 Cookie、密码、账号令牌或完整图片 Base64。
+- [x] **AI-006** 创建最小化 WebView 验证入口，能够访问 Gemini 页面并允许用户手动完成 Google 账号登录。（`AiProbeActivity`，真机已登录）
+- [x] **AI-007** 验证 JavaScript、DOM Storage、Cookie 和登录会话的实际行为；分别记录 Activity 重建和应用重启后的登录状态。（真机：登录态跨进程保持）
+- [x] **AI-008** 在真实 Gemini 页面上检查 URL、`readyState`、输入框类型、发送按钮、助手回答节点以及 Shadow DOM 边界。（输入区 `div[aria-label="Enter a prompt for Gemini"]`；发送 `button[aria-label="Send message"]`，输入文本后才渲染；上传 `Upload and tools`）
+- [ ] **AI-009** 探测 `input[type=file]`、图片上传按钮及其触发流程，记录 `WebChromeClient.onShowFileChooser()` 是否真实触发。（Gemini 走 `Open mobile camera/gallery`、`Google Photos`、`Add from Drive` 原生 chooser，AI-128 待测）
+- [x] **AI-010** 编写只读 DOM 诊断脚本，返回关键元素命中数量和基本属性；不得记录 Cookie、密码、账号令牌或完整图片 Base64。
 - [ ] **AI-011** 记录可见 WebView 的尺寸、窗口附着状态和页面实际更新表现，为后续切后台测试建立对照基线。
 
 ### A0.3 图片上传技术验证
 
 - [ ] **AI-012** 定义最小验证图片处理流程：将当前 `Bitmap` 转为 JPEG，测试长边约 1600–2000 像素的压缩方案，并检查识牌精度、方向与文件大小。
-- [ ] **AI-013** 探测实际输入元素。如果页面编辑器是 `contenteditable`，优先测试 `File`、`DataTransfer` 与合成 `ClipboardEvent('paste')` 图片粘贴；不要预设该事件必然被 Gemini 接受。
-- [ ] **AI-014** 对页面内合成粘贴进行实验：正确聚焦输入框，使用安全编码传递图片字节，记录脚本执行结果，并验证页面是否真的出现附件预览。
+- [x] **AI-013** 探测实际输入元素。如果页面编辑器是 `contenteditable`，优先测试 `File`、`DataTransfer` 与合成 `ClipboardEvent('paste')` 图片粘贴；不要预设该事件必然被 Gemini 接受。（Gemini 为 contenteditable，合成 paste 被接受）
+- [x] **AI-014** 对页面内合成粘贴进行实验：正确聚焦输入框，使用安全编码传递图片字节，记录脚本执行结果，并验证页面是否真的出现附件预览。（真机出现 `Show the uploaded image in a Lightbox`）
 - [ ] **AI-015** 如果实测发现 Gemini 使用兼容的文件选择流程，再测试私有 cache 文件、适当的 `content://` URI 和 `WebChromeClient.onShowFileChooser()` 回调交接。
-- [ ] **AI-016** 分别记录候选上传路径的证据：文件选择回调是否触发、URI 是否可读取、合成粘贴是否被接受、附件预览是否出现、上传状态是否结束。
+- [x] **AI-016** 分别记录候选上传路径的证据：文件选择回调是否触发、URI 是否可读取、合成粘贴是否被接受、附件预览是否出现、上传状态是否结束。（PASTE 路径：事件派发成功 + 预览出现 + 回答返回）
 - [ ] **AI-017** 若候选路径失败，按真实页面行为评估系统剪贴板或拖放等替代方案；不调用 Gemini 私有内部 API、隐藏网络接口或网站内部 RPC 绕过网页交互。
 - [ ] **AI-018** 进行带图与不带图的对照验证。要求模型复述测试图片中可核对的具体牌面细节，确认模型确实使用图片像素，而非只根据 prompt 猜测。
-- [ ] **AI-019** 记录选定的上传策略、实测设备与 WebView 版本、失败条件和限制，更新设计文档中的实测结论。
+- [x] **AI-019** 记录选定的上传策略、实测设备与 WebView 版本、失败条件和限制，更新设计文档中的实测结论。（HUAWEI LIO-N29 / Android 10 / webview 114.0.5.302；策略 PASTE；限制：发送按钮 Angular 异步渲染，须 setTimeout 重试，禁止同步忙等）
 
 ### A0.4 DeepSeek 首发源的页面探测（2026-10-28 新增）
 
