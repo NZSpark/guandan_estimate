@@ -22,22 +22,30 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
 
     override val siteKey: String = AiSourceId.GEMINI_WEBVIEW.key
 
-    override val preferredUpload: UploadStrategy = UploadStrategy.FILE_CHOOSER
+    /** 附件在 [fillAndSubmitScript] 内随提交一起注入，因此不需要独立上传阶段。 */
+    override val preferredUpload: UploadStrategy = UploadStrategy.PASTE
+
+    /** 填文本 → 合成 paste → 点发送，必须在同一次注入内完成。 */
+    override val uploadsInsideSubmit: Boolean = true
 
     /**
-     * Gemini 的 `fillPrompt` 与 `submit` 本是两步脚本，这里串联执行。
+     * 一次注入完成「填文本 → 注入图片 → 提交」。
      *
-     * 不合并成单个 JS 是为了不改变已验证脚本的行为；驱动层会在两次注入之间检查中间结果。
-     * 第二次注入带 `submitOnly` 标记，由驱动层按 `;` 分隔执行（见 `PageDriver`）。
+     * 顺序不可拆：Gemini 的 `contenteditable` 只有在本条消息文本已在框内、编辑器已聚焦时
+     * 收到合成 paste，才会把图片挂到该消息上（GeminiBridge `doc/image_upload.md` §3.3）。
+     * 图片派发失败不影响文本提交，只降级为纯文本。
      */
     override fun fillAndSubmitScript(
         prompt: String,
         fileName: String,
         mimeType: String,
         base64: String
-    ): String = GeminiScripts.fillPrompt(prompt)
+    ): String = GeminiScripts.fillPasteAndSubmit(prompt, fileName, mimeType, base64)
 
-    /** 附件注入脚本（粘贴路径）。只有 preferredUpload 为 PASTE 时才调用。 */
+    /**
+     * 单独的粘贴注入脚本：仅用于探针 / 诊断，主流程不走这里。
+     * 主流程的粘贴在 [fillAndSubmitScript] 内部完成。
+     */
     override fun pasteAttachmentScript(fileName: String, mimeType: String, base64: String): String =
         GeminiScripts.pasteImage(fileName, mimeType, base64)
 
@@ -51,15 +59,25 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
 
     override fun pageFixScript(): String = ""
 
+    /**
+     * 解析 `fillPasteAndSubmit` 的返回。
+     *
+     * 注意：脚本返回 `ok:true` 只代表"文本已写入"，**不代表已提交**。
+     * 必须同时确认 `submitted:true`；`pasted` 仅为事件派发信号，不作成功判据（M11）。
+     */
     override fun parseSubmitResult(json: JSONObject): SubmitOutcome {
-        val ok = json.optBoolean("ok", false)
-        if (ok) {
-            return SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
+        val filled = json.optBoolean("filled", false) || json.optBoolean("ok", false)
+        val submitted = json.optBoolean("submitted", false)
+        if (!filled) {
+            return SubmitOutcome.fail(
+                why = JsonParse.why(json) ?: "fill-prompt-failed",
+                inputFilled = false
+            )
         }
-        return SubmitOutcome.fail(
-            why = JsonParse.why(json) ?: "fill-prompt-failed",
-            inputFilled = json.optBoolean("inputFilled", false)
-        )
+        if (!submitted) {
+            return SubmitOutcome.fail(why = "submit-not-dispatched", inputFilled = true)
+        }
+        return SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
     }
 
     override fun parseSnapshot(json: JSONObject): AnswerSnapshot = AnswerSnapshot(
@@ -79,7 +97,8 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
         responseCount = json.optInt("responseCount", 0),
         fileInputCount = json.optInt("fileInputCount", 0),
         loginIndicatorCount = json.optInt("loginIndicatorCount", 0),
-        generatingCount = json.optInt("generatingCount", 0)
+        generatingCount = json.optInt("generatingCount", 0),
+        passwordCount = json.optInt("passwordCount", 0)
     )
 
     /**

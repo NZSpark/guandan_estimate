@@ -1,5 +1,6 @@
 package nz.org.aotearoa.guandanscore.recognition.site
 
+import nz.org.aotearoa.guandanscore.recognition.GeminiScripts
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -149,10 +150,98 @@ class SiteAdapterScriptsTest {
     @Test
     fun geminiParseSubmitMapsOk() {
         val a = GeminiAdapter()
-        assertTrue(a.parseSubmitResult(JSONObject("""{"ok":true}""")).ok)
+        assertTrue(a.parseSubmitResult(JSONObject("""{"ok":true,"submitted":true}""")).ok)
         val failed = a.parseSubmitResult(JSONObject("""{"ok":false,"why":"composer-not-found"}"""))
         assertFalse(failed.ok)
         assertEquals("composer-not-found", failed.why)
+    }
+
+    // ---- Gemini 图片上传 ----
+
+    @Test
+    fun geminiUploadsInsideSubmitWithPasteStrategy() {
+        val a = GeminiAdapter()
+        assertTrue(a.uploadsInsideSubmit)
+        assertEquals(UploadStrategy.PASTE, a.preferredUpload)
+    }
+
+    @Test
+    fun geminiSubmitScriptFillsThenPastesThenClicksSend() {
+        val script = GeminiScripts.fillPasteAndSubmit("hi", "a.png", "image/png", "QUJD")
+        assertTrue(script.contains("JSON.stringify"))
+        val openBraces = script.count { it == '{' }
+        val closeBraces = script.count { it == '}' }
+        assertEquals("balanced braces", openBraces, closeBraces)
+
+        assertTrue("fills composer", script.contains("textContent = text"))
+        assertTrue("constructs File", script.contains("new File("))
+        assertTrue("uses DataTransfer", script.contains("new DataTransfer()"))
+        assertTrue("dispatches ClipboardEvent paste", script.contains("ClipboardEvent('paste'"))
+        assertTrue("focus before paste", script.contains("el.focus()"))
+        assertTrue("clicks send", script.contains("btn.click()"))
+
+        // 顺序必须：写文本 → 粘贴 → 发送。
+        val fillAt = script.indexOf("textContent = text")
+        val pasteAt = script.indexOf("ClipboardEvent('paste'")
+        val sendAt = script.indexOf("btn.click()")
+        assertTrue("fill before paste", fillAt in 0 until pasteAt)
+        assertTrue("paste before send", pasteAt in 0 until sendAt)
+
+        // 发送按钮由 Angular 异步渲染：必须用 setTimeout 重试，不能同步忙等
+        // （忙等阻塞事件循环，Angular 永远渲染不出来）。
+        assertTrue("async retry via setTimeout", script.contains("setTimeout(retry, 50)"))
+        assertFalse("no synchronous busy-wait", script.contains("while ("))
+        assertTrue("records submit path", script.contains("submitVia"))
+    }
+
+    @Test
+    fun geminiPasteFailureDoesNotBlockSubmit() {
+        val script = GeminiScripts.fillPasteAndSubmit("hi", "a.png", "image/png", "QUJD")
+        assertTrue(script.contains("pasteWhy"))
+        // 粘贴失败不得阻断提交：submitted 由发送分支赋值，不是硬编码常量。
+        assertTrue(script.contains("result.submitted = true"))
+        assertFalse(script.contains("submitted: true"))
+    }
+
+    @Test
+    fun geminiSubmitRequiresSubmittedFlag() {
+        val a = GeminiAdapter()
+        // 仅写入文本、未提交 → 必须判失败
+        val notSubmitted = a.parseSubmitResult(
+            JSONObject("""{"ok":true,"filled":true,"pasted":false,"submitted":false}""")
+        )
+        assertFalse(notSubmitted.ok)
+        assertTrue(notSubmitted.inputFilled)
+        assertEquals("submit-not-dispatched", notSubmitted.why)
+
+        val submitted = a.parseSubmitResult(
+            JSONObject("""{"ok":true,"filled":true,"pasted":false,"submitted":true}""")
+        )
+        assertTrue(submitted.ok)
+    }
+
+    @Test
+    fun geminiLoginRequiresPasswordAndLoginUi() {
+        val a = GeminiAdapter()
+        // 有账户菜单但无密码框（已登录页）→ 不得判为未登录
+        assertFalse(a.parseLogin(JSONObject("""{"passwordCount":0,"loginIndicatorCount":3}""")))
+        assertTrue(a.parseLogin(JSONObject("""{"passwordCount":1,"loginIndicatorCount":1}""")))
+        assertFalse(a.parseLogin(JSONObject("""{"passwordCount":1,"loginIndicatorCount":0}""")))
+    }
+
+    @Test
+    fun geminiDiagnoseExposesPasswordCountForLoginCheck() {
+        val s = GeminiScripts.diagnose()
+        assertTrue("diagnose must emit passwordCount", s.contains("passwordCount"))
+        assertTrue(s.contains("loginIndicatorCount"))
+    }
+
+    @Test
+    fun geminiVerifyAttachmentScopesToComposerContainer() {
+        val script = GeminiScripts.verifyAttachment()
+        assertTrue(script.contains("composer-not-found"))
+        assertTrue(script.contains("box.querySelectorAll"))
+        assertTrue(script.contains("thumbCount"))
     }
 
     // ---- Custom ----

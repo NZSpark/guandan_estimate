@@ -98,7 +98,7 @@ class GeminiScriptsTest {
         val s = GeminiScripts.verifyAttachment()
         // 必须有 attached 判定，且基于真实 img/preview 计数
         assertTrue(s.contains("attached"))
-        assertTrue(s.contains("imageCount"))
+        assertTrue(s.contains("thumbCount"))
         assertTrue(s.contains("previewCount"))
     }
 

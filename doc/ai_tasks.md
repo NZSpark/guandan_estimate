@@ -21,6 +21,8 @@
 | 3 | 接入应用 UI 与设置（含 AI 源选择） | 现有入口可使用任一网页源，API Key 不再阻挡该模式 | 阶段 2 |
 | 4 | 生命周期、恢复与并发 | 异常可恢复、任务可取消、回答不会串线 | 阶段 2–3 |
 | 5 | 配置迁移、清理与发布验收 | 迁移安全，回归测试通过，文档完整 | 阶段 3–4 |
+| 6 | 多源横向验收 | 两个网页源与 API 兼容性、会话隔离通过验证 | 阶段 1.5、2–5 |
+| 7 | UI 全面重设计 | 工作台、手牌编辑、结果、源管理、登录/诊断及无障碍验收 | 阶段 3；与阶段 0/2 真机验证协同 |
 
 ---
 
@@ -60,11 +62,11 @@
 
 > 依据 `doc/multi_ai_update.md` §5。DeepSeek 为首发源，因此它的探测结论优先于 Gemini。
 
-- [ ] **AI-006D** 扩展探测入口：`GeminiProbeActivity` 泛化为 `AiProbeActivity`，可在运行期切换 `homeUrl`（Gemini / DeepSeek / 自定义），并保留旧入口名以便既有 adb 脚本不失效。
-- [ ] **AI-007D** 在目标设备手动登录 DeepSeek 网页版，分别记录 Activity 重建与应用进程重启后的登录态是否保持（Cookie + DOM Storage 生效）。
+- [x] **AI-006D** 扩展探测入口：`GeminiProbeActivity` 泛化为 `AiProbeActivity`，可在运行期切换 `homeUrl`（Gemini / DeepSeek / 自定义），并保留旧入口名以便既有 adb 脚本不失效。
+- [x] **AI-007D** 在目标设备手动登录 DeepSeek 网页版，分别记录 Activity 重建与应用进程重启后的登录态是否保持（Cookie + DOM Storage 生效）。
 - [ ] **AI-008D** 在真实 DeepSeek 页面检查：`location.href`、`readyState`、`innerHeight`、输入框元素（`textarea#chat-input` 是否为唯一/最内层）、发送按钮的可点击判据、回答节点容器、是否存在 Shadow DOM。
 - [ ] **AI-009D** 探测 `input[type=file]` 与上传按钮，记录 `WebChromeClient.onShowFileChooser()` 是否真实触发、`accept` 类型与 `multiple` 属性。
-- [ ] **AI-010D** 用只读诊断脚本记录每个候选选择器的 `querySelectorAll(sel).length`，写入 `DeepSeekSelectors` 注释（日期 + 命中数 + 实测方法）。
+- [x] **AI-010D** 用只读诊断脚本记录每个候选选择器的 `querySelectorAll(sel).length`，写入 `DeepSeekSelectors` 注释（日期 + 命中数 + 实测方法）。
 - [ ] **AI-011D** 记录是否存在可用的“停止生成”控件；若为 0 命中，明确写下“不得作为结束判定前提”。
 
 **阶段 0 准入条件：** 必须能够手动登录 Gemini，将应用当前图片真实附加到网页消息，确认上传完成，提交识牌 prompt，并验证模型回答确实受到图片像素影响。如果无法可靠完成此闭环，应暂停后续业务迁移，不得将事件派发成功误认为上传成功。
@@ -192,9 +194,9 @@
 
 > 这是本任务的**核心验收**。Gemini 的对应闭环（A2.1–A2.4 真机部分）与本节并行推进，但 DeepSeek 优先。
 
-- [ ] **AI-127** 真机登录 DeepSeek 网页版，用 `DeepSeekAdapter.diagnoseScript()` 记录全部选择器命中数，回填到 `DeepSeekSelectors` 注释。
+- [x] **AI-127** 真机登录 DeepSeek 网页版，用 `DeepSeekAdapter.diagnoseScript()` 记录全部选择器命中数，回填到 `DeepSeekSelectors` 注释。
 - [ ] **AI-128** 上传路径 A：`FILE_CHOOSER`。把当前 JPEG 写入 `cacheDir`，`onShowFileChooser` 回调里 `onReceiveValue(arrayOf(uri))`，确认页面出现附件预览。
-- [ ] **AI-129** 上传路径 B：`PASTE`。合成 `ClipboardEvent` + `DataTransfer` + `File`，`verifyAttachment` 必须通过；仅 `dispatched=true` 不算成功。
+- [x] **AI-129** 上传路径 B：`PASTE`。合成 `ClipboardEvent` + `DataTransfer` + `File`，`verifyAttachment` 必须通过；仅 `dispatched=true` 不算成功。
 - [ ] **AI-130** 两条路径都失败时，记录具体拒绝信号（事件 `defaultPrevented`、无预览节点、文件选择器未触发），更新 `DeepSeekAdapter.preferredUpload` 的注释结论。
 - [ ] **AI-131** 提交闭环：填 prompt → 点发送 → 确认 `responseCount` 增加或文本变化 → `GenerationWatcher` 判定结束 → `AiCardResponseParser` 解析出 `List<Card>`。
 - [ ] **AI-132** 带图 / 不带图对照：同一张手牌照片分别提交，要求模型复述图片中可核对的具体牌面，确认像素被使用（对应全局 G-02）。
@@ -338,6 +340,48 @@
 
 ---
 
+## 阶段 7：UI 全面重设计（依据 `doc/ui_design.md`）
+
+**阶段目标：** 在保留现有业务逻辑、评分规则、数据模型和多 AI 源架构的前提下，实施主工作台、手牌编辑、评分结果、AI 源管理及独立网页登录/诊断页面。`doc/ui_design.md` 是设计规格，不代表实现已完成；本阶段任务默认未完成，必须取得测试或设备验证证据后才能勾选。
+
+### A7.1 基线与主工作台（P0）
+
+- [ ] **UI-001** 记录重设计前的界面截图、现有控件行为和测试基线；将原有缺陷与重设计引入的问题分别记录。
+- [ ] **UI-002** 重构 `activity_main.xml`，按输入照片、本地/联网识牌、手牌核对、级牌选择和评分结果分区；优先沿用现有 XML 与 View Binding，不因设计稿强制迁移 Compose。
+- [ ] **UI-003** 将界面状态按职责拆分：`imageState`、`localRecognitionState`、`aiRecognitionState`、`handState`、`levelState`、`scoreState`、`outputImageState`、`sourceState`；不再让无关任务覆盖同一个状态文字。
+- [ ] **UI-004** 保留拍照、相册导入、本地 OCR、模板匹配、`VisualCardCodec`、用户主动触发的在线识牌、手工校对、评分、随机手牌及图片保存能力；不在 UI 改造中重写识牌算法或评分规则。
+- [ ] **UI-005** 在相应分区提供明确且持续可见的加载、成功、警告、部分识别、失败和取消状态，并给出可执行的恢复操作；失败时保留仍然有效的输入、已确认手牌和既有结果。
+- [ ] **UI-006** 手牌增删/校正或级牌改变后，将旧评分清除或标记为过期；切换 AI 源或保存图片不得意外修改已确认手牌或使有效评分无故失效。
+- [ ] **UI-007** 识牌、评分、渲染和保存等耗时操作不得阻塞主线程；防止重复提交，并确保成功、失败、超时和取消后都能恢复相关控件。
+
+### A7.2 手牌核对与评分结果（P1）
+
+- [ ] **UI-008** 实现自适应牌面网格，显示 0～27 张的准确数量，支持查看全部牌、单张校正及独立删除；遵守现有模型的重复牌规则，不擅自去重或改变业务顺序。
+- [ ] **UI-009** 实现统一的单张牌校正/补录面板：选项来自 `Rank.entries` 和 `Suit.entries`；编辑时保留原值；正确处理 `Suit.JOKER`、合法牌面和 27 张上限。
+- [ ] **UI-010** 实现本局级牌选择器和主要评分操作。1～27 张手牌均使用现有支持的评分路径，不在 UI 中增加额外业务限制。
+- [ ] **UI-011** 使用 `HandScorer` 的真实结果展示手牌数量、权威 `grade`、SPI、NSPI、评分分子、出牌轮数、`T_max` 和适用的散牌惩罚；UI 不得自行计算等级或修改底层评分精度。
+- [ ] **UI-012** 实现评分说明和可展开拆牌明细；解释内容与 `doc/掼蛋牌型量化评分方案.md`、`doc/手牌综合牌力评估方法.md` 一致。沿用现有按分数降序的结果，不在 UI 重算最优拆牌。
+
+### A7.3 图片输出、AI 源管理与网页登录（P1）
+
+- [ ] **UI-013** 将输入图片与生成图片的状态独立管理；核对 `MainActivity` 中 `currentBitmap` 等字段的调用关系，确保输出图不会覆盖原图引用或破坏“保存当前图片”的行为。
+- [ ] **UI-014** 验证随机生成 27 张手牌、保存当前图片、生成并保存最优拆牌图的完整流程。拆牌图操作仅在恰有 27 张手牌且评分结果有效时启用；渲染或保存失败时保留可用结果和图片。
+- [ ] **UI-015** 按 `doc/ui_design.md` 实现 AI 源管理界面，复用 `AiSettingsStore`、`AiSourceId`、`AiSourceRegistry` 和预设；支持 DeepSeek 网页版、Gemini 网页版、自定义网页源及 HTTP API，并根据源类型显示字段。
+- [ ] **UI-016** 验证配置档的选择、新建、编辑、保存并选用和删除；正确处理删除确认、未保存修改取消、激活配置回退及 API Key 的现有安全存储机制。
+- [ ] **UI-017** 展示来自真实健康检查的源状态，并区分需要登录、页面不可用、配置不完整、上传失败、回答超时和解析失败；登录返回后重新检查状态，不显示未经确认的成功状态。
+- [ ] **UI-018** 将 `GeminiProbeActivity` 整理为独立的网页登录/诊断页面，按需要保留旧入口兼容；验证 WebView 可见、尺寸有效、正常出帧，并提供重新加载、状态检查、高级诊断和明确的返回工作台操作。
+- [ ] **UI-019** 验证从 AI 设置或工作台进入登录页、返回并恢复状态的完整流程；保留手牌、级牌和上次计算结果。返回后重新检查健康状态，但不得自动发送用户图片；诊断不得泄露 Cookie、密码、令牌、私人页面内容或完整图片 Base64。
+
+### A7.4 视觉、无障碍与回归验收（P1/P2）
+
+- [ ] **UI-020** 按设计系统统一现有主题资源、颜色、间距、圆角、按钮层级和数字格式；验证对比度，状态不能只靠颜色区分。
+- [ ] **UI-021** 验证窄屏、横屏、较大屏幕、键盘弹出和系统字体缩放；重要操作可达，触控目标符合至少 48×48dp 的设计要求，并为牌面、图标、状态及错误提供有意义的 TalkBack 文案。
+- [ ] **UI-022** 执行 `./gradlew testDebugUnitTest` 和 `./gradlew assembleDebug`，记录真实结果并修复回归；在实际 Android 设备验证工作台主流程、手牌编辑、评分、图片生成/保存、四种 AI 源配置和网页登录导航。记录必要截图和设备证据；UI 单测不能替代阶段 0/2 的真实网页登录和带图上传验收。
+
+**阶段 7 验收：** 主工作台能够完成输入到评分的完整流程；显示的分值、状态和源健康信息均来自真实业务结果；现有功能不被无故删除；配置档和网页登录行为清晰可恢复；布局、无障碍、测试、构建及真机验收结果均有记录。
+
+---
+
 ## 全局验收清单
 
 - [ ] **G-01** 图片上传的真实网页行为已在目标 Android WebView 上验证，而不是仅有脚本派发成功记录。
@@ -357,10 +401,17 @@
 - [ ] **G-15** DeepSeek 与 Gemini 各自会话独立：Cookie、历史、当前回答互不串线。
 - [ ] **G-16** 两源的失败文案经 `AiSourceError` 分类映射，用户能区分“未登录 / 上传失败 / 超时 / 页面结构变化”。
 
+- [ ] **G-17** `doc/ui_design.md` 所规定的主工作台、手牌编辑、评分结果、图片输出、AI 源管理和独立网页登录/诊断均已完成阶段 7 验收。
+- [ ] **G-18** 输入照片与输出图片状态分离；手牌或级牌变更后旧评分会失效，UI 不独立计算等级或重新评分。
+- [ ] **G-19** 所有 UI 状态、健康状态、评分数值和图片保存结果均来自真实业务状态；失败时保留仍然有效的用户数据。
+- [ ] **G-20** 配置档操作、四种 AI 源字段显隐、网页源免 API Key、API 配置校验及网页登录返回后的健康状态刷新均已验证。
+- [ ] **G-21** 窄屏、横屏、字体缩放、TalkBack 与触控目标已验证；测试、构建和实际 Android 设备验收结果有记录。
+
 ## 任务执行记录
 
 | 日期 | 任务编号/阶段 | 结果 | 证据或问题 | 后续动作 |
 |---|---|---|---|---|
+| 2026-10-28 | 阶段 7 / UI-001~022 | 已分解，待实施 | 依据 `doc/ui_design.md` 新增 UI 任务；未将设计规格视为实现证据，所有 UI 任务保持未勾选 | 按 P0→P1→P2 实施并逐步验证 |
 | 2026-10-28 | AI-001~003 | 通过 | 分支 airecognize 工作区干净；testDebugUnitTest 与 assembleDebug 均 BUILD SUCCESSFUL（基线 24 测试） | — |
 | 2026-10-28 | AI-052~055, AI-085 | 完成 | 新增 AiCardResponseParser：严格 JSON + 围栏剥离 + 有边界回退 + rank/suit/王一致性校验 + 数量/count 告警；AiRecognitionClient 解析委托至此，旧 7 测试不变通过；新增 19 测试 | 真机回来后补真实模型输出用例 |
 | 2026-10-28 | AI-047~049, AI-086 | 完成 | 新增 GenerationWatcher：新节点/文本变化判定、连续稳定 + 最小静默、prompt 回显与旧答案排除、生成中辅助信号、硬超时；11 测试 | AI-048 未与 GeminiBridge 用例逐条对照 |
@@ -372,6 +423,9 @@
 | 2026-10-28 | AI-102~126, AI-136~139, AI-145~147 | 完成 | 新增 recognition/source（AiSource/AiSourceError/SourceHealth/AiSourceId/AiSourcePresets/AiSourceRegistry/HttpApiSource）、recognition/site（SiteAdapter+结构化返回/JsonQuote/JsonParse/GeminiAdapter/DeepSeekAdapter/CustomAdapter/DeepSeekSelectors/DeepSeekScripts）、recognition/webview（PageOps/PageDriver/WebViewBridge/WebViewHost/WebViewAiSource）；AiSettings 加 sourceKey+homeUrl、AiTransport 收敛为 WEBVIEW/API、迁移规则抽成 decodeProfile 伴生函数；DeepSeek 为默认首源；驱动层 grep 证明零站点耦合；testOptions.unitTests.isReturnDefaultValues 打开 | 余下 AI-140~144（配置页 UI 与 MainActivity 接线）待做；真机验证未开始 |
 | 2026-10-28 | 文档 | 完成 | 多源改造任务分解写入本清单：新增阶段 1.5（多源抽象层 AI-102~126）、A0.4（DeepSeek 探测 AI-006D~011D）、A2.5（DeepSeek 真机闭环 AI-127~135）、A3.4（源选择配置页 AI-136~147）、阶段 6（多源横向验收 AI-148~155）、G-11~G-16；依据 `doc/multi_ai_update.md`，DeepSeek 定为首发源 | 从 AI-136~147（配置层）与 AI-102~126（抽象层）开始实施 |
 | 2026-10-28 | AI-004, AI-006~025, AI-036~046, AI-058~070, AI-075~083, AI-089~090, AI-093~101 | 未开始 | 依赖目标 Android 设备上的真实 Gemini WebView 会话、登录与图片上传验证；离线环境无法产生有效证据 | 需真机执行阶段 0 准入验证 |
+| 2026-10-28 | AI-006D, AI-007D, AI-010D, AI-127, AI-129 | 通过 | 设备 HUAWEI LIO-N29 / Android 10 / com.huawei.webview 114.0.5.302。`AiProbeActivity` 可切换 DeepSeek/Gemini/自定义；进程重启后 DeepSeek 仍登录（inputCount=1 login=0 password=0）；诊断 input=1(textarea) send=1 file=1 gen=0；合成 paste 后 `attachmentCount=1 attached=true`，但 `dispatchEvent` 返回 accepted=false —— 判据只能看附件节点 | AI-128 FILE_CHOOSER 路径待测；AI-130 记录两条路径结论 |
+| 2026-10-29 | Gemini 真机闭环 + 3 缺陷修复 | 通过 | 设备 HUAWEI LIO-N29 / Android 10 / webview 114.0.5.302。Gemini 已登录（passwordCount=0 正确判已登录）。端到端：填文本 → 合成 paste 注入图片 → 点 `Send message` → 页面出现 `You said 这是什么颜色？只回答颜色。`、`Show the uploaded image in a Lightbox`、回答 `粉红色`。修复：①diagnose 缺 `passwordCount` 致登录误判；②`parseSubmitResult` 只认 `ok:true` 致未提交报成功；③发送按钮 Angular 异步渲染，同步查询扑空，改 `setTimeout` 重试。实测禁止同步忙等（阻塞事件循环，按钮永不渲染）。testDebugUnitTest 159 全绿 | 用实测值复核 response/generating 选择器；AI-128 原生触摸路径待测 |
+| 2026-10-28 | WebViewHost / PageDriver 华为适配 | 完成 | 参照 SMSProxy：`layoutDirection=LTR`（EMUI 下 DeepSeek 输入字符倒序）、`onPageStarted` 提前记录 URL、`setWebContentsDebuggingEnabled(true)`；`PageDriver` 增同步同源 XHR 活性探针（区分“URL 正确但卡死”与真正就绪）。testDebugUnitTest 全绿 | — |
 
 ## 参考资料
 

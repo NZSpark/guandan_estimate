@@ -54,6 +54,10 @@
 - 回答必须相对发送前基线是新的；旧回答与 prompt 回显一律丢弃。
 - 同一上游同一时刻只允许一个任务（`AiRecognitionService.isBusy`）。
 - 脚本动态参数一律 `JSONObject.quote`；诊断脚本不得读取 Cookie / Storage / Base64。
+- **`evaluateJavascript` 只返回同步值**。Promise 与 `setTimeout` 里的赋值拿不到；异步副作用必须由调用方用后续快照（`snapshot()` / `awaitSubmitStarted`）验证，脚本返回值只作"已派发"信号。
+- **JS 内禁止同步忙等**（`while (Date.now() < dl)`）。它会阻塞事件循环，Angular/React 变更检测停摆，实测 2s 内发送按钮始终不渲染。等待渲染只能用 `setTimeout` 重试或轮询下一帧。
+- 登录态判据必须同时看密码框与登录 UI；只查登录选择器会把已登录页的账户菜单误判为未登录（Gemini 已登录页 `passwordCount=0`）。
+- 提交成功不能只看脚本 `ok:true`；必须确认 `submitted:true`，最终成败以回答基线变化为准。
 
 ## 排错顺序
 

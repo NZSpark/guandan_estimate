@@ -38,6 +38,34 @@ class PageDriver(
 
     private companion object {
         const val TAG = "PageDriver"
+
+        /**
+         * 同步同源 XHR 探活。与站点无关：只读 `location` 与一个同源静态资源。
+         *
+         * - `not_ready`：文档尚未 commit（origin 为空或 readyState 还是 loading）
+         * - `alive`：请求返回且 status > 0
+         * - `dead`：抛异常（跨域/被拦截）或请求未返回
+         */
+        val SYNC_XHR_PROBE = """
+            (function(){
+              try{
+                var rs=document.readyState||'';
+                var href=location.href||'';
+                var origin='';try{origin=String(location.origin||'');}catch(e0){}
+                var committed=(origin&&origin!=='null')&&(rs==='interactive'||rs==='complete');
+                if(!committed){return JSON.stringify({state:'not_ready',rs:rs,origin:origin,href:href});}
+                var x=new XMLHttpRequest();
+                x.open('GET','/favicon.ico?_='+Date.now(),false);
+                x.send();
+                return JSON.stringify({state:x.status>0?'alive':'dead',status:x.status});
+              }catch(e){
+                var origin2='';try{origin2=String(location.origin||'');}catch(e2){}
+                var rs2='';try{rs2=document.readyState||'';}catch(e3){}
+                var committed2=(origin2&&origin2!=='null')&&(rs2==='interactive'||rs2==='complete');
+                return JSON.stringify({state:committed2?'dead':'not_ready',err:String(e&&e.message||e)});
+              }
+            })();
+        """.trimIndent()
         const val READY_TIMEOUT_MILLIS = 15_000L
         const val READY_POLL_MILLIS = 300L
         const val UPLOAD_TIMEOUT_MILLIS = 20_000L
@@ -94,7 +122,28 @@ class PageDriver(
         if (!ready || !hasOrigin) return PageLiveness.NOT_READY
         val viewportOk = diag.innerHeight >= 100
         val composerOk = diag.inputCount > 0
-        return if (viewportOk && composerOk) PageLiveness.ALIVE else PageLiveness.NOT_READY
+        if (!viewportOk || !composerOk) return PageLiveness.NOT_READY
+        // 静态诊断全部通过，仍可能是“URL 正确、元素在、但页面已卡死”的假活页。
+        // 用一个同步同源 XHR 探活：健康页毫秒级返回；卡死的 WebView 永远不返回。
+        // 同步（第三个参数 false）是刻意的：异步请求可能悬挂到 evaluate 结束之后，
+        // 污染后续轮询（SMSProxy 实测）。超时/异常一律判 DEAD，交给 ensureLoaded 重载。
+        return probeSyncXhrLiveness()
+    }
+
+    /**
+     * 同步同源 XHR 探活（SMSProxy `probePageLiveness` 的可移植部分）。
+     *
+     * 只在已经确认 `readyState`、`origin`、输入框都就绪之后调用，所以这里
+     * 不需要再区分 NOT_READY —— 走不到这里就说明还没就绪。
+     */
+    private fun probeSyncXhrLiveness(): PageLiveness {
+        val raw = runBlockingEvaluate(SYNC_XHR_PROBE).trim()
+        val json = JsonParse.parse(raw) ?: return PageLiveness.DEAD
+        return when (json.optString("state")) {
+            "alive" -> PageLiveness.ALIVE
+            "not_ready" -> PageLiveness.NOT_READY
+            else -> PageLiveness.DEAD
+        }
     }
 
     override fun diagnose(): DiagnoseResult? {

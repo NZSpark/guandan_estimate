@@ -133,12 +133,17 @@ class WebViewAiSource(
 
         val base64 = base64Encoder(request.jpegBytes)
 
-        val uploadError = uploadWithFallback(request, base64)
+        val uploadError = if (adapter.uploadsInsideSubmit) null else uploadWithFallback(request, base64)
         if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
         if (cancelled) throw AiSourceError.Cancelled()
 
         val outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
         if (!outcome.ok) throw AiSourceError.SubmitFailed(outcome.why ?: "未知原因")
+
+        // 附件在提交脚本内注入的站点（Gemini）：提交后仍要确认预览真的出现。
+        if (adapter.uploadsInsideSubmit && !pages.verifyAttachment()) {
+            throw AiSourceError.UploadFailed("提交后未确认附件预览")
+        }
 
         if (!pages.awaitSubmitStarted(baseline)) {
             throw AiSourceError.SubmitFailed("提交后未见新回答节点或文本变化")

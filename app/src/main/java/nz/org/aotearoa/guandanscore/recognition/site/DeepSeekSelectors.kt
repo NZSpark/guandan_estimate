@@ -18,6 +18,17 @@ package nz.org.aotearoa.guandanscore.recognition.site
  * | PASSWORD | 0（已登录） | ✅ |
  * | GENERATING | 0 | ❌ 无 stop 控件；**不得作为结束判定前提** |
  *
+ * ## 复测 2026-10-28 23:00（AiProbeActivity，进程重启后）
+ * `inputCount=1 inputTag=textarea inputEditable=true sendCount=1 fileInputCount=1
+ * loginIndicatorCount=0 passwordCount=0 attachmentCount=0 editableCount=0 innerHeight=372`
+ * → 登录态跨进程重启保持（Cookie + DOM Storage 生效，AI-007D 通过）。
+ *
+ * ## 合成 paste 实测 2026-10-28 23:07
+ * `pasteImage` 返回 `{dispatched:true, accepted:false}`，但紧接的 `verifyAttachment`
+ * 返回 `{attachmentCount:1, attached:true}` —— **预览真实出现**。
+ * 结论：`dispatchEvent` 的返回值被 DeepSeek `preventDefault` 掉，**不能作为成败判据**；
+ * 唯一权威判据是 [ATTACHMENT] 命中数。PASTE 路径在本机可行，保持为首选。
+ *
  * ## 关键行为（实测）
  * 1. **发送按钮不是 `<button>`**，是 `div[role=button].ds-button`；启用/禁用靠
  *    `ds-button--disabled` 类，不看 `aria-disabled`/`disabled`。

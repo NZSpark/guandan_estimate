@@ -12,7 +12,7 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import nz.org.aotearoa.guandanscore.probe.GeminiProbeActivity
+import nz.org.aotearoa.guandanscore.probe.AiProbeActivity
 import nz.org.aotearoa.guandanscore.recognition.AiSettings
 import nz.org.aotearoa.guandanscore.recognition.AiSettingsStore
 import nz.org.aotearoa.guandanscore.recognition.AiTransport
@@ -147,8 +147,8 @@ class AiSettingsDialog(
                     return@setOnClickListener
                 }
                 activity.startActivity(
-                    Intent(activity, GeminiProbeActivity::class.java)
-                        .putExtra(GeminiProbeActivity.EXTRA_START_URL, target)
+                    Intent(activity, AiProbeActivity::class.java)
+                        .putExtra(AiProbeActivity.EXTRA_URL, target)
                 )
             }
         }

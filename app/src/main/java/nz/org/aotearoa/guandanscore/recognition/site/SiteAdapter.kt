@@ -46,6 +46,7 @@ data class DiagnoseResult(
     val fileInputCount: Int,
     val loginIndicatorCount: Int,
     val generatingCount: Int,
+    val passwordCount: Int = 0,
     val editableCount: Int = 0
 ) {
     fun summary(): String = buildString {
@@ -74,6 +75,15 @@ interface SiteAdapter {
 
     /** 首选上传策略。 */
     val preferredUpload: UploadStrategy
+
+    /**
+     * 附件是否在 [fillAndSubmitScript] 内部完成（填文本 → 粘贴 → 提交一次注入）。
+     *
+     * Gemini 的 `contenteditable` 必须在本条消息文本已填入后收到合成 paste，
+     * 才会把图片挂到该消息上，因此它的上传无法与提交拆开。为 true 时驱动层
+     * 跳过独立的 upload 阶段，附件是否成功一律由 [verifyAttachmentScript] 判定。
+     */
+    val uploadsInsideSubmit: Boolean get() = false
 
     /** 一次注入完成“填 prompt + 挂附件 + 点发送”。 */
     fun fillAndSubmitScript(prompt: String, fileName: String, mimeType: String, base64: String): String

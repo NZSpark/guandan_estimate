@@ -13,6 +13,7 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
         <!-- 阶段 0 验证入口，Gemini WebView 迁移完成后移除 -->
+        <activity android:name=".probe.AiProbeActivity" android:exported="true" android:label="AI Probe" />
         <activity android:name=".probe.GeminiProbeActivity" android:exported="true" android:label="Gemini Probe" />
         <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true">
             <intent-filter>

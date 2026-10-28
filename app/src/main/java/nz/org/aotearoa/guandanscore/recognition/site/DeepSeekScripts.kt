@@ -242,22 +242,65 @@ object DeepSeekScripts {
           try { input = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
           if (!input) return JSON.stringify({ ok: false, why: 'composer-not-found' });
           var box = input;
-          for (var i = 0; i < 6 && box && box.parentElement; i++) { box = box.parentElement; }
+          for (var i = 0; i < 8 && box && box.parentElement; i++) { box = box.parentElement; }
           if (!box) return JSON.stringify({ ok: false, why: 'no-container' });
-          var cands = box.querySelectorAll('div.ds-button, div[role="button"]');
-          var best = null;
+          var ir = input.getBoundingClientRect();
+
+          function center(r) {
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+                     w: Math.round(r.width), h: Math.round(r.height), left: r.left, top: r.top };
+          }
+          function labelOf(el) {
+            var a = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-tooltip'));
+            var t = (el.textContent || '').trim();
+            return ((a || '') + ' ' + (t.length <= 12 ? t : '')).toLowerCase();
+          }
+
+          // 1) 锚点：发送按钮。没有锚点就无法区分工具栏里的各个开关。
+          var sendEl = null;
+          try { sendEl = document.querySelector(${q(DeepSeekSelectors.send())}); } catch (e) {}
+          var send = null;
+          if (sendEl) {
+            var sr = sendEl.getBoundingClientRect();
+            if (sr.width > 0 && sr.height > 0) send = center(sr);
+          }
+
+          var cands = box.querySelectorAll('div.ds-button, div[role="button"], button');
+          var labelled = null, leftOfSend = null;
           for (var j = 0; j < cands.length; j++) {
             var c = cands[j];
             var r = c.getBoundingClientRect();
             if (r.width <= 0 || r.height <= 0) continue;
-            if (r.width > 80 || r.height > 80) continue;
-            if (c.querySelector('svg') === null) continue;
-            if (!best || r.left < best.x) {
-              best = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) };
+            if (r.width > 60 || r.height > 60) continue;
+            var cls = (c.className || '').toString();
+            if (cls.indexOf('ds-button__icon') >= 0) continue;  // 内层图标，取外层按钮
+            if (cls.indexOf('ds-toggle-button') >= 0) continue; // 主题/侧栏开关，绝不上传
+            if (cls.indexOf('--primary') >= 0) continue;        // 发送键本身
+            // 只取输入框同一水平带内的按钮。
+            if (r.top < ir.top - 60 || r.top > ir.bottom + 60) continue;
+            var info = center(r);
+            var lab = labelOf(c);
+            if (lab.indexOf('attach') >= 0 || lab.indexOf('upload') >= 0 ||
+                lab.indexOf('上传') >= 0 || lab.indexOf('附件') >= 0) {
+              if (!labelled || info.left > labelled.left) labelled = info;
+            }
+            if (send) {
+              // 发送键左侧、且垂直对齐（同一行）的最近按钮。
+              if (info.left < send.left && Math.abs(info.top - send.top) <= 24) {
+                if (!leftOfSend || info.left > leftOfSend.left) leftOfSend = info;
+              }
             }
           }
-          if (!best) return JSON.stringify({ ok: false, why: 'icon-not-found' });
-          return JSON.stringify({ ok: true, x: best.x, y: best.y, w: best.w, h: best.h, innerHeight: window.innerHeight, dpr: window.devicePixelRatio || 1 });
+
+          var best = labelled || leftOfSend;
+          if (!best) {
+            return JSON.stringify({ ok: false, why: 'icon-not-found', send: send,
+                                    candidates: cands.length });
+          }
+          return JSON.stringify({ ok: true, x: best.x, y: best.y, w: best.w, h: best.h,
+                                  via: labelled ? 'label' : 'left-of-send',
+                                  innerHeight: window.innerHeight,
+                                  dpr: window.devicePixelRatio || 1 });
         })()
     """.trimIndent()
 

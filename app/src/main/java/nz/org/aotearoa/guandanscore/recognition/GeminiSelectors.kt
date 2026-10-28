@@ -19,10 +19,12 @@ object GeminiSelectors {
         "textarea"
     )
 
-    /** 发送按钮候选。 */
+    /** 发送按钮候选。实测 aria-label 为 `Send message`，且可能渲染为 div。 */
     val SEND_CANDIDATES = listOf(
+        "button[aria-label*=\"Send message\" i]",
         "button[aria-label*=\"Send\" i]",
         "button[aria-label*=\"发送\"]",
+        "[role=\"button\"][aria-label*=\"Send\" i]",
         "button.send-button",
         "button[mattooltip*=\"Send\" i]"
     )
@@ -34,6 +36,9 @@ object GeminiSelectors {
         "div.response-content",
         ".model-response-text"
     )
+
+    /** 密码输入框：只有未登录/登录页才有。已登录页 0 命中。 */
+    const val PASSWORD = "input[type='password']"
 
     /** 登录/未登录指示。 */
     val LOGIN_CANDIDATES = listOf(
@@ -59,6 +64,7 @@ object GeminiSelectors {
     fun input(): String = INPUT_CANDIDATES.joinToString(",")
     fun send(): String = SEND_CANDIDATES.joinToString(",")
     fun response(): String = RESPONSE_CANDIDATES.joinToString(",")
+    fun password(): String = PASSWORD
     fun login(): String = LOGIN_CANDIDATES.joinToString(",")
     fun fileInput(): String = FILE_INPUT_CANDIDATES.joinToString(",")
     fun generating(): String = GENERATING_CANDIDATES.joinToString(",")

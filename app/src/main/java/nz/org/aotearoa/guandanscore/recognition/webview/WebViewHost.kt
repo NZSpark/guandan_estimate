@@ -169,6 +169,8 @@ class WebViewHost private constructor(private val appContext: Context) {
         requireMainThread()
         webView?.let { return it }
         val view = WebView(appContext).apply {
+            // 华为/EMUI WebView 会给 DeepSeek 登录输入框选 RTL，导致输入字符倒序（SMSProxy 实测）。
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_LTR
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.databaseEnabled = true
@@ -178,6 +180,12 @@ class WebViewHost private constructor(private val appContext: Context) {
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webViewClient = object : WebViewClient() {
+                // SPA 跳转中途 onPageFinished 可能迟迟不来；提前记录 URL，
+                // 供 currentUrl 的读者拿到尽量新的值（只读缓存，不碰 WebView.url）。
+                override fun onPageStarted(v: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    if (url != null) currentUrl = url
+                }
+
                 override fun onPageFinished(v: WebView?, url: String?) {
                     if (url != null) currentUrl = url
                     onPageFinished?.invoke(url.orEmpty())
@@ -242,6 +250,8 @@ class WebViewHost private constructor(private val appContext: Context) {
                 }
             }
         }
+        // 允许 chrome://inspect 调试；Release 由 R8 保留规则与正式流程另行把关。
+        WebView.setWebContentsDebuggingEnabled(true)
         webView = view
         windowStatus = WindowStatus.NotAttached
         Log.i(TAG, "WebView created")
