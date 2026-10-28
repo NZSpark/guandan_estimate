@@ -7,7 +7,7 @@
 
 | 任务 | 必读 | 按需 | Skill |
 | --- | --- | --- | --- |
-| 修改牌型分值 / SPI / NSPI / 评级阈值 | `掼蛋牌型量化评分方案.md`、`手牌综合牌力评估方法.md` | `memory/scoring-rules.md`、`README.md` 牌力指标节 | `skills/add-scoring-test` |
+| 修改牌型分值 / SPI / NSPI / 评级阈值 | `doc/掼蛋牌型量化评分方案.md`、`doc/手牌综合牌力评估方法.md` | `memory/scoring-rules.md`、`README.md` 牌力指标节 | `skills/add-scoring-test` |
 | 排查识图 / AI Provider / 模板匹配 | `memory/recognition-pipeline.md` | `recognition/` 四个文件、`testcases/` | `skills/ai-recognition-debug` |
 | 修改拍照取图 / 图片渲染 / 拆牌图 | `memory/project-overview.md` | `imaging/`、`MainActivity.kt`、`res/layout/activity_main.xml` | — |
 | 训练 / 接入离线牌角模型 | `model_training/README.md` | `memory/recognition-pipeline.md`、`model_training/*.py` | `skills/ai-recognition-debug` |
@@ -41,8 +41,8 @@ skills/
 
 | 文件 | 权威内容 |
 | --- | --- |
-| `掼蛋牌型量化评分方案.md` | 单牌型分值公式、基础点数表、炸弹/同花顺/火箭分值 |
-| `手牌综合牌力评估方法.md` | SPI / NSPI / 动态评级 / 散牌惩罚 |
+| `doc/掼蛋牌型量化评分方案.md` | 单牌型分值公式、基础点数表、炸弹/同花顺/火箭分值 |
+| `doc/手牌综合牌力评估方法.md` | SPI / NSPI / 动态评级 / 散牌惩罚 |
 | `README.md` | 面向用户的功能说明、指标摘要、构建与隐私声明 |
 | `model_training/README.md` | 标注、训练、导出、接入流程 |
 

@@ -14,7 +14,7 @@ description: 掼蛋牌型分值 / SPI / NSPI / 评级规则变更的标准流程
 
 ## 输入
 
-- `掼蛋牌型量化评分方案.md`、`手牌综合牌力评估方法.md`（权威）。
+- `doc/掼蛋牌型量化评分方案.md`、`doc/手牌综合牌力评估方法.md`（权威）。
 - `harness/memory/scoring-rules.md`（改动指南与不变量）。
 - `app/src/main/java/nz/org/aotearoa/guandanscore/scoring/HandScorer.kt`。
 

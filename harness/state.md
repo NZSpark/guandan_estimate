@@ -9,9 +9,15 @@
 
 ## 当前任务
 
-无进行中任务。上一任务：建立模块化 Agent Harness 框架 —— 已完成。
+无进行中任务。最近完成：整理 AI 识牌改造方案与实施任务清单，并将两份权威评分文档归档至 `doc/`。
 
 ## 最近完成
+
+2026-10-28 · AI 识牌改造文档整理与评分文档归档
+
+- 新增 `doc/ai_update.md`（改造方案）与 `doc/ai_tasks.md`（101 项 AI 任务清单）。清单只定义计划，尚未执行 Gemini WebView 代码迁移。
+- 将两份评分权威文档移入 `doc/`，内容与原文件逐字节一致；同步更新 README、Harness 路由、评分知识、决策记录和 Skill 中的引用路径。
+- 验证：`./gradlew testDebugUnitTest` BUILD SUCCESSFUL；`git diff --check` 通过。
 
 2026-10-28 · Harness 框架落地（ADR-0001 ~ ADR-0004）
 
