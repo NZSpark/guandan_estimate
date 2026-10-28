@@ -9,53 +9,82 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
+import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/** 上游传输方式。Gemini 网页模式不使用 endpoint / model / apiKey。 */
-enum class AiTransport { GEMINI_WEBVIEW, API }
+/** 上游传输方式。WEBVIEW 复用网页登录态，API 使用 endpoint + model + apiKey。 */
+enum class AiTransport { WEBVIEW, API }
 
 data class AiSettings(
+    val id: String = UUID.randomUUID().toString(),
+    /** [AiSourceId.key]；取代靠 provider 字符串嗅探调用路径。 */
+    val sourceKey: String = AiSourceId.HTTP_API.key,
     val provider: String = "Google Gemini",
     val endpoint: String = "https://generativelanguage.googleapis.com/v1beta/models",
     val model: String = "gemini-3.6-flash",
     val apiKey: String = "",
-    val id: String = UUID.randomUUID().toString(),
+    /** WEBVIEW 模式必填（自定义源由用户填写）。 */
+    val homeUrl: String = "",
     val transport: AiTransport = AiTransport.API
 ) {
     /** 网页模式不需要 API Key 与 endpoint。 */
     val requiresApiKey: Boolean get() = transport == AiTransport.API
+
+    val source: AiSourceId get() = AiSourceId.fromKey(sourceKey)
+
+    /** 位置参数兼容：旧的 `AiSettings(provider, endpoint, model, apiKey, id)` 写法。 */
+    constructor(
+        provider: String,
+        endpoint: String,
+        model: String,
+        apiKey: String,
+        id: String
+    ) : this(
+        id = id,
+        sourceKey = AiSourceId.HTTP_API.key,
+        provider = provider,
+        endpoint = endpoint,
+        model = model,
+        apiKey = apiKey,
+        transport = AiTransport.API
+    )
 }
 
 object AiPresets {
     fun gemini() = AiSettings(
+        id = "preset_gemini",
+        sourceKey = AiSourceId.HTTP_API.key,
         provider = "Google Gemini",
         endpoint = "https://generativelanguage.googleapis.com/v1beta/models",
         model = "gemini-3.6-flash",
         apiKey = "",
-        id = "preset_gemini"
+        transport = AiTransport.API
     )
 
     fun openAi() = AiSettings(
+        id = "preset_openai",
+        sourceKey = AiSourceId.HTTP_API.key,
         provider = "OpenAI",
         endpoint = "https://api.openai.com/v1/responses",
         model = "gpt-5.6-sol",
         apiKey = "",
-        id = "preset_openai"
+        transport = AiTransport.API
     )
 
     /** Gemini 网页版（WebView）配置：无 endpoint / model / apiKey 语义。 */
-    fun geminiWebView() = AiSettings(
-        provider = "Gemini 网页版",
-        endpoint = "",
-        model = "",
-        apiKey = "",
-        id = "preset_gemini_webview",
-        transport = AiTransport.GEMINI_WEBVIEW
-    )
+    fun geminiWebView(): AiSettings = AiSourcePresets.geminiWebView()
 
-    fun defaults(): List<AiSettings> = listOf(gemini(), openAi())
+    /** DeepSeek 网页版（WebView）配置：首发源。 */
+    fun deepseekWebView(): AiSettings = AiSourcePresets.deepseekWebView()
+
+    /** 自定义网页源：homeUrl 由用户填写。 */
+    fun customWebView(): AiSettings = AiSourcePresets.customWebView()
+
+    /** 默认 profile 列表：DeepSeek 首发在前。 */
+    fun defaults(): List<AiSettings> = AiSourcePresets.defaultProfiles()
 }
 
 class AiSettingsStore(private val context: Context) {
@@ -73,22 +102,32 @@ class AiSettingsStore(private val context: Context) {
         if (raw.isNullOrBlank()) {
             val legacy = legacyProfile()
             return if (legacy.apiKey.isNotBlank() || legacy.provider != "Google Gemini") {
-                listOf(legacy, AiPresets.gemini()).distinctBy { it.provider }
+                listOf(legacy) + AiPresets.defaults()
             } else {
                 AiPresets.defaults()
             }
         }
         return try {
             val array = JSONArray(raw)
-            val list = (0 until array.length()).mapNotNull { i -> array.optJSONObject(i)?.let(::decodeProfile) }
+            val list = (0 until array.length()).mapNotNull { i ->
+                array.optJSONObject(i)?.let { decodeProfile(it) }
+            }
             list.ifEmpty { AiPresets.defaults() }
-        } catch (_: Exception) { AiPresets.defaults() }
+        } catch (_: Exception) {
+            AiPresets.defaults()
+        }
     }
 
     fun save(settings: AiSettings) {
         val profiles = loadAll().toMutableList()
         val index = profiles.indexOfFirst { it.id == settings.id }
-        val clean = settings.copy(provider=settings.provider.trim(), endpoint=settings.endpoint.trim(), model=settings.model.trim(), apiKey=settings.apiKey.trim())
+        val clean = settings.copy(
+            provider = settings.provider.trim(),
+            endpoint = settings.endpoint.trim(),
+            model = settings.model.trim(),
+            apiKey = settings.apiKey.trim(),
+            homeUrl = settings.homeUrl.trim()
+        )
         if (index >= 0) profiles[index] = clean else profiles += clean
         persist(profiles, clean.id)
     }
@@ -104,35 +143,83 @@ class AiSettingsStore(private val context: Context) {
 
     private fun persist(profiles: List<AiSettings>, activeId: String) {
         val array = JSONArray()
-        profiles.forEach { s -> array.put(JSONObject().put("id",s.id).put("provider",s.provider)
-            .put("endpoint",s.endpoint).put("model",s.model).put("api_key",encrypt(s.apiKey))
-            .put("transport", s.transport.name)) }
-        prefs.edit().putString("profiles",array.toString()).putString("active_profile",activeId)
-            .remove("provider").remove("endpoint").remove("model").remove("api_key").apply()
+        profiles.forEach { s ->
+            array.put(
+                JSONObject()
+                    .put("id", s.id)
+                    .put("source_key", s.sourceKey)
+                    .put("provider", s.provider)
+                    .put("endpoint", s.endpoint)
+                    .put("model", s.model)
+                    .put("api_key", encrypt(s.apiKey))
+                    .put("home_url", s.homeUrl)
+                    .put("transport", s.transport.name)
+            )
+        }
+        prefs.edit()
+            .putString("profiles", array.toString())
+            .putString("active_profile", activeId)
+            .remove("provider").remove("endpoint").remove("model").remove("api_key")
+            .apply()
     }
 
-    private fun decodeProfile(o: JSONObject) = AiSettings(
-        provider=o.optString("provider","Google Gemini"), endpoint=o.optString("endpoint","https://generativelanguage.googleapis.com/v1beta/models"),
-        model=o.optString("model","gemini-3.6-flash"), apiKey=decrypt(o.optString("api_key","")),
-        id=o.optString("id").ifBlank { UUID.randomUUID().toString() },
-        // 旧数据无 transport 字段时按 API 处理，避免静默改变既有 Provider 行为。
-        transport = o.optString("transport").takeIf { it.isNotBlank() }
-            ?.let { runCatching { AiTransport.valueOf(it) }.getOrNull() } ?: AiTransport.API
-    )
+    companion object {
+        /**
+         * 解码单个 profile，含旧数据迁移。抽成伴生函数以便单测直接覆盖迁移规则（无需 Context）。
+         *
+         * 迁移规则（doc/multi_ai_update.md §4.1）：
+         * - 有 transport=WEBVIEW 或旧名 GEMINI_WEBVIEW → WEBVIEW + 相应 source_key
+         * - 无 transport → API + http_api（与迁移前行为一致）
+         * - source_key 缺失时按 transport 兜底推断，**不**用 provider 字符串推断
+         */
+        fun decodeProfile(o: JSONObject, decrypt: (String) -> String = { "" }): AiSettings {
+            val rawTransport = o.optString("transport").takeIf { it.isNotBlank() }
+            val transport = when (rawTransport) {
+                "WEBVIEW", "GEMINI_WEBVIEW" -> AiTransport.WEBVIEW
+                else -> AiTransport.API
+            }
+            val rawSourceKey = o.optString("source_key").takeIf { it.isNotBlank() }
+            val sourceKey = rawSourceKey ?: when {
+                rawTransport == "GEMINI_WEBVIEW" -> AiSourceId.GEMINI_WEBVIEW.key
+                transport == AiTransport.WEBVIEW -> AiSourceId.CUSTOM_WEBVIEW.key
+                else -> AiSourceId.HTTP_API.key
+            }
+            val source = AiSourceId.fromKey(sourceKey)
+            val homeUrl = o.optString("home_url").takeIf { it.isNotBlank() }
+                ?: AiSourcePresets.homeUrlFor(source).orEmpty()
+            return AiSettings(
+                id = o.optString("id").ifBlank { UUID.randomUUID().toString() },
+                sourceKey = source.key,
+                provider = o.optString("provider", "Google Gemini"),
+                endpoint = o.optString("endpoint", "https://generativelanguage.googleapis.com/v1beta/models"),
+                model = o.optString("model", "gemini-3.6-flash"),
+                apiKey = decrypt(o.optString("api_key", "")),
+                homeUrl = homeUrl,
+                transport = transport
+            )
+        }
+    }
+
+    private fun decodeProfile(o: JSONObject) = decodeProfile(o) { decrypt(it) }
 
     private fun legacyProfile() = AiSettings(
-        provider=prefs.getString("provider","Google Gemini") ?: "Google Gemini",
-        endpoint=prefs.getString("endpoint","https://generativelanguage.googleapis.com/v1beta/models") ?: "https://generativelanguage.googleapis.com/v1beta/models",
-        model=prefs.getString("model","gemini-3.6-flash") ?: "gemini-3.6-flash",
-        apiKey=decrypt(prefs.getString("api_key","").orEmpty())
+        provider = prefs.getString("provider", "Google Gemini") ?: "Google Gemini",
+        endpoint = prefs.getString("endpoint", "https://generativelanguage.googleapis.com/v1beta/models")
+            ?: "https://generativelanguage.googleapis.com/v1beta/models",
+        model = prefs.getString("model", "gemini-3.6-flash") ?: "gemini-3.6-flash",
+        apiKey = decrypt(prefs.getString("api_key", "").orEmpty())
     )
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(alias, null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
+            init(
+                KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .build()
+            )
         }.generateKey()
     }
 
@@ -150,5 +237,7 @@ class AiSettingsStore(private val context: Context) {
             }
             String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)))
         }
-    } catch (_: Exception) { "" }
+    } catch (_: Exception) {
+        ""
+    }
 }

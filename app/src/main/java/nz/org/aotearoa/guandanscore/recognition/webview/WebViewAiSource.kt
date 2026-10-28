@@ -1,0 +1,215 @@
+package nz.org.aotearoa.guandanscore.recognition.webview
+
+import android.util.Base64
+import android.util.Log
+import nz.org.aotearoa.guandanscore.model.Card
+import nz.org.aotearoa.guandanscore.recognition.AiCardResponseParser
+import nz.org.aotearoa.guandanscore.recognition.GenerationWatcher
+import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
+import nz.org.aotearoa.guandanscore.recognition.site.UploadStrategy
+import nz.org.aotearoa.guandanscore.recognition.source.AiSource
+import nz.org.aotearoa.guandanscore.recognition.source.AiSourceError
+import nz.org.aotearoa.guandanscore.recognition.source.RecognizeRequest
+import nz.org.aotearoa.guandanscore.recognition.source.SourceHealth
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * 网页 AI 源驱动层。站点无关：所有站点知识来自 [SiteAdapter]。
+ *
+ * 状态机：
+ * EnsurePageReady → EnsureLoggedIn → CaptureBaseline
+ *   → Upload（首选 + 回退） → FillAndSubmit → VerifyAttachment → WaitForNewAnswer → Parse
+ *
+ * 硬规则：
+ * - 上传未确认前不提交（AI-123 / M11）。
+ * - 上传首选失败后回退另一条策略（AI-124）。
+ * - 回答必须有基线，避免追问拿到上一轮（M5）。
+ * - 生成中不跑健康探测（M8）。
+ *
+ * 依赖 [PageOps] 而非具体 [PageDriver]，因此可用 Fake 完整单测（AI-126）。
+ */
+class WebViewAiSource(
+    private val adapter: SiteAdapter,
+    private val pages: PageOps,
+    private val displayNameOverride: String? = null,
+    private val parser: AiCardResponseParser = AiCardResponseParser(),
+    private val watcherFactory: () -> GenerationWatcher = { GenerationWatcher() },
+    private val pollIntervalMillis: Long = 500,
+    private val timeoutMillis: Long = 120_000,
+    private val sleepMillis: (Long) -> Unit = { Thread.sleep(it) },
+    private val nowMillis: () -> Long = { System.currentTimeMillis() },
+    /** Base64 编码器。抽成参数以便单测不依赖 android.util.Base64。 */
+    private val base64Encoder: (ByteArray) -> String = { Base64.encodeToString(it, Base64.NO_WRAP) }
+) : AiSource {
+
+    /** 生产构造：由宿主 + 桥构造真实驱动。 */
+    constructor(
+        adapter: SiteAdapter,
+        host: WebViewHost,
+        bridge: WebViewBridge,
+        parser: AiCardResponseParser = AiCardResponseParser(),
+        watcherFactory: () -> GenerationWatcher = { GenerationWatcher() },
+        pollIntervalMillis: Long = 500,
+        timeoutMillis: Long = 120_000
+    ) : this(
+        adapter = adapter,
+        pages = PageDriver(adapter, host, bridge),
+        displayNameOverride = null,
+        parser = parser,
+        watcherFactory = watcherFactory,
+        pollIntervalMillis = pollIntervalMillis,
+        timeoutMillis = timeoutMillis
+    )
+
+    private companion object {
+        const val TAG = "WebViewAiSource"
+    }
+
+    override val id: String = adapter.siteKey
+    override val displayName: String = displayNameOverride ?: adapter.siteKey
+    override val requiresNetworkConfig: Boolean = false
+    override val requiresWebLogin: Boolean = true
+
+    private val running = AtomicBoolean(false)
+
+    @Volatile
+    private var cancelled = false
+
+    /** 生成中标志：健康探测此时必须直接返回缓存（M8）。 */
+    @Volatile
+    private var generating = false
+
+    @Volatile
+    private var cachedHealth: SourceHealth = SourceHealth.Unavailable("尚未检查")
+
+    override fun healthCheck(): SourceHealth {
+        if (generating) return cachedHealth
+        val health = try {
+            when {
+                !pages.ensureLoaded() -> SourceHealth.Unavailable("页面未就绪")
+                !pages.isLoggedIn() -> SourceHealth.NotLoggedIn("请在页面中手动登录")
+                else -> SourceHealth.Ready
+            }
+        } catch (e: AiSourceError) {
+            SourceHealth.Unavailable(e.message ?: "未知错误")
+        } catch (e: Exception) {
+            SourceHealth.Unavailable(e.message ?: "未知错误")
+        }
+        cachedHealth = health
+        return health
+    }
+
+    override fun recognize(request: RecognizeRequest): List<Card> {
+        if (!running.compareAndSet(false, true)) throw AiSourceError.Busy()
+        cancelled = false
+        generating = true
+        try {
+            return runPipeline(request)
+        } finally {
+            generating = false
+            running.set(false)
+        }
+    }
+
+    private fun runPipeline(request: RecognizeRequest): List<Card> {
+        if (cancelled) throw AiSourceError.Cancelled()
+
+        if (!pages.ensureLoaded()) {
+            throw AiSourceError.NotReady("页面在超时内未就绪（输入框或视口不可用）")
+        }
+        pages.applyPageFix()
+
+        if (!pages.isLoggedIn()) {
+            throw AiSourceError.NotLoggedIn("请在页面中手动登录后重试")
+        }
+        if (cancelled) throw AiSourceError.Cancelled()
+
+        val baseline = pages.captureBaseline()
+        val watcher = watcherFactory()
+        watcher.reset(
+            GenerationWatcher.Baseline(baseline.responseCount, baseline.lastAnswerText),
+            nowMillis()
+        )
+
+        val base64 = base64Encoder(request.jpegBytes)
+
+        val uploadError = uploadWithFallback(request, base64)
+        if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
+        if (cancelled) throw AiSourceError.Cancelled()
+
+        val outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
+        if (!outcome.ok) throw AiSourceError.SubmitFailed(outcome.why ?: "未知原因")
+
+        if (!pages.awaitSubmitStarted(baseline)) {
+            throw AiSourceError.SubmitFailed("提交后未见新回答节点或文本变化")
+        }
+        if (cancelled) throw AiSourceError.Cancelled()
+
+        val answer = awaitAnswer(watcher) ?: throw if (cancelled) {
+            AiSourceError.Cancelled()
+        } else {
+            AiSourceError.Timeout(timeoutMillis)
+        }
+
+        val parsed = parser.parseDetailed(answer)
+        if (parsed.cards.isEmpty()) {
+            throw AiSourceError.ParseFailed(parsed.warnings.lastOrNull() ?: "未能解析出有效牌面")
+        }
+        return parsed.cards
+    }
+
+    /**
+     * 上传：按适配器首选策略，失败后换另一条。
+     * @return null 表示成功；非 null 是包含两条策略原因的失败说明。
+     */
+    private fun uploadWithFallback(request: RecognizeRequest, base64: String): String? {
+        val first = adapter.preferredUpload
+        val second = if (first == UploadStrategy.PASTE) UploadStrategy.FILE_CHOOSER else UploadStrategy.PASTE
+        val reasons = mutableListOf<String>()
+        for (strategy in listOf(first, second)) {
+            if (tryUpload(strategy, request, base64)) return null
+            reasons += "$strategy 未确认附件预览"
+        }
+        return reasons.joinToString("；")
+    }
+
+    private fun tryUpload(strategy: UploadStrategy, request: RecognizeRequest, base64: String): Boolean {
+        Log.i(TAG, "trying upload strategy $strategy")
+        if (strategy == UploadStrategy.PASTE) {
+            // 派发失败直接判本策略失败；派发成功也仍要验证预览（M11）。
+            if (!pages.pasteImage(request.fileName, request.mimeType, base64)) {
+                Log.w(TAG, "paste event was not dispatched")
+                return false
+            }
+        }
+        // FILE_CHOOSER 由 WebViewHost.fileChooserHandler 在原生侧完成，驱动层只验证结果。
+        return pages.verifyAttachment()
+    }
+
+    private fun awaitAnswer(watcher: GenerationWatcher): String? {
+        while (true) {
+            if (cancelled) return null
+            val s = pages.pollSnapshot()
+            if (s.loginFormPresent) throw AiSourceError.NotLoggedIn("会话已过期")
+            val decision = watcher.onSample(
+                GenerationWatcher.Sample(
+                    responseCount = s.responseCount,
+                    answerText = s.lastAnswerText,
+                    generating = s.generating,
+                    timestampMillis = nowMillis()
+                )
+            )
+            when (decision) {
+                GenerationWatcher.Decision.Finished -> return s.lastAnswerText.trim()
+                is GenerationWatcher.Decision.Failed -> return null
+                GenerationWatcher.Decision.Waiting -> sleepMillis(pollIntervalMillis)
+            }
+        }
+    }
+
+    override fun cancel() {
+        cancelled = true
+    }
+
+    override fun currentSessionUrl(): String? = runCatching { pages.diagnose()?.href }.getOrNull()
+}

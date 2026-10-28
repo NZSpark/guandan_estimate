@@ -1,12 +1,14 @@
 # AI 识牌改造实施任务清单
 
-> **依据：** `doc/ai_update.md`（设计方案）
+> **依据：** `doc/ai_update.md`（Gemini 单源设计）、`doc/multi_ai_update.md`（多源设计，DeepSeek 首发）
 >
-> **目标：** 将在线 Gemini 识牌从 API Key / HTTP API 迁移到 Android WebView 驱动 Gemini 网页版，同时保留本地 OCR、模板匹配、`VisualCardCodec`、现有 `Card` 领域模型和牌力评分功能。
+> **目标：** ① 将在线识牌从 API Key / HTTP API 迁移到 Android WebView；② 把 AI 源做成配置可选，**DeepSeek 网页版为首发源**，Gemini 网页版保留，自定义网页源与 HTTP API 作为附加选项。同时保留本地 OCR、模板匹配、`VisualCardCodec`、现有 `Card` 领域模型和牌力评分功能。
 >
-> **当前状态：** 任务拆分清单，尚未执行本清单中的应用代码迁移。所有任务默认未完成，必须取得真实测试或设备验证证据后才能勾选。
+> **当前状态：** 阶段 0/1/2 已有部分纯逻辑实现（解析器、结束判定、选择器/脚本、状态机、transport 字段）。多源抽象层（`AiSource` / `SiteAdapter` / 驱动层 / DeepSeek 适配器）**尚未开工**。所有任务默认未完成，必须取得真实测试或设备验证证据后才能勾选。
 >
-> **执行原则：** 严格按阶段推进。图片真实上传是核心准入条件；未验证成功前，不进入完整业务集成。GeminiBridge 与 DeepseekBridge 的网页自动化经验只作参考，不能把其他项目的选择器或上传行为视作 Gemini Android WebView 的既定事实。
+> **执行原则：** 严格按阶段推进。图片真实上传是核心准入条件；未验证成功前，不进入完整业务集成。GeminiBridge 与 DeepseekBridge 的网页自动化经验只作参考，不能把其他项目的选择器或上传行为视作目标 Android WebView 的既定事实。
+>
+> **多源决策（2026-10-28）：** DeepSeek 首发。`SiteAdapter` 抽象与驱动层必须最先落地（阶段 1.5），Gemini 适配器只是其中一个实现，不再是唯一实现。
 
 ## 任务总览
 
@@ -14,8 +16,9 @@
 |---|---|---|---|
 | 0 | 基线、环境和技术可行性 | 登录、真实图片上传及带图识别闭环得到实证 | 无 |
 | 1 | WebView 宿主与页面适配 | 可复用 WebView，页面状态和 DOM 诊断可靠 | 阶段 0 的页面探测结论 |
-| 2 | 单次识牌闭环 | 图片、prompt、提交、新回答和解析完整串联 | 阶段 1；上传路径已验证 |
-| 3 | 接入应用 UI 与设置 | 现有入口可使用 WebView，API Key 不再阻挡该模式 | 阶段 2 |
+| **1.5** | **多源抽象层（AiSource / SiteAdapter / 驱动层）** | **同一驱动可跑通两个站点；驱动层无站点字样** | **阶段 1** |
+| 2 | 单次识牌闭环（DeepSeek 首发 + Gemini 并行） | 图片、prompt、提交、新回答和解析完整串联 | 阶段 1.5；上传路径已验证 |
+| 3 | 接入应用 UI 与设置（含 AI 源选择） | 现有入口可使用任一网页源，API Key 不再阻挡该模式 | 阶段 2 |
 | 4 | 生命周期、恢复与并发 | 异常可恢复、任务可取消、回答不会串线 | 阶段 2–3 |
 | 5 | 配置迁移、清理与发布验收 | 迁移安全，回归测试通过，文档完整 | 阶段 3–4 |
 
@@ -53,6 +56,17 @@
 - [ ] **AI-018** 进行带图与不带图的对照验证。要求模型复述测试图片中可核对的具体牌面细节，确认模型确实使用图片像素，而非只根据 prompt 猜测。
 - [ ] **AI-019** 记录选定的上传策略、实测设备与 WebView 版本、失败条件和限制，更新设计文档中的实测结论。
 
+### A0.4 DeepSeek 首发源的页面探测（2026-10-28 新增）
+
+> 依据 `doc/multi_ai_update.md` §5。DeepSeek 为首发源，因此它的探测结论优先于 Gemini。
+
+- [ ] **AI-006D** 扩展探测入口：`GeminiProbeActivity` 泛化为 `AiProbeActivity`，可在运行期切换 `homeUrl`（Gemini / DeepSeek / 自定义），并保留旧入口名以便既有 adb 脚本不失效。
+- [ ] **AI-007D** 在目标设备手动登录 DeepSeek 网页版，分别记录 Activity 重建与应用进程重启后的登录态是否保持（Cookie + DOM Storage 生效）。
+- [ ] **AI-008D** 在真实 DeepSeek 页面检查：`location.href`、`readyState`、`innerHeight`、输入框元素（`textarea#chat-input` 是否为唯一/最内层）、发送按钮的可点击判据、回答节点容器、是否存在 Shadow DOM。
+- [ ] **AI-009D** 探测 `input[type=file]` 与上传按钮，记录 `WebChromeClient.onShowFileChooser()` 是否真实触发、`accept` 类型与 `multiple` 属性。
+- [ ] **AI-010D** 用只读诊断脚本记录每个候选选择器的 `querySelectorAll(sel).length`，写入 `DeepSeekSelectors` 注释（日期 + 命中数 + 实测方法）。
+- [ ] **AI-011D** 记录是否存在可用的“停止生成”控件；若为 0 命中，明确写下“不得作为结束判定前提”。
+
 **阶段 0 准入条件：** 必须能够手动登录 Gemini，将应用当前图片真实附加到网页消息，确认上传完成，提交识牌 prompt，并验证模型回答确实受到图片像素影响。如果无法可靠完成此闭环，应暂停后续业务迁移，不得将事件派发成功误认为上传成功。
 
 ---
@@ -87,6 +101,53 @@
 - [ ] **AI-035** 检查页面恢复逻辑，避免在 SPA 初始化过程中无条件 reload，或在业务生成过程中执行可能打断请求的恢复操作。
 
 **阶段 1 验收：** 能打开并人工登录 Gemini；WebView 会话实例可复用；页面关键元素和登录状态能够诊断；页面未就绪与真正错误可以区分；不存在重复创建、错误销毁或主线程阻塞问题。
+
+---
+
+## 阶段 1.5：多源抽象层（DeepSeek 首发的前置条件）
+
+**阶段目标：** 把“站点”从“驱动”里剥离出来，使同一个驱动层能跑 DeepSeek 与 Gemini；驱动层内不得出现任何站点名或站点选择器。
+
+> 依据 `doc/multi_ai_update.md` §2–§3。此阶段只做**结构与假实现**，真机验证放到阶段 2。
+
+### A1.5.1 业务契约
+
+- [x] **AI-102** 新建 `recognition/source/AiSource.kt`：`RecognizeRequest`、`AiSource` 接口（`id` / `displayName` / `requiresNetworkConfig` / `requiresWebLogin` / `healthCheck` / `recognize` / `cancel` / `currentSessionUrl`）。
+- [x] **AI-103** 新建 `AiSourceError`（NotLoggedIn / NotReady / UploadFailed / SubmitFailed / Timeout / ParseFailed / Busy / Cancelled / Unknown）与 `SourceHealth`（Ready / NotLoggedIn / Unavailable），供 UI 直接映射文案。
+- [x] **AI-104** 新建 `AiSourceId` 枚举：`gemini_web` / `deepseek_web` / `custom_web` / `http_api`，含中文显示名。
+- [x] **AI-105** 新建 `AiSourceRegistry`：`presets()` 返回四个内置源配置；`create(settings, host, ctx)` 按 `sourceKey` 构造实现；未知 key 回退 `http_api` 并记录告警。
+- [x] **AI-106** 为 `AiSourceRegistry` 编写单测：四个 key 映射到正确实现类型；未知 key 回退；presets 与 `AiPresets` 不重复定义 URL 常量（单一事实来源）。
+
+### A1.5.2 站点适配层
+
+- [x] **AI-107** 新建 `recognition/site/SiteAdapter.kt`：`homeUrl` / `siteKey` / `preferredUpload` / `fillAndSubmitScript` / `snapshotScript` / `diagnoseScript` / `loginCheckScript` / `verifyAttachmentScript` / `pageFixScript`（默认空串）/ 五个 `parseXxx` 方法。
+- [x] **AI-108** 定义结构化返回：`SubmitOutcome(ok, why, inputFilled, attached)`、`AnswerSnapshot(responseCount, lastAnswerText, generating, loginFormPresent, pageUrl)`、`DiagnoseResult`、`UploadStrategy { PASTE, FILE_CHOOSER }`。
+- [x] **AI-109** 新建 `GeminiAdapter`：把现有 `GeminiSelectors` + `GeminiScripts` 收进实现，行为与当前完全一致（不修改脚本内容）。
+- [x] **AI-110** 为 `GeminiAdapter` 编写单测：脚本可解析、`why` 存在、prompt 含引号/换行/`$`/U+2028 不破坏脚本、Base64 正确转义。
+- [x] **AI-111** 新建 `DeepSeekSelectors.kt`（候选值 + 每条注释写“待真机验证”）、`DeepSeekScripts.kt`（fillAndSubmit / snapshot / diagnose / loginCheck / verifyAttachment / pageFix）、`DeepSeekAdapter`。
+- [x] **AI-112** `DeepSeekAdapter.preferredUpload = FILE_CHOOSER`（首版保守选择），并在注释说明若真机实测 PASTE 可行再改。
+- [x] **AI-113** 为 `DeepSeekAdapter` 编写与 AI-110 同构的单测（不依赖真机）。
+- [x] **AI-114** 编写 `CustomAdapter`：`homeUrl` 由设置提供，选择器复用 `DeepSeekAdapter` 的默认集合，并在 `siteKey` 上标注“自定义”。
+
+### A1.5.3 主线程桥与宿主
+
+- [x] **AI-115** 新建 `recognition/webview/WebViewBridge.kt`：`suspend fun evaluate(script: String): String`，全部 post 到主线程，`suspendCancellableCoroutine` + `isActive` 保护，JSON 字符串反转义。
+- [x] **AI-116** 为 `WebViewBridge` 的纯逻辑部分（JSON 反转义、`null` 返回、异常返回空串）编写单测。
+- [x] **AI-117** 新建 `WebViewHost`：进程级单例、懒创建、`attach(view)` / `detach()` / `currentWindowStatus()`；一个 WebView 同一时刻只有一个父容器；`removeHostFromParent(dropWebView=false)` 与 `detachOffscreenHost()` 分离。
+- [x] **AI-118** `WebViewHost` 首版只实现**可见挂接**（挂进当前 Activity 的容器）。overlay 后台宿主按 `multi_ai_update.md` M2 作为后续可选增强，在代码中留出接口与 TODO，不本轮实现。
+- [x] **AI-119** 配置 `WebChromeClient`：`onShowFileChooser`（供 FILE_CHOOSER 上传）、`onJsAlert` / `onJsConfirm`（避免弹窗被静默丢弃）、`onCreateWindow` 返回 false、`onPermissionRequest` 只 grant 请求资源。
+
+### A1.5.4 驱动层
+
+- [x] **AI-120** 新建 `PageDriver`（站点无关）：`ensureLoaded()`（三态活性判断：ALIVE / NOT_READY / DEAD，NOT_READY 只等待不 reload）、`captureBaseline()`、`fillAndSubmit()`、`verifyAttachment()`、`pollSnapshot()`、`isLoggedIn()`。
+- [x] **AI-121** 新建 `WebViewAiSource(adapter, host, bridge, watcherFactory)` 实现 `AiSource`：状态机 `EnsurePageReady → EnsureLoggedIn → CaptureBaseline → FillAndSubmit → VerifyAttachment → WaitForNewAnswer`。
+- [x] **AI-122** `PageDriver` / `WebViewAiSource` 中禁止出现任何 CSS 选择器、URL 字面量、`gemini` / `deepseek` 字样；加一个静态检查脚本（`grep`）作为阶段 G 的验收依据。
+- [x] **AI-123** 上传失败（`VerifyAttachment` 不通过）必须返回 `UploadFailed`，**不得**继续提交纯文本。
+- [x] **AI-124** 上传策略回退：`preferredUpload` 失败后换另一条；两条都失败才报错，错误信息包含两条各自的原因。
+- [x] **AI-125** `HttpApiSource`：包一层现有 `AiRecognitionClient`，`requiresNetworkConfig = true`、`requiresWebLogin = false`，内部保留现有 `isGemini()` / `isOpenAiChat()` 嗅探逻辑，**不外泄到新代码**。
+- [x] **AI-126** 用 Fake `SiteAdapter` + Fake `WebViewBridge` 为 `WebViewAiSource` 编写单测：正常闭环、上传被拒、未登录、超时、取消、Busy 重入、旧回答不串线。
+
+**阶段 1.5 验收：** ① 全部单测绿；② `grep` 证明驱动层无站点字样；③ Fake 适配器能跑通完整状态机；④ Gemini 适配器行为与现状一致（用现有测试作为回归）；⑤ DeepSeek 适配器编译通过但真机行为待阶段 2 验证。
 
 ---
 
@@ -127,7 +188,23 @@
 - [x] **AI-055** 对非法 JSON、未知牌面和不完整结果返回明确错误或校验警告，不把无效数据静默转换成有效 `Card`。
 - [ ] **AI-056** 串联完整路径：图片上传与确认、prompt 提交、读取本轮新回答、确认生成结束、解析牌面并返回 `List<Card>`。
 
-**阶段 2 验收：** 单张图片可以在可见 Gemini WebView 中上传，上传确认后再提交；能稳定读取当前任务的新回答并转换为合法牌列表。连续识别不同图片时没有附件残留或回答串线。
+### A2.5 DeepSeek 首发源真机闭环（2026-10-28 新增）
+
+> 这是本任务的**核心验收**。Gemini 的对应闭环（A2.1–A2.4 真机部分）与本节并行推进，但 DeepSeek 优先。
+
+- [ ] **AI-127** 真机登录 DeepSeek 网页版，用 `DeepSeekAdapter.diagnoseScript()` 记录全部选择器命中数，回填到 `DeepSeekSelectors` 注释。
+- [ ] **AI-128** 上传路径 A：`FILE_CHOOSER`。把当前 JPEG 写入 `cacheDir`，`onShowFileChooser` 回调里 `onReceiveValue(arrayOf(uri))`，确认页面出现附件预览。
+- [ ] **AI-129** 上传路径 B：`PASTE`。合成 `ClipboardEvent` + `DataTransfer` + `File`，`verifyAttachment` 必须通过；仅 `dispatched=true` 不算成功。
+- [ ] **AI-130** 两条路径都失败时，记录具体拒绝信号（事件 `defaultPrevented`、无预览节点、文件选择器未触发），更新 `DeepSeekAdapter.preferredUpload` 的注释结论。
+- [ ] **AI-131** 提交闭环：填 prompt → 点发送 → 确认 `responseCount` 增加或文本变化 → `GenerationWatcher` 判定结束 → `AiCardResponseParser` 解析出 `List<Card>`。
+- [ ] **AI-132** 带图 / 不带图对照：同一张手牌照片分别提交，要求模型复述图片中可核对的具体牌面，确认像素被使用（对应全局 G-02）。
+- [ ] **AI-133** 连续两张不同图片：确认无附件残留、无回答串线（对应 A4.3）。
+- [ ] **AI-134** 追问场景：在已有回答的会话里再发一次，确认拿到新答案而不是上一轮（对应 M5 基线）。
+- [ ] **AI-135** 记录 DeepSeek 适配器的已知限制（无 stop 控件、风控、会话 URL 形态）到 `doc/multi_ai_update.md` §5。
+
+**阶段 2 验收：**
+
+ 单张图片可以在可见 Gemini WebView 中上传，上传确认后再提交；能稳定读取当前任务的新回答并转换为合法牌列表。连续识别不同图片时没有附件残留或回答串线。
 
 ---
 
@@ -138,16 +215,16 @@
 ### A3.1 统一业务入口
 
 - [x] **AI-057** 新建 `AiRecognitionService.kt`，作为 UI 识牌入口，负责任务互斥、状态传递、取消和错误映射。
-- [ ] **AI-058** 修改 `MainActivity.recognizeOnline()`，从同步调用 `AiRecognitionClient.recognize()` 切换为异步调用业务服务。
-- [ ] **AI-059** 删除仅针对 WebView 模式不必要的 `settings.apiKey.isBlank()` 门槛，确保已登录网页但没有 API Key 时仍可识牌。
-- [ ] **AI-060** 为在线识牌按钮设置真实忙碌状态；成功、失败、超时和取消后都能正确恢复操作状态。
-- [ ] **AI-061** 在线识牌失败时保留当前本地识别结果以及用户手动修改的牌，不覆盖为错误、空或旧结果。
+- [x] **AI-058** 修改 `MainActivity.recognizeOnline()`，从同步调用 `AiRecognitionClient.recognize()` 切换为异步调用业务服务。
+- [x] **AI-059** 删除仅针对 WebView 模式不必要的 `settings.apiKey.isBlank()` 门槛，确保已登录网页但没有 API Key 时仍可识牌。
+- [x] **AI-060** 为在线识牌按钮设置真实忙碌状态；成功、失败、超时和取消后都能正确恢复操作状态。
+- [x] **AI-061** 在线识牌失败时保留当前本地识别结果以及用户手动修改的牌，不覆盖为错误、空或旧结果。
 - [ ] **AI-062** 检查 `VisualCardCodec.decode()` 和 `CardRecognizer` 的既有调用顺序，确保本地直接解码、OCR、模板匹配和评分逻辑不被重写或意外绕过。
 
 ### A3.2 设置与登录入口
 
 - [x] **AI-063** 在 `AiSettingsStore.kt` 中设计明确的传输模式，例如 `GEMINI_WEBVIEW` 与 `API`，而不是让网页模式伪装成拥有 API endpoint/model 的配置。
-- [ ] **AI-064** 修改 `showAiSettings()`：Gemini WebView 模式显示登录状态、打开网页和重新检查操作，不要求填写 Gemini API Key。
+- [x] **AI-064** 修改 `showAiSettings()`：Gemini WebView 模式显示登录状态、打开网页和重新检查操作，不要求填写 Gemini API Key。
 - [ ] **AI-065** 明确 WebView 模式的实际模型由 Gemini 网页会话决定，不宣称可以像 HTTP API 一样通过 model 字段可靠指定模型。
 - [ ] **AI-066** 设置界面显示正在登录、就绪、未登录、页面未就绪和错误原因；各状态均来自真实检测结果。
 - [ ] **AI-067** 确保 WebView 的主线程操作、Service 与 Activity 生命周期衔接正确，避免离开设置页时销毁业务 WebView 或对失效 Activity 更新 UI。
@@ -155,10 +232,27 @@
 ### A3.3 现有 API 能力兼容
 
 - [ ] **AI-068** 保留 OpenAI/custom API 配置与调用能力，除非另有明确产品决定；Gemini WebView 模式与 API 模式执行路径清晰分离。
-- [ ] **AI-069** 防止一个识牌操作同时触发网页与 API 两个后端，确保每次请求只有一个明确的执行者。
-- [ ] **AI-070** 为 WebView 模式和 API 模式分别验证设置展示、配置保存、选择与调用行为。
+- [x] **AI-069** 防止一个识牌操作同时触发网页与 API 两个后端，确保每次请求只有一个明确的执行者。
+- [x] **AI-070** 为 WebView 模式和 API 模式分别验证设置展示、配置保存、选择与调用行为。
 
 **阶段 3 验收：** 用户可以通过现有在线识牌入口使用 Gemini 网页，无需配置 Gemini API Key；本地识牌、用户校对、牌力分析和仍受支持的 API Provider 均保持原有能力。
+
+### A3.4 AI 源选择配置页（2026-10-28 新增）
+
+> 依据 `doc/multi_ai_update.md` §4、§8。这是用户可见的“可选 DeepSeek / Gemini / 其它源”入口。
+
+- [x] **AI-136** 扩展 `AiSettings`：新增 `sourceKey`、`homeUrl`；`AiTransport` 改为 `{ WEBVIEW, API }`（原 `GEMINI_WEBVIEW` 改名泛化）。
+- [x] **AI-137** 实现迁移逻辑：旧 `GEMINI_WEBVIEW` → `gemini_web` + `WEBVIEW`；无 `transport` → `http_api` + `API`（行为不变）；`api_key` 加解密在改名后仍可用。
+- [x] **AI-138** 为迁移编写单测：旧数据加载、混合 profile、切 profile 后 `sourceKey` 正确、加密 Key 可解密。
+- [x] **AI-139** `AiPresets` 新增 `deepseekWebView()`、`customWebView()`；`defaults()` 顺序把 DeepSeek 放首位（首发源）。
+- [x] **AI-140** 重写 `showAiSettings()` 为**先选源、再显隐字段**：网页源显示 `homeUrl` + “打开登录页” + 登录状态；API 源显示 endpoint/model/key 并校验 HTTPS。
+- [x] **AI-141** 修掉当前 bug：`recognizeOnline()` 中无条件的 `settings.apiKey.isBlank()` 门槛改为“仅 API 源才检查”。
+- [x] **AI-142** 配置页显示真实 `SourceHealth`：Ready / NotLoggedIn / Unavailable 各一句人话，不做假绿。
+- [x] **AI-143** “打开登录页”跳到探测/登录 Activity（见 AI-006D），登录返回后刷新健康态。
+- [x] **AI-144** `MainActivity.recognizeOnline()` 改为通过 `AiSourceRegistry.create(...)` 取当前源并调用 `recognize()`，不再直接 new `AiRecognitionClient`。
+- [x] **AI-145** 保留 HTTP API 路径可用：`AiSourceRegistry` 对 `http_api` 返回 `HttpApiSource`，OpenAI/custom 配置与调用不受影响。
+- [x] **AI-146** 防止一次识牌同时触发网页与 API 两个后端：`AiSource` 每次只有一个实现被调用，加单测覆盖。
+- [x] **AI-147** 单测覆盖 `AiSettingsStore` 的多源场景：DeepSeek / Gemini / 自定义 / API 四个 profile 并存，切换后 `load()` 返回正确源。
 
 ---
 
@@ -218,12 +312,29 @@
 
 - [ ] **AI-096** 更新 `README.md`，说明 Gemini WebView 的使用方式、登录要求、上传限制和常见故障处理。
 - [ ] **AI-097** 更新设计/排障说明，区分已实测行为、推测方案与尚未验证的设备限制，避免将合成粘贴或文件选择路径写成普遍保证。
-- [ ] **AI-098** 检查 `AndroidManifest.xml`、`app/build.gradle.kts`、依赖、Activity 配置、R8 和 Release 构建；不无故加入 Python 或 Playwright 依赖。
-- [ ] **AI-099** 执行 `./gradlew testDebugUnitTest` 与 `./gradlew assembleDebug`，记录测试和构建结果；对最终发布需要的构建配置另行执行验证。
+- [x] **AI-098** 检查 `AndroidManifest.xml`、`app/build.gradle.kts`、依赖、Activity 配置、R8 和 Release 构建；不无故加入 Python 或 Playwright 依赖。
+- [x] **AI-099** 执行 `./gradlew testDebugUnitTest` 与 `./gradlew assembleDebug`，记录测试和构建结果；对最终发布需要的构建配置另行执行验证。
 - [ ] **AI-100** 检查所有任务验收证据，确认没有遗留 Gemini API Key 门槛、错误的上传成功判断、未受控重试或意外删除其它 Provider。
 - [ ] **AI-101** 整理最终改造摘要、测试结果、已知限制和设备实测记录，并回写 `doc/ai_update.md` 中仍待确认的设计结论。
 
 **阶段 5 验收：** 配置迁移安全，Gemini 网页识牌不依赖 API Key；其它仍受支持的 API Provider 不受影响；回归测试与构建通过，文档和实测证据齐备。
+
+---
+
+## 阶段 6：多源横向验收（2026-10-28 新增）
+
+**阶段目标：** 证明“可配置多源”真的成立，而不是两个各自硬编码的分支。
+
+- [ ] **AI-148** 同一张手牌照片，分别用 DeepSeek / Gemini 两个网页源识牌，结果都能解析出牌面；记录各自耗时与失败率。
+- [ ] **AI-149** 两个源来回切换两次，确认：WebView 会话不互相污染、Cookie 各自独立、回答不串线。
+- [ ] **AI-150** 加一个“假站点”验证扩展性：新建一个仅用于测试的 `SiteAdapter` 实现（`about:blank` + 本地 HTML），确认新增站点**不需要修改驱动层与 `MainActivity`**。
+- [ ] **AI-151** 代码审查：`grep -rn "gemini\|deepseek\|chat.deepseek\|gemini.google" app/src/main/java/nz/org/aotearoa/guandanscore/recognition/webview/` 必须为空（大小写不敏感）。
+- [ ] **AI-152** 代码审查：`AiRecognitionService` / `MainActivity` 不再出现 `GeminiUpstream` 这类站点命名类型。
+- [ ] **AI-153** 自定义网页源：填入一个非目标站点的 URL，确认得到明确 `NotReady` / `SelectorMissing`，而不是超时或崩溃。
+- [ ] **AI-154** HTTP API 源回归：OpenAI / custom API profile 仍能正常识牌，且不会被网页源逻辑拦截。
+- [ ] **AI-155** 把 AI-148~154 的结论回写 `doc/multi_ai_update.md`（含实测日期、设备、WebView 版本）。
+
+**阶段 6 验收：** 多源是真的；新增第三个站点只改适配器；驱动层零站点耦合。
 
 ---
 
@@ -239,6 +350,12 @@
 - [ ] **G-08** 日志与诊断不泄露密码、Cookie、令牌或完整图片 Base64。
 - [ ] **G-09** 旧 Gemini Key 已按迁移策略处理，OpenAI/custom API profile 保持兼容。
 - [ ] **G-10** 单元测试、构建和目标设备真实会话验收均有可核对的执行记录。
+- [ ] **G-11** 配置页能显式选择 AI 源（DeepSeek / Gemini / 自定义 / HTTP API），且选择被真实保存与复用。
+- [ ] **G-12** 选网页源时不再要求 API Key；选 API 源时仍校验 HTTPS 与 Key。
+- [ ] **G-13** 驱动层（`PageDriver` / `WebViewAiSource`）内无任何站点名、站点 URL 或 CSS 选择器（`grep` 可证）。
+- [ ] **G-14** 新增第三个站点只需实现 `SiteAdapter` + 注册预设，不改驱动层与 `MainActivity` 主流程。
+- [ ] **G-15** DeepSeek 与 Gemini 各自会话独立：Cookie、历史、当前回答互不串线。
+- [ ] **G-16** 两源的失败文案经 `AiSourceError` 分类映射，用户能区分“未登录 / 上传失败 / 超时 / 页面结构变化”。
 
 ## 任务执行记录
 
@@ -251,11 +368,14 @@
 | 2026-10-28 | AI-063, AI-091~092, AI-088 | 完成 | 新增 AiTransport；geminiWebView() 预设无 endpoint/model/key；旧 profile 缺 transport 回落 API；位置构造参数兼容；7 测试 | AI-093~095 Key 清理待真机通过后 |
 | 2026-10-28 | AI-032, AI-043, AI-057, AI-071~072, AI-074, AI-081, AI-084 | 完成 | GeminiUpstream 接口 + AiRecognitionService 状态机：8 类错误、BUSY 互斥（含重入）、取消、旧回答不入结果、失败后可重试；15 测试 | AI-036~041 真实上传接线未完成 |
 | 2026-10-28 | 全量验证 | 通过 | ./gradlew testDebugUnitTest 共 94 测试 0 失败（原 24 + 新增 70） | — |
+| 2026-10-28 | AI-140~144, AI-058~061, AI-064, AI-069~070, AI-098~099 | 完成 | 新增 ui/AiSettingsDialog：先选源再显隐字段；MainActivity.recognizeOnline 改走 AiSourceRegistry + AiSource.recognize，API Key 门槛仅对 requiresNetworkConfig 生效（修掉网页源仍要 Key 的 bug）；新增可见挂接容器 + onResume attach / onPause detach + fileChooserHandler 占位；GeminiProbeActivity 支持 EXTRA_START_URL；testDebugUnitTest 151 测试 + assembleDebug 均通过 | 真机阶段 0/2 未开始 |
+| 2026-10-28 | AI-102~126, AI-136~139, AI-145~147 | 完成 | 新增 recognition/source（AiSource/AiSourceError/SourceHealth/AiSourceId/AiSourcePresets/AiSourceRegistry/HttpApiSource）、recognition/site（SiteAdapter+结构化返回/JsonQuote/JsonParse/GeminiAdapter/DeepSeekAdapter/CustomAdapter/DeepSeekSelectors/DeepSeekScripts）、recognition/webview（PageOps/PageDriver/WebViewBridge/WebViewHost/WebViewAiSource）；AiSettings 加 sourceKey+homeUrl、AiTransport 收敛为 WEBVIEW/API、迁移规则抽成 decodeProfile 伴生函数；DeepSeek 为默认首源；驱动层 grep 证明零站点耦合；testOptions.unitTests.isReturnDefaultValues 打开 | 余下 AI-140~144（配置页 UI 与 MainActivity 接线）待做；真机验证未开始 |
+| 2026-10-28 | 文档 | 完成 | 多源改造任务分解写入本清单：新增阶段 1.5（多源抽象层 AI-102~126）、A0.4（DeepSeek 探测 AI-006D~011D）、A2.5（DeepSeek 真机闭环 AI-127~135）、A3.4（源选择配置页 AI-136~147）、阶段 6（多源横向验收 AI-148~155）、G-11~G-16；依据 `doc/multi_ai_update.md`，DeepSeek 定为首发源 | 从 AI-136~147（配置层）与 AI-102~126（抽象层）开始实施 |
 | 2026-10-28 | AI-004, AI-006~025, AI-036~046, AI-058~070, AI-075~083, AI-089~090, AI-093~101 | 未开始 | 依赖目标 Android 设备上的真实 Gemini WebView 会话、登录与图片上传验证；离线环境无法产生有效证据 | 需真机执行阶段 0 准入验证 |
 
 ## 参考资料
 
-- 本项目设计方案：`doc/ai_update.md`
+- 本项目设计方案：`doc/ai_update.md`（Gemini 单源）、`doc/multi_ai_update.md`（多源，DeepSeek 首发）
 - DeepseekBridge 图片上传参考：`/Users/onetreehill/Github/DeepseekBridge/doc/image_upload.md`
 - SMSProxy WebView 架构参考：`/Users/onetreehill/Github/SMSProxy/doc/ai_support.md`
 - GeminiBridge 页面驱动与结束判定参考：`gemini_web/config.py`、`gemini_web/chat_io.py`、`gemini_web/driver.py`、`tests/test_end_detection.py`

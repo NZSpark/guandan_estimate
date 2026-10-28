@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/mainScroll"
     android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/cream">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+    <LinearLayout android:id="@+id/mainContent" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="掼蛋牌力" android:textColor="@color/green_900" android:textSize="30sp" android:textStyle="bold" />
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="拍清牌角 · 确认 27 张 · 计算最优拆牌" android:textColor="#59645E" android:layout_marginBottom="16dp" />
         <ImageView android:id="@+id/photo" android:layout_width="match_parent" android:layout_height="300dp" android:background="#E3E7E1" android:scaleType="fitCenter" android:adjustViewBounds="false" android:contentDescription="手牌照片" />

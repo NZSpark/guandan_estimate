@@ -20,6 +20,8 @@
 - AI-063 / AI-091 / AI-092 / AI-088：`AiTransport` 枚举、`geminiWebView()` 预设、旧 profile 回落 API、位置参数兼容，7 测试。
 - AI-032 / AI-043 / AI-057 / AI-071 / AI-072 / AI-074 / AI-081 / AI-084：`GeminiUpstream` 接口 + `AiRecognitionService` 状态机（互斥 BUSY、取消、8 类错误、旧回答不入结果），15 测试。
 
+- 启动崩溃修复：`MainActivity` 把 `webContainer` 直接 add 到 `ScrollView`（`mainScroll`）导致 `IllegalStateException: ScrollView can host only one direct child`。已给布局内层 `LinearLayout` 加 `@+id/mainContent`，改为 `mainContent.addView(webContainer, 0, ...)`。真机 J7R0220110001216 验证启动正常、crash buffer 为空。
+
 **未完成（必须真机，不可离线伪造）**：
 
 - AI-006~019：WebView 登录、DOM 探测、真实图片上传闭环 —— 阶段 0 准入条件。
@@ -31,7 +33,7 @@
 
 ## 上次完成
 
-2026-10-28 · Harness 框架落地（ADR-0001 ~ ADR-0004）
+2026-10-28 · 修复 MainActivity 启动崩溃（ScrollView 单子节点约束）
 
 ## 阻塞
 
@@ -46,6 +48,7 @@
 
 ## 已知问题
 
+- `ScrollView` 只能有一个直接子节点；任何动态 View 必须挂到 `mainContent`，不得挂到 `mainScroll`。
 - `GeminiSelectors` 全部为**未验证的候选选择器**，代码注释已标注。
 - 本机无系统 JDK，需 `export JAVA_HOME=/opt/homebrew/opt/openjdk@17`。
 - macOS 无 `timeout` 命令。

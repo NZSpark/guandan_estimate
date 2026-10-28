@@ -27,6 +27,13 @@ import nz.org.aotearoa.guandanscore.databinding.ActivityMainBinding
 import nz.org.aotearoa.guandanscore.imaging.HandImageRenderer
 import nz.org.aotearoa.guandanscore.model.*
 import nz.org.aotearoa.guandanscore.recognition.CardRecognizer
+import nz.org.aotearoa.guandanscore.recognition.source.AiSourceError
+import nz.org.aotearoa.guandanscore.recognition.source.AiSourceRegistry
+import nz.org.aotearoa.guandanscore.recognition.source.RecognizeRequest
+import nz.org.aotearoa.guandanscore.recognition.source.SourceHealth
+import nz.org.aotearoa.guandanscore.recognition.webview.FileChooserHandler
+import nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost
+import nz.org.aotearoa.guandanscore.ui.AiSettingsDialog
 import nz.org.aotearoa.guandanscore.recognition.AiRecognitionClient
 import nz.org.aotearoa.guandanscore.recognition.AiPresets
 import nz.org.aotearoa.guandanscore.recognition.AiSettings
@@ -40,7 +47,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ui: ActivityMainBinding
     private val recognizer by lazy { CardRecognizer(this) }
     private val aiClient = AiRecognitionClient()
+    private val webHost by lazy { WebViewHost.get(this) }
     private lateinit var aiSettingsStore: AiSettingsStore
+    private lateinit var webContainer: android.widget.FrameLayout
     private val imageRenderer by lazy { HandImageRenderer(this) }
     private val worker = Executors.newSingleThreadExecutor()
     private val hand = mutableListOf<Card>()
@@ -57,6 +66,21 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); ui = ActivityMainBinding.inflate(layoutInflater); setContentView(ui.root)
         aiSettingsStore = AiSettingsStore(this)
+        // 可见挂接容器：必须有真实尺寸，否则 WebView 的 innerHeight 为 0，页面不出帧（M3）。
+        webContainer = android.widget.FrameLayout(this).apply {
+            id = android.view.View.generateViewId()
+            visibility = android.view.View.GONE
+        }
+        // ScrollView 只能有一个直接子节点（activity_main.xml 里的 mainContent LinearLayout），
+        // 因此容器必须挂到 mainContent 上，直接 add 到 mainScroll 会抛 IllegalStateException。
+        ui.mainContent.addView(
+            webContainer,
+            0,
+            android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                (360 * resources.displayMetrics.density).toInt()
+            ).apply { topMargin = (8 * resources.displayMetrics.density).toInt() }
+        )
         val levels = Rank.entries.filter { it.value <= 14 }
         ui.level.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, levels.map { it.label })
         ui.camera.setOnClickListener { cameraPermission.launch(Manifest.permission.CAMERA) }
@@ -77,6 +101,17 @@ class MainActivity : AppCompatActivity() {
         ui.sortedImage.setOnClickListener { generateSortedImage() }
         ui.onlineRecognition.setOnClickListener { recognizeOnline() }
         ui.aiSettings.setOnClickListener { showAiSettings() }
+        // 网页 AI 需要一个可见容器才能出帧（M2）。挂到滚动区顶部的 1dp 占位里，
+        // 用户切到网页登录页时可在此看到页面；识牌期间不需额外遮挡。
+        webHost.setAttachTarget {
+            // GONE 的视图没有测量尺寸；挂接前先让它可见（用户首次识牌时会看到网页）。
+            webContainer.visibility = android.view.View.VISIBLE
+            webContainer
+        }
+        webHost.fileChooserHandler = FileChooserHandler { _ ->
+            // 首版只记录并拒绝：文件选择桥接在真机验证前不接管系统选择器（AI-009D）。
+            false
+        }
     }
 
     private fun launchCamera() {
@@ -107,21 +142,37 @@ class MainActivity : AppCompatActivity() {
     private fun recognizeOnline() {
         val bitmap = currentBitmap ?: return
         val settings = aiSettingsStore.load()
-        if (settings.apiKey.isBlank()) { showAiSettings(); toast("请先填写 API Key"); return }
+        val source = AiSourceRegistry.create(settings, host = webHost, context = this)
+        // AI-141：只有 API 源才需要 API Key；网页源复用登录态。
+        if (source.requiresNetworkConfig && settings.apiKey.isBlank()) {
+            showAiSettings()
+            toast("请先填写 API Key")
+            return
+        }
         ui.onlineRecognition.isEnabled = false
         ui.onlineRecognition.text = "AI 识别中…"
-        ui.status.text = "正在通过 ${settings.provider} / ${settings.model} 联网识图…"
+        ui.status.text = "正在通过 ${settings.provider} 识图…"
         worker.execute {
             try {
-                val cards = aiClient.recognize(bitmap, settings)
+                val jpeg = java.io.ByteArrayOutputStream().also {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
+                }.toByteArray()
+                val cards = source.recognize(
+                    RecognizeRequest(jpegBytes = jpeg, prompt = AiRecognitionClient.PROMPT)
+                )
                 runOnUiThread {
                     hand.clear(); hand += cards; renderCards()
-                    ui.status.text = "AI 联网识别：${cards.size}/27 张；请核对点数和花色后计算"
+                    ui.status.text = "${settings.provider} 识别：${cards.size}/27 张；请核对点数和花色后计算"
+                    ui.onlineRecognition.isEnabled = true; ui.onlineRecognition.text = "联网识图"
+                }
+            } catch (e: AiSourceError) {
+                runOnUiThread {
+                    ui.status.text = "识图失败：${e.message}；已保留原有识别结果"
                     ui.onlineRecognition.isEnabled = true; ui.onlineRecognition.text = "联网识图"
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    ui.status.text = "联网识图失败：${e.localizedMessage}；已保留原有识别结果"
+                    ui.status.text = "识图失败：${e.localizedMessage}；已保留原有识别结果"
                     ui.onlineRecognition.isEnabled = true; ui.onlineRecognition.text = "联网识图"
                 }
             }
@@ -129,61 +180,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAiSettings() {
-        val profiles = aiSettingsStore.loadAll().toMutableList()
-        val current = aiSettingsStore.load()
-        fun field(hint: String, value: String, secret: Boolean = false) = EditText(this).apply {
-            this.hint = hint; setText(value); setSingleLine(true)
-            if (secret) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        val options = profiles.map { "${it.provider} · ${it.model}" } + listOf("＋ 新增 Google Gemini", "＋ 新增 OpenAI", "＋ 自定义 Provider")
-        val selector = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, options)
-        }
-        val provider = field("Provider 名称", current.provider)
-        val endpoint = field("HTTPS API 地址", current.endpoint)
-        val model = field("模型", current.model)
-        val key = field("API Key（仅本机加密保存）", current.apiKey, true)
-        val hint = TextView(this).apply {
-            text = "提示：使用 Google 账号登录 aistudio.google.com 即可免费获取 Gemini API Key。"
-            textSize = 12f
-            setPadding(12, 10, 12, 4)
-            setTextColor(0xff666666.toInt())
-        }
-        fun showProfile(p: AiSettings) {
-            provider.setText(p.provider)
-            endpoint.setText(p.endpoint)
-            model.setText(p.model)
-            key.setText(p.apiKey)
-        }
-        selector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                when {
-                    position < profiles.size -> showProfile(profiles[position])
-                    position == profiles.size -> showProfile(AiPresets.gemini().copy(id = java.util.UUID.randomUUID().toString()))
-                    position == profiles.size + 1 -> showProfile(AiPresets.openAi().copy(id = java.util.UUID.randomUUID().toString()))
-                    else -> showProfile(AiSettings(provider = "", endpoint = "https://", model = "", apiKey = "", id = java.util.UUID.randomUUID().toString()))
+        AiSettingsDialog(
+            activity = this,
+            store = aiSettingsStore,
+            healthProvider = { settings ->
+                val source = AiSourceRegistry.create(settings, host = webHost, context = this)
+                when (val h = source.healthCheck()) {
+                    SourceHealth.Ready -> "已就绪"
+                    is SourceHealth.NotLoggedIn -> "未登录：${h.hint}"
+                    is SourceHealth.Unavailable -> "不可用：${h.reason}"
                 }
+            },
+            onSaved = { settings ->
+                toast("当前 AI 源：${settings.provider}")
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(40, 8, 40, 0)
-            addView(selector); addView(provider); addView(endpoint); addView(model); addView(key); addView(hint)
-        }
-        val currentIndex = profiles.indexOfFirst { it.id == current.id }
-        selector.setSelection(if (currentIndex >= 0) currentIndex else 0)
-        AlertDialog.Builder(this).setTitle("AI Provider 设置").setView(form)
-            .setNegativeButton("取消", null).setNeutralButton("删除所选") { _, _ ->
-                profiles.getOrNull(selector.selectedItemPosition)?.let {
-                    aiSettingsStore.delete(it.id); toast("已删除 ${it.provider}")
-                }
-            }.setPositiveButton("保存并选用") { _, _ ->
-                val selected = profiles.getOrNull(selector.selectedItemPosition)
-                val settings = AiSettings(provider.text.toString(), endpoint.text.toString(), model.text.toString(), key.text.toString(), selected?.id ?: java.util.UUID.randomUUID().toString())
-                if (settings.provider.isBlank() || settings.endpoint.isBlank() || settings.model.isBlank()) toast("Provider、接口地址和模型不能为空")
-                else if (!settings.endpoint.startsWith("https://")) toast("接口地址必须使用 HTTPS")
-                else { aiSettingsStore.save(settings); aiSettingsStore.select(settings.id); toast("已保存并选用 ${settings.provider}") }
-            }.show()
+        ).show()
     }
 
     private fun renderCards() {
@@ -286,5 +297,16 @@ class MainActivity : AppCompatActivity() {
 
     private inline fun <T> MutableList<T>.replaceAllIndexed(block: (Int, T) -> T) { for (i in indices) this[i] = block(i, this[i]) }
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
+    override fun onResume() {
+        super.onResume()
+        // 回到前台时正是“之前不存在的窗口现在可能存在”的时刻（SMSProxy D43）。
+        webHost.attach()
+    }
+
+    override fun onPause() {
+        webHost.detachFromVisible()
+        super.onPause()
+    }
+
     override fun onDestroy() { worker.shutdownNow(); super.onDestroy() }
 }
