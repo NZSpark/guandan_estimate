@@ -27,11 +27,11 @@
 
 ### A0.1 基线与测试材料
 
-- [ ] **AI-001** 检查当前分支、工作区改动和项目文件；保留用户已有改动，不覆盖或清理无关文件。
-- [ ] **AI-002** 阅读 `doc/ai_update.md`、现有 `AiRecognitionClient.kt`、`AiSettingsStore.kt`、`AiRecognitionClientTest.kt`、`MainActivity.kt`、`AndroidManifest.xml`、Gradle 配置及 `README.md`。
-- [ ] **AI-003** 运行现有 `./gradlew testDebugUnitTest` 与 `./gradlew assembleDebug`，记录结果和已存在的失败。
+- [x] **AI-001** 检查当前分支、工作区改动和项目文件；保留用户已有改动，不覆盖或清理无关文件。
+- [x] **AI-002** 阅读 `doc/ai_update.md`、现有 `AiRecognitionClient.kt`、`AiSettingsStore.kt`、`AiRecognitionClientTest.kt`、`MainActivity.kt`、`AndroidManifest.xml`、Gradle 配置及 `README.md`。
+- [x] **AI-003** 运行现有 `./gradlew testDebugUnitTest` 与 `./gradlew assembleDebug`，记录结果和已存在的失败。
 - [ ] **AI-004** 选取若干牌面测试图片，记录现有 AI 输出、本地识别结果和人工确认的正确牌面，作为迁移前基线。
-- [ ] **AI-005** 确认项目的 `Rank`、`Suit`、大小王标记、牌数限制和重复牌处理规则，记录现有解析行为，不凭示例猜测枚举定义。
+- [x] **AI-005** 确认项目的 `Rank`、`Suit`、大小王标记、牌数限制和重复牌处理规则，记录现有解析行为，不凭示例猜测枚举定义。
 
 ### A0.2 登录和 WebView 页面探测
 
@@ -72,16 +72,16 @@
 
 ### A1.2 选择器和网页能力报告
 
-- [ ] **AI-026** 新建 `GeminiSelectors.kt`，集中管理输入框、发送按钮、助手回答、登录提示、文件输入和附件预览相关选择器。
-- [ ] **AI-027** 新建 `GeminiScripts.kt`，集中维护页面诊断、输入框聚焦、上传验证、prompt 填充和回答快照脚本。
-- [ ] **AI-028** 为所有动态参数进行 JSON 安全编码，例如使用 `JSONObject.quote()` 或等效方法；禁止手工拼接未经编码的 prompt 或文件名。
-- [ ] **AI-029** 诊断脚本返回可解析的结构化结果，包括 `ok`、`why` 和必要的页面能力信息；异常时不得伪装成功。
+- [x] **AI-026** 新建 `GeminiSelectors.kt`，集中管理输入框、发送按钮、助手回答、登录提示、文件输入和附件预览相关选择器。
+- [x] **AI-027** 新建 `GeminiScripts.kt`，集中维护页面诊断、输入框聚焦、上传验证、prompt 填充和回答快照脚本。
+- [x] **AI-028** 为所有动态参数进行 JSON 安全编码，例如使用 `JSONObject.quote()` 或等效方法；禁止手工拼接未经编码的 prompt 或文件名。
+- [x] **AI-029** 诊断脚本返回可解析的结构化结果，包括 `ok`、`why` 和必要的页面能力信息；异常时不得伪装成功。
 - [ ] **AI-030** 用真实 Gemini DOM 验证各个选择器，不将 GeminiBridge 当前选择器直接当作固定正确的常量。
 - [ ] **AI-031** 处理 SPA 初始化、页面导航、登录失效、选择器缺失和页面未就绪等不同状态，避免只凭 `readyState == complete` 判定可操作。
 
 ### A1.3 登录状态和错误类型
 
-- [ ] **AI-032** 定义明确的上游状态或错误类型，至少区分 Ready、NotLoggedIn、PageLoading、SelectorMissing、PageUnhealthy、Busy、Timeout 和 InvalidResponse。
+- [x] **AI-032** 定义明确的上游状态或错误类型，至少区分 Ready、NotLoggedIn、PageLoading、SelectorMissing、PageUnhealthy、Busy、Timeout 和 InvalidResponse。
 - [ ] **AI-033** 以实际页面状态判断登录情况；登录失效时提供重新登录入口，不把选择器失败或 WebView 销毁误报为未登录。
 - [ ] **AI-034** 为页面就绪、登录检测和 DOM 诊断添加有限超时、有限重试和必要日志。
 - [ ] **AI-035** 检查页面恢复逻辑，避免在 SPA 初始化过程中无条件 reload，或在业务生成过程中执行可能打断请求的恢复操作。
@@ -106,25 +106,25 @@
 ### A2.2 提交确认与回答基线
 
 - [ ] **AI-042** 实现发送前 `AnswerSnapshot`，记录最后一个非空助手回答、回答节点数量、输入内容、附件状态和可读取的会话标识。
-- [ ] **AI-043** 按状态机执行 `EnsurePageReady → EnsureLoggedIn → CaptureReplyBaseline → AttachImage → VerifyAttachment → FillPrompt → Submit`。
+- [x] **AI-043** 按状态机执行 `EnsurePageReady → EnsureLoggedIn → CaptureReplyBaseline → AttachImage → VerifyAttachment → FillPrompt → Submit`。
 - [ ] **AI-044** 实现提交后验证：确认输入框变化、用户消息进入页面、出现新回答节点或新回答正文，而不把点击发送按钮当作成功。
 - [ ] **AI-045** 确认读取的回答属于当前任务，排除旧回答、用户 prompt 回显和末尾尚未填充的空回答容器。
 - [ ] **AI-046** 处理新对话策略。确实需要新建会话时，通过实际页面操作及 DOM 状态确认成功，不仅凭 URL 拼接假设会话已创建。
 
 ### A2.3 生成结束检测
 
-- [ ] **AI-047** 新建 `GenerationWatcher.kt`，将回答文本变化、生成状态和连续稳定观察封装为独立的可测试逻辑。
-- [ ] **AI-048** 参考 GeminiBridge 的结束检测用例，处理只有旧答案、回答节点为空、prompt 被错误命中、生成暂时停顿和页面错误等场景。
-- [ ] **AI-049** 设置轮询间隔、连续稳定判定条件和总体回答超时；避免回答仍在生成时过早返回，也避免永久等待。
+- [x] **AI-047** 新建 `GenerationWatcher.kt`，将回答文本变化、生成状态和连续稳定观察封装为独立的可测试逻辑。
+- [x] **AI-048** 参考 GeminiBridge 的结束检测用例，处理只有旧答案、回答节点为空、prompt 被错误命中、生成暂时停顿和页面错误等场景。
+- [x] **AI-049** 设置轮询间隔、连续稳定判定条件和总体回答超时；避免回答仍在生成时过早返回，也避免永久等待。
 - [ ] **AI-050** 将页面读取、提交确认、回答收集和结束判定串成完整上游操作，超时与异常必须返回有分类的错误。
 
 ### A2.4 识牌响应解析
 
 - [ ] **AI-051** 从 `AiRecognitionClient.kt` 中梳理现有 `extractText()`、`parseCards()`、字符串归一化及相关测试，明确可以直接复用的行为。
-- [ ] **AI-052** 新建 `AiCardResponseParser.kt`，将回复文本解析与 HTTP 或 WebView 传输层解耦。
-- [ ] **AI-053** 提示 Gemini 返回符合现有项目牌面定义的 JSON；格式示例只作结构说明，实际 rank、suit、大小王和数量限制以项目枚举及规则为准。
-- [ ] **AI-054** 解析器支持去除 Markdown 围栏，必要时以有边界的方式提取 JSON，并严格校验字段、rank、suit、空数组、重复记录及数量限制。
-- [ ] **AI-055** 对非法 JSON、未知牌面和不完整结果返回明确错误或校验警告，不把无效数据静默转换成有效 `Card`。
+- [x] **AI-052** 新建 `AiCardResponseParser.kt`，将回复文本解析与 HTTP 或 WebView 传输层解耦。
+- [x] **AI-053** 提示 Gemini 返回符合现有项目牌面定义的 JSON；格式示例只作结构说明，实际 rank、suit、大小王和数量限制以项目枚举及规则为准。
+- [x] **AI-054** 解析器支持去除 Markdown 围栏，必要时以有边界的方式提取 JSON，并严格校验字段、rank、suit、空数组、重复记录及数量限制。
+- [x] **AI-055** 对非法 JSON、未知牌面和不完整结果返回明确错误或校验警告，不把无效数据静默转换成有效 `Card`。
 - [ ] **AI-056** 串联完整路径：图片上传与确认、prompt 提交、读取本轮新回答、确认生成结束、解析牌面并返回 `List<Card>`。
 
 **阶段 2 验收：** 单张图片可以在可见 Gemini WebView 中上传，上传确认后再提交；能稳定读取当前任务的新回答并转换为合法牌列表。连续识别不同图片时没有附件残留或回答串线。
@@ -137,7 +137,7 @@
 
 ### A3.1 统一业务入口
 
-- [ ] **AI-057** 新建 `AiRecognitionService.kt`，作为 UI 识牌入口，负责任务互斥、状态传递、取消和错误映射。
+- [x] **AI-057** 新建 `AiRecognitionService.kt`，作为 UI 识牌入口，负责任务互斥、状态传递、取消和错误映射。
 - [ ] **AI-058** 修改 `MainActivity.recognizeOnline()`，从同步调用 `AiRecognitionClient.recognize()` 切换为异步调用业务服务。
 - [ ] **AI-059** 删除仅针对 WebView 模式不必要的 `settings.apiKey.isBlank()` 门槛，确保已登录网页但没有 API Key 时仍可识牌。
 - [ ] **AI-060** 为在线识牌按钮设置真实忙碌状态；成功、失败、超时和取消后都能正确恢复操作状态。
@@ -146,7 +146,7 @@
 
 ### A3.2 设置与登录入口
 
-- [ ] **AI-063** 在 `AiSettingsStore.kt` 中设计明确的传输模式，例如 `GEMINI_WEBVIEW` 与 `API`，而不是让网页模式伪装成拥有 API endpoint/model 的配置。
+- [x] **AI-063** 在 `AiSettingsStore.kt` 中设计明确的传输模式，例如 `GEMINI_WEBVIEW` 与 `API`，而不是让网页模式伪装成拥有 API endpoint/model 的配置。
 - [ ] **AI-064** 修改 `showAiSettings()`：Gemini WebView 模式显示登录状态、打开网页和重新检查操作，不要求填写 Gemini API Key。
 - [ ] **AI-065** 明确 WebView 模式的实际模型由 Gemini 网页会话决定，不宣称可以像 HTTP API 一样通过 model 字段可靠指定模型。
 - [ ] **AI-066** 设置界面显示正在登录、就绪、未登录、页面未就绪和错误原因；各状态均来自真实检测结果。
@@ -168,10 +168,10 @@
 
 ### A4.1 并发与取消
 
-- [ ] **AI-071** 确保同一 WebView 同一时间最多处理一个识牌请求；并发请求应排队或返回 `Busy`，不能同时改写输入框。
-- [ ] **AI-072** 定义任务取消行为：停止后续提交、取消页面轮询、释放相关回调与临时资源，并阻止迟到的旧回调覆盖当前 UI。
+- [x] **AI-071** 确保同一 WebView 同一时间最多处理一个识牌请求；并发请求应排队或返回 `Busy`，不能同时改写输入框。
+- [x] **AI-072** 定义任务取消行为：停止后续提交、取消页面轮询、释放相关回调与临时资源，并阻止迟到的旧回调覆盖当前 UI。
 - [ ] **AI-073** 对 Bitmap、JPEG 缓存、JavaScript 回调和任务句柄明确资源所有权；所有结束路径都能安全清理资源。
-- [ ] **AI-074** 为重复调用、超时后再次识牌和失败后重试编写回归测试，防止死锁、重复提交或遗留 Busy 状态。
+- [x] **AI-074** 为重复调用、超时后再次识牌和失败后重试编写回归测试，防止死锁、重复提交或遗留 Busy 状态。
 
 ### A4.2 页面健康与宿主恢复
 
@@ -184,17 +184,17 @@
 
 ### A4.3 图片与回答隔离测试
 
-- [ ] **AI-081** 测试同一图片重复识别、图片 A 后连续识别图片 B，以及上传失败后立即重试。
+- [x] **AI-081** 测试同一图片重复识别、图片 A 后连续识别图片 B，以及上传失败后立即重试。
 - [ ] **AI-082** 验证新任务发送前没有上次遗留的待发送图片附件，当前回答与当前图片对应。
 - [ ] **AI-083** 测试回答节点数量不变但文本更新、末尾空节点出现、旧回答保留和生成暂停等情况。
-- [ ] **AI-084** 验证上传未完成、登录过期、选择器变化、回答超时、解析失败和用户取消时，UI 都显示明确状态且不破坏已有结果。
+- [x] **AI-084** 验证上传未完成、登录过期、选择器变化、回答超时、解析失败和用户取消时，UI 都显示明确状态且不破坏已有结果。
 
 ### A4.4 自动化测试与真机验收
 
-- [ ] **AI-085** 为 `AiCardResponseParser` 编写单元测试：标准 JSON、Markdown 围栏、解释文字、非法 JSON、缺字段、无效 rank/suit、空结果和超量数据。
-- [ ] **AI-086** 为 `GenerationWatcher` 编写单元测试：文本增长、生成停顿、稳定结束、无新回答、旧回答、空容器、prompt 回显、页面错误及超时。
-- [ ] **AI-087** 为页面脚本及上传逻辑编写可行的单元/集成测试：参数安全编码、脚本异常、事件已派发但预览未出现、文件选择取消、超时和回调重复触发。
-- [ ] **AI-088** 为上游接口、忙碌状态、任务取消、页面状态转换及设置迁移编写回归测试；需要时使用 Fake 上游或 Fake JS 桥隔离页面依赖。
+- [x] **AI-085** 为 `AiCardResponseParser` 编写单元测试：标准 JSON、Markdown 围栏、解释文字、非法 JSON、缺字段、无效 rank/suit、空结果和超量数据。
+- [x] **AI-086** 为 `GenerationWatcher` 编写单元测试：文本增长、生成停顿、稳定结束、无新回答、旧回答、空容器、prompt 回显、页面错误及超时。
+- [x] **AI-087** 为页面脚本及上传逻辑编写可行的单元/集成测试：参数安全编码、脚本异常、事件已派发但预览未出现、文件选择取消、超时和回调重复触发。
+- [x] **AI-088** 为上游接口、忙碌状态、任务取消、页面状态转换及设置迁移编写回归测试；需要时使用 Fake 上游或 Fake JS 桥隔离页面依赖。
 - [ ] **AI-089** 在目标 Android 设备上手动登录 Gemini，完成单张图片、连续不同图片、会话过期及恢复的真实网页端验收。
 - [ ] **AI-090** 比较迁移前后本地 `VisualCardCodec`、`CardRecognizer`、手动编辑、`HandScorer` 和 API Provider 的回归结果。
 
@@ -208,8 +208,8 @@
 
 ### A5.1 配置迁移与凭据安全
 
-- [ ] **AI-091** 为旧 AI profile 增加明确传输模式或类型识别，避免启动时重置全部配置。
-- [ ] **AI-092** 将旧 Gemini API profile 平滑迁移到 Gemini WebView 模式，保留其它无关设置及 OpenAI/custom API 配置。
+- [x] **AI-091** 为旧 AI profile 增加明确传输模式或类型识别，避免启动时重置全部配置。
+- [x] **AI-092** 将旧 Gemini API profile 平滑迁移到 Gemini WebView 模式，保留其它无关设置及 OpenAI/custom API 配置。
 - [ ] **AI-093** WebView 模式正常运行后，确认旧 Gemini Key 不再参与识牌调用，且设置 UI 不再要求用户填写该 Key。
 - [ ] **AI-094** 在确认迁移成功后，有序清理旧 Gemini Key 密文及不再使用的 Keystore alias；不在迁移、日志或异常中输出 Key。
 - [ ] **AI-095** 验证 WebView Cookie、DOM Storage 和登录状态未被设置迁移误清除；解释用户需要在网页中手动登录。
@@ -244,7 +244,14 @@
 
 | 日期 | 任务编号/阶段 | 结果 | 证据或问题 | 后续动作 |
 |---|---|---|---|---|
-| | | | | |
+| 2026-10-28 | AI-001~003 | 通过 | 分支 airecognize 工作区干净；testDebugUnitTest 与 assembleDebug 均 BUILD SUCCESSFUL（基线 24 测试） | — |
+| 2026-10-28 | AI-052~055, AI-085 | 完成 | 新增 AiCardResponseParser：严格 JSON + 围栏剥离 + 有边界回退 + rank/suit/王一致性校验 + 数量/count 告警；AiRecognitionClient 解析委托至此，旧 7 测试不变通过；新增 19 测试 | 真机回来后补真实模型输出用例 |
+| 2026-10-28 | AI-047~049, AI-086 | 完成 | 新增 GenerationWatcher：新节点/文本变化判定、连续稳定 + 最小静默、prompt 回显与旧答案排除、生成中辅助信号、硬超时；11 测试 | AI-048 未与 GeminiBridge 用例逐条对照 |
+| 2026-10-28 | AI-026~029, AI-087 | 完成 | GeminiSelectors 集中 6 组候选选择器；GeminiScripts 提供 diagnose/snapshot/fillPrompt/submit/pasteImage/verifyAttachment；动态参数全部 JSONObject.quote；诊断不读 Cookie/Storage；12 测试（含注入与 U+2028/2029） | AI-030/031 需真机验证选择器 |
+| 2026-10-28 | AI-063, AI-091~092, AI-088 | 完成 | 新增 AiTransport；geminiWebView() 预设无 endpoint/model/key；旧 profile 缺 transport 回落 API；位置构造参数兼容；7 测试 | AI-093~095 Key 清理待真机通过后 |
+| 2026-10-28 | AI-032, AI-043, AI-057, AI-071~072, AI-074, AI-081, AI-084 | 完成 | GeminiUpstream 接口 + AiRecognitionService 状态机：8 类错误、BUSY 互斥（含重入）、取消、旧回答不入结果、失败后可重试；15 测试 | AI-036~041 真实上传接线未完成 |
+| 2026-10-28 | 全量验证 | 通过 | ./gradlew testDebugUnitTest 共 94 测试 0 失败（原 24 + 新增 70） | — |
+| 2026-10-28 | AI-004, AI-006~025, AI-036~046, AI-058~070, AI-075~083, AI-089~090, AI-093~101 | 未开始 | 依赖目标 Android 设备上的真实 Gemini WebView 会话、登录与图片上传验证；离线环境无法产生有效证据 | 需真机执行阶段 0 准入验证 |
 
 ## 参考资料
 

@@ -36,12 +36,32 @@
 - 产物：`card_corner_classifier.tflite` + `model_manifest.json`，经 `install_model.ps1` 放入 `app/src/main/assets/models/`。
 - **接入闸门**：独立验证达标 + 15 点数 5 花色样本充足 + API 29 真机耗时/内存/稳定性验证，之后才启用 LiteRT 推理路径。
 
+## WebView 迁移分层（ADR-0005）
+
+| 层 | 文件 | 依赖 Android | 作用 |
+| --- | --- | --- | --- |
+| 解析 | `AiCardResponseParser` | 否 | 回复文本 → `Card`，严格校验 + 告警 |
+| 结束判定 | `GenerationWatcher` | 否 | 新回答识别、稳定结束、超时 |
+| 页面能力 | `GeminiUpstream`（接口） | 接口否 / 实现是 | 就绪检查、基线、上传、提交、快照 |
+| 编排 | `AiRecognitionService` | 否 | 互斥 BUSY、取消、8 类错误映射 |
+| 站点适配 | `GeminiSelectors` / `GeminiScripts` | 否 | 选择器与注入脚本单一来源 |
+
+**当前状态**：前四层已完成并有 94 个单测覆盖；`GeminiUpstream` 的真实 WebView 实现**尚未编写**（需真机验证后按实测选择器实现）。
+
+关键不变量：
+
+- `attachImage()` 返回 true 必须意味着附件预览真实出现，事件派发成功不算。
+- 回答必须相对发送前基线是新的；旧回答与 prompt 回显一律丢弃。
+- 同一上游同一时刻只允许一个任务（`AiRecognitionService.isBusy`）。
+- 脚本动态参数一律 `JSONObject.quote`；诊断脚本不得读取 Cookie / Storage / Base64。
+
 ## 排错顺序
 
 1. 确认是哪条路径出的问题（日志/是否点了“联网识图”/是否本 App 生成图）。
 2. 本地路径：先用 `testcases/case*.jpg|png` 复现，再缩小到定位 / 点数 / 花色哪一阶段。
 3. 联网路径：核对 Provider 地址、模型名、协议分支、返回 JSON 解析；不要打印 Key。
-4. 素材相关：核对 `CardAssetNames` 与 `card_picture/card_png/` 文件名一致。
+4. WebView 路径：先跑 `GeminiScripts.diagnose()` 看 `inputCount` / `responseCount` / `fileInputCount` / `loginIndicatorCount`；再确认上传后 `verifyAttachment()` 的 `attached` 为 true。
+5. 素材相关：核对 `CardAssetNames` 与 `card_picture/card_png/` 文件名一致。
 
 ## 相关 Skill
 

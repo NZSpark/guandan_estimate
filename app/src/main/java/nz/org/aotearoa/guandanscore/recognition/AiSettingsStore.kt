@@ -13,13 +13,20 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
+/** 上游传输方式。Gemini 网页模式不使用 endpoint / model / apiKey。 */
+enum class AiTransport { GEMINI_WEBVIEW, API }
+
 data class AiSettings(
     val provider: String = "Google Gemini",
     val endpoint: String = "https://generativelanguage.googleapis.com/v1beta/models",
     val model: String = "gemini-3.6-flash",
     val apiKey: String = "",
-    val id: String = UUID.randomUUID().toString()
-)
+    val id: String = UUID.randomUUID().toString(),
+    val transport: AiTransport = AiTransport.API
+) {
+    /** 网页模式不需要 API Key 与 endpoint。 */
+    val requiresApiKey: Boolean get() = transport == AiTransport.API
+}
 
 object AiPresets {
     fun gemini() = AiSettings(
@@ -36,6 +43,16 @@ object AiPresets {
         model = "gpt-5.6-sol",
         apiKey = "",
         id = "preset_openai"
+    )
+
+    /** Gemini 网页版（WebView）配置：无 endpoint / model / apiKey 语义。 */
+    fun geminiWebView() = AiSettings(
+        provider = "Gemini 网页版",
+        endpoint = "",
+        model = "",
+        apiKey = "",
+        id = "preset_gemini_webview",
+        transport = AiTransport.GEMINI_WEBVIEW
     )
 
     fun defaults(): List<AiSettings> = listOf(gemini(), openAi())
@@ -88,7 +105,8 @@ class AiSettingsStore(private val context: Context) {
     private fun persist(profiles: List<AiSettings>, activeId: String) {
         val array = JSONArray()
         profiles.forEach { s -> array.put(JSONObject().put("id",s.id).put("provider",s.provider)
-            .put("endpoint",s.endpoint).put("model",s.model).put("api_key",encrypt(s.apiKey))) }
+            .put("endpoint",s.endpoint).put("model",s.model).put("api_key",encrypt(s.apiKey))
+            .put("transport", s.transport.name)) }
         prefs.edit().putString("profiles",array.toString()).putString("active_profile",activeId)
             .remove("provider").remove("endpoint").remove("model").remove("api_key").apply()
     }
@@ -96,7 +114,10 @@ class AiSettingsStore(private val context: Context) {
     private fun decodeProfile(o: JSONObject) = AiSettings(
         provider=o.optString("provider","Google Gemini"), endpoint=o.optString("endpoint","https://generativelanguage.googleapis.com/v1beta/models"),
         model=o.optString("model","gemini-3.6-flash"), apiKey=decrypt(o.optString("api_key","")),
-        id=o.optString("id").ifBlank { UUID.randomUUID().toString() }
+        id=o.optString("id").ifBlank { UUID.randomUUID().toString() },
+        // 旧数据无 transport 字段时按 API 处理，避免静默改变既有 Provider 行为。
+        transport = o.optString("transport").takeIf { it.isNotBlank() }
+            ?.let { runCatching { AiTransport.valueOf(it) }.getOrNull() } ?: AiTransport.API
     )
 
     private fun legacyProfile() = AiSettings(
