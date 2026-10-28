@@ -54,6 +54,17 @@ object GeminiSelectors {
         "button[aria-label*=\"上传\"]"
     )
 
+    /**
+     * 上传工具入口（工具栏按钮）。真机实测：输入区工具栏上有 `Upload and tools` 按钮，
+     * 点击后弹出 `Open mobile camera/gallery` / `Google Photos` / `Add from Drive` 原生 chooser（AI-009）。
+     */
+    val UPLOAD_TOOLS_CANDIDATES = listOf(
+        "button[aria-label*=\"Upload and tools\" i]",
+        "button[aria-label*=\"Upload\" i]",
+        "button[aria-label*=\"上传\"]",
+        "[role=\"button\"][aria-label*=\"Upload\" i]"
+    )
+
     /** 生成中/停止控件，仅作辅助信号。 */
     val GENERATING_CANDIDATES = listOf(
         "button[aria-label*=\"Stop\" i]",
@@ -67,5 +78,6 @@ object GeminiSelectors {
     fun password(): String = PASSWORD
     fun login(): String = LOGIN_CANDIDATES.joinToString(",")
     fun fileInput(): String = FILE_INPUT_CANDIDATES.joinToString(",")
+    fun uploadTools(): String = UPLOAD_TOOLS_CANDIDATES.joinToString(",")
     fun generating(): String = GENERATING_CANDIDATES.joinToString(",")
 }

@@ -60,3 +60,35 @@
 **理由**：任务清单明确禁止把其他项目的选择器当既定事实；同时防止脚本注入与「派发成功即上传成功」的误判。
 
 **状态**：Active
+
+---
+
+## ADR-0007 · 2026-10-29 · 解析器同时接受对象与顶层裸数组
+
+**决策**：`AiCardResponseParser.parseStrict` 先尝试 `{"cards":[...]}` 对象，失败再尝试顶层 JSON 数组 `[...]`；两者共用 `collectCards` 做字段校验、条数上限与告警。
+
+**理由**：`PROMPT` 要求对象格式，但探针/自定义 prompt 可能要求直接输出数组，DeepSeek 实测即返回裸数组。旧实现只认对象，导致必然退回正则兜底并产生“请重点核对”告警，削弱结果可信度。
+
+**状态**：Active
+
+---
+
+## ADR-0008 · 2026-10-29 · `evaluateJavascript` 回传必须用 `JSONTokener` 解码
+
+**决策**：`WebView.evaluateJavascript` 的字符串返回值是 JSON 字符串字面量，必须经 `org.json.JSONTokener` 反序列化还原 `\n`/`\"`/`\\`/`\uXXXX`；不得用 `removeSurrounding("\"")` + 手工 `replace`。
+
+**理由**：手工替换无法还原换行与转义反斜杠，含引号的 JSON 回答（如识牌数组）会被解析成 `null`，表现为“快照为空”而非解析错误，极易误诊为 DOM/上传问题。
+
+**状态**：Active
+
+---
+
+## ADR-0009 · 2026-10-29 · 上传路径保持 PASTE ⇄ FILE_CHOOSER 双策略，不引入第三种
+
+**决策**：`WebViewAiSource.uploadWithFallback` 只按 `adapter.preferredUpload` 及其互补策略尝试两次；不把合成拖放或系统剪贴板纳入自动降级链。拖放与系统剪贴板作为探针手工排障入口保留（`AiProbeActivity` 的「拖放测试」「系统剪贴板」按钮与 `--es auto upload_alt`）。
+
+**理由**：真机（LIO-N29 / Android 10 / webview 114，DeepSeek）实测两种替代路径都能让页面出现附件预览（基线 0 → 各自 1），但它们与 PASTE 一样依赖合成事件或原生注入，收益不显著，却会显著拉长失败链与排障面。现有双策略已在 DeepSeek（FILE_CHOOSER）与 Gemini（PASTE）两端各自闭环，足以覆盖页面改版时的互补失败。
+
+**约束**：不得为此引入站点私有 API、隐藏网络接口或内部 RPC；附件是否被接受唯一判据是 `verifyAttachment()` 的预览计数，`dispatchEvent` 返回值不可作判据。
+
+**状态**：Active

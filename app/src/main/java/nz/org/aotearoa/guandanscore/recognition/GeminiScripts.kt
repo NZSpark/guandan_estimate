@@ -16,6 +16,50 @@ object GeminiScripts {
     /** JSON 安全编码。`JSONObject.quote` 会正确处理引号、反斜杠、换行、U+2028/2029。 */
     fun quote(raw: String): String = JSONObject.quote(raw)
 
+    /**
+     * AI-015：FILE_CHOOSER 触发脚本。
+     *
+     * 只尝试 `input[type=file]` 的 JS `.click()`；这在真实 WebView 上缺少 user activation，
+     * 预期返回 `js-click-needs-user-activation`。真正可行的路径是 [locateUploadIcon] + 原生触摸。
+     */
+    fun uploadTrigger(): String = """
+        (function() {
+          var fs;
+          try { fs = document.querySelectorAll('input[type="file"]'); } catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (fs && fs.length > 0) {
+            try { fs[0].click(); } catch (e) {}
+            return JSON.stringify({ ok: false, why: 'js-click-needs-user-activation', fileInputs: fs.length });
+          }
+          return JSON.stringify({ ok: false, why: 'no-file-input', hint: 'use locateUploadIcon + native tap' });
+        })()
+    """.trimIndent()
+
+    /**
+     * AI-015：返回 Gemini 工具栏上传入口（`Upload and tools`）的视口坐标，供原生触摸点击。
+     *
+     * 坐标是 CSS 像素。若按钮尚未渲染（Angular 异步），返回 `ok:false, why:'upload-tools-not-found'`，
+     * 由驱动层重试；绝不在此处同步忙等。
+     */
+    fun locateUploadIcon(): String = """
+        (function() {
+          function center(r) {
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+                     w: Math.round(r.width), h: Math.round(r.height), left: r.left, top: r.top };
+          }
+          var el = null;
+          try { el = document.querySelector(${quote(GeminiSelectors.uploadTools())}); } catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!el) return JSON.stringify({ ok: false, why: 'upload-tools-not-found' });
+          var r = el.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return JSON.stringify({ ok: false, why: 'upload-tools-hidden' });
+          var c = center(r);
+          c.ok = true;
+          c.innerHeight = window.innerHeight;
+          c.dpr = window.devicePixelRatio || 1;
+          c.label = (el.getAttribute('aria-label') || '').toString();
+          return JSON.stringify(c);
+        })()
+    """.trimIndent()
+
     /** 只读诊断：统计各选择器命中数量与页面基础状态。 */
     fun diagnose(): String = """
         (function() {

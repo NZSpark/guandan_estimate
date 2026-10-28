@@ -38,21 +38,43 @@ class AiCardResponseParser {
     }
 
     internal fun parseStrict(text: String, warnings: MutableList<String>): List<Card> {
-        val start = text.indexOf('{')
-        if (start < 0) return emptyList()
-        val end = text.lastIndexOf('}')
-        if (end <= start) return emptyList()
-        val json = try {
-            JSONObject(text.substring(start, end + 1))
-        } catch (_: Exception) {
-            return emptyList()
-        }
-        val array = json.optJSONArray("cards") ?: return emptyList()
-
-        json.optInt("count", -1).let { declared ->
-            if (declared >= 0 && declared != array.length()) {
-                warnings += "模型声明 $declared 张，实际返回 ${array.length()} 张"
+        // AI-134：既兼容 `{"cards":[...]}` 对象格式，也兼容模型直接返回的**顶层裸数组** `[...]`。
+        val objStart = text.indexOf('{')
+        if (objStart >= 0) {
+            val objEnd = text.lastIndexOf('}')
+            if (objEnd > objStart) {
+                val obj = try {
+                    JSONObject(text.substring(objStart, objEnd + 1))
+                } catch (_: Exception) {
+                    null
+                }
+                if (obj != null) {
+                    val array = obj.optJSONArray("cards")
+                    if (array != null) return collectCards(array, obj.optInt("count", -1), warnings)
+                }
             }
+        }
+        // 顶层裸数组回退。
+        val arrStart = text.indexOf('[')
+        if (arrStart >= 0) {
+            val arrEnd = text.lastIndexOf(']')
+            if (arrEnd > arrStart) {
+                val array = try {
+                    JSONArray(text.substring(arrStart, arrEnd + 1))
+                } catch (_: Exception) {
+                    null
+                }
+                if (array != null) return collectCards(array, -1, warnings)
+            }
+        }
+        return emptyList()
+    }
+
+    /** 把 JSON 数组按牌面规则转成 [Card] 列表，超限截断并写告警。 */
+    private fun collectCards(array: JSONArray, declaredCount: Int, warnings: MutableList<String>): List<Card> {
+
+        if (declaredCount >= 0 && declaredCount != array.length()) {
+            warnings += "模型声明 $declaredCount 张，实际返回 ${array.length()} 张"
         }
         if (array.length() > MAX_CARDS) {
             warnings += "模型返回超过 $MAX_CARDS 张，已截断"

@@ -107,7 +107,40 @@ class GeminiScriptsTest {
         listOf(
             GeminiSelectors.input(), GeminiSelectors.send(),
             GeminiSelectors.response(), GeminiSelectors.login(),
-            GeminiSelectors.fileInput(), GeminiSelectors.generating()
+            GeminiSelectors.fileInput(), GeminiSelectors.generating(),
+            GeminiSelectors.uploadTools()
         ).forEach { assertTrue(it.isNotBlank()) }
+    }
+
+    // ---- AI-015：FILE_CHOOSER 交接路径 ----
+
+    @Test
+    fun uploadToolsSelectorTargetsUploadAndTools() {
+        assertTrue(GeminiSelectors.uploadTools().contains("Upload and tools"))
+    }
+
+    @Test
+    fun uploadTriggerReportsMissingUserActivation() {
+        val s = GeminiScripts.uploadTrigger()
+        assertTrue(s.contains("input[type="))
+        assertTrue(s.contains("file"))
+        assertTrue(s.contains("js-click-needs-user-activation"))
+    }
+
+    @Test
+    fun locateUploadIconReturnsViewportCoords() {
+        val s = GeminiScripts.locateUploadIcon()
+        assertTrue(s.contains("upload-tools-not-found"))
+        assertTrue(s.contains("getBoundingClientRect"))
+        assertTrue(s.contains("innerHeight"))
+        assertTrue(s.contains("devicePixelRatio"))
+        assertTrue(s.contains(GeminiScripts.quote(GeminiSelectors.uploadTools())))
+    }
+
+    @Test
+    fun locateUploadIconHasNoBusyWait() {
+        val s = GeminiScripts.locateUploadIcon()
+        assertFalse(s.contains("while"))
+        assertFalse(s.contains("Date.now"))
     }
 }

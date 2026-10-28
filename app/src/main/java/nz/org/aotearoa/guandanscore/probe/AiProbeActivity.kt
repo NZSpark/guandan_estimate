@@ -20,6 +20,7 @@ import android.widget.TextView
 import nz.org.aotearoa.guandanscore.recognition.site.GeminiAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.DeepSeekAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.JsonParse
+import nz.org.aotearoa.guandanscore.recognition.site.JsonQuote
 import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
@@ -61,6 +62,12 @@ open class AiProbeActivity : Activity() {
         /** 兼容旧入口：`GeminiProbeActivity` 使用的参数名。 */
         const val EXTRA_START_URL = "start_url"
 
+        /**
+         * AI-132：真实测试图路径（设备上可读的绝对路径或 content URI）。
+         * 设置后 [prepareChooserImage] 复制它作为上传附件；未设置则回退 1×1 占位图。
+         */
+        const val EXTRA_TEST_IMAGE = "test_image"
+
         const val DEFAULT_SITE = "gemini_web"
     }
 
@@ -100,6 +107,7 @@ open class AiProbeActivity : Activity() {
             setOnClickListener { action() }
             bar.addView(this)
         }
+        button("基线") { logBaseline() }
         button("诊断") { runAdapterScript("DIAG") { adapter.diagnoseScript() } }
         button("快照") { runAdapterScript("SNAP") { adapter.snapshotScript() } }
         button("登录检查") { runAdapterScript("LOGIN") { adapter.loginCheckScript() } }
@@ -110,6 +118,8 @@ open class AiProbeActivity : Activity() {
         button("输入区按钮") { runScript(COMPOSER_BUTTONS) { log("CBTNS", it) } }
         button("上传图标坐标") { runAdapterScript("ICON") { adapter.uploadIconScript() } }
         button("粘贴测试") { testPaste() }
+        button("拖放测试") { testDrop() }
+        button("系统剪贴板") { testSystemClipboard() }
         button("填+贴+发") { testFillPasteSubmit() }
         button("UA") { runScript("navigator.userAgent") { log("UA", it) } }
         button("按钮枚举") { runScript(ENUM_BUTTONS) { log("BTNS", it) } }
@@ -271,8 +281,177 @@ open class AiProbeActivity : Activity() {
             "gemini_attach" -> runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() }
             "gemini_senddiag" -> runScript(GEMINI_SEND_DIAG) { r -> log("GSDIAG", r) }
             "gemini_diag" -> runAdapterScript("DIAG") { adapter.diagnoseScript() }
+            "fschooser" -> {
+                prepareChooserImage()
+                tapUploadIcon()
+                webView.postDelayed({
+                    runAdapterScript("ATTACH_AFTER_CHOOSER") { adapter.verifyAttachmentScript() }
+                }, 5000)
+            }
+            // AI-017：候选上传路径失败时的替代方案评估。拖放与系统剪贴板各跑一次，
+            // 每次之后用 verifyAttachment 判定页面是否真的接受了附件。
+            "upload_alt" -> {
+                log("ALT", "=== 0/3 基线（排除页面残留附件）===")
+                runAdapterScript("ALT_BASELINE_ATTACH") { adapter.verifyAttachmentScript() }
+                log("ALT", "=== 1/3 合成拖放 ===")
+                testDrop()
+                webView.postDelayed({
+                    runAdapterScript("ALT_DROP_ATTACH") { adapter.verifyAttachmentScript() }
+                    log("ALT", "=== 2/3 系统剪贴板 + KEYCODE_PASTE ===")
+                    testSystemClipboard()
+                    webView.postDelayed({
+                        runAdapterScript("ALT_CLIP_ATTACH") { adapter.verifyAttachmentScript() }
+                    }, 3000)
+                }, 3000)
+            }
+            "baseline" -> logBaseline()
+            "e2e" -> runEndToEnd()
+            "textonly" -> runTextOnlyControl()
             else -> log("AUTO", "unknown mode")
         }
+    }
+
+    /**
+     * AI-131：DeepSeek 单次识牌闭环，严格按状态机顺序，每一步都打日志。
+     *
+     * 基线 → 附件（FILE_CHOOSER）→ 附件验证 → 填 prompt 并提交 → 等新回答 → 解析 List<Card>。
+     * 附件验证不通过就**不提交**（AI-123）。
+     */
+    private fun runEndToEnd() {
+        val prompt =
+            "请识别这张掼蛋手牌照片里的全部牌。只输出 JSON 数组，元素形如 {\"rank\":\"A\",\"suit\":\"SPADE\"}；" +
+                "rank 取 2-10/J/Q/K/A，大小王用 suit=JOKER 且 rank=SMALL_JOKER/BIG_JOKER。"
+
+        // 1) 基线
+        runAdapterScript("E2E_BASELINE") { adapter.snapshotScript() }
+
+        // 2) 附件：准备图 → 原生触摸 → onShowFileChooser 回填
+        prepareChooserImage()
+        tapUploadIcon()
+
+        // 3) 附件验证（必须通过才继续）
+        webView.postDelayed({
+            val verify = adapter.verifyAttachmentScript()
+            runScript(verify) { raw ->
+                val o = JsonParse.parse(raw)
+                val attached = o != null && adapter.parseAttachment(o)
+                log("E2E_VERIFY", "attached=$attached raw=$raw")
+                if (!attached) {
+                    log("E2E", "ABORT: 附件未确认，按 AI-123 不提交纯文本")
+                    return@runScript
+                }
+                // 4) 填 prompt 并提交（此时附件已在）
+                val submit = adapter.fillAndSubmitScript(prompt, "", "", "")
+                runScript(submit) { sr ->
+                    log("E2E_SUBMIT", sr)
+                    // 5) 轮询新回答
+                    pollAnswerForEndToEnd(attempt = 0)
+                }
+            }
+        }, 5000)
+    }
+
+    /**
+     * AI-018：带图/不带图对照的「不带图」对照组。
+     *
+     * 用与 [runEndToEnd] 完全相同的 prompt，但**不上传任何附件**。
+     * 若模型仍能给出与真图一致的牌面，说明它在凭 prompt 猜测而不是读像素。
+     */
+    private fun runTextOnlyControl() {
+        val prompt =
+            "请识别这张掼蛋手牌照片里的全部牌。只输出 JSON 数组，元素形如 {\"rank\":\"A\",\"suit\":\"SPADE\"}；" +
+                "rank 取 2-10/J/Q/K/A，大小王用 suit=JOKER 且 rank=SMALL_JOKER/BIG_JOKER。"
+        runAdapterScript("CTRL_BASELINE") { adapter.snapshotScript() }
+        runAdapterScript("CTRL_ATTACH_BEFORE") { adapter.verifyAttachmentScript() }
+        val submit = adapter.fillAndSubmitScript(prompt, "", "", "")
+        runScript(submit) { sr ->
+            log("CTRL_SUBMIT", sr)
+            pollAnswerForControl(attempt = 0)
+        }
+    }
+
+    /** 与 [pollAnswerForEndToEnd] 同构，只是日志前缀为 CTRL。 */
+    private fun pollAnswerForControl(attempt: Int) {
+        if (attempt * 3000L > 120_000L) {
+            log("CTRL", "TIMEOUT: 120s 内未拿到稳定回答")
+            return
+        }
+        runScript(adapter.snapshotScript()) { raw ->
+            val o = JsonParse.parse(raw)
+            val snap = o?.let { adapter.parseSnapshot(it) }
+            if (snap == null) {
+                log("CTRL_POLL", "snapshot null at attempt=$attempt")
+                webView.postDelayed({ pollAnswerForControl(attempt + 1) }, 3000)
+                return@runScript
+            }
+            log(
+                "CTRL_POLL",
+                "attempt=$attempt count=${snap.responseCount} generating=${snap.generating} len=${snap.lastAnswerText.length}"
+            )
+            if (!snap.generating && snap.lastAnswerText.isNotBlank()) {
+                val outcome = nz.org.aotearoa.guandanscore.recognition.AiCardResponseParser()
+                    .parseDetailed(snap.lastAnswerText)
+                log("CTRL_ANSWER", snap.lastAnswerText.take(600))
+                log(
+                    "CTRL_PARSE",
+                    "cards=${outcome.cards.size} warnings=${outcome.warnings} first=${outcome.cards.take(5)}"
+                )
+                return@runScript
+            }
+            webView.postDelayed({ pollAnswerForControl(attempt + 1) }, 3000)
+        }
+    }
+
+    /** 每 3s 读一次快照，连续两次文本非空且未变化即视为生成结束；上限 120s。 */
+    private fun pollAnswerForEndToEnd(attempt: Int) {
+        if (attempt * 3000L > 120_000L) {
+            log("E2E", "TIMEOUT: 120s 内未拿到稳定回答")
+            return
+        }
+        runScript(adapter.snapshotScript()) { raw ->
+            val o = JsonParse.parse(raw)
+            val snap = o?.let { adapter.parseSnapshot(it) }
+            if (snap == null) {
+                log("E2E_POLL", "snapshot null at attempt=$attempt")
+                webView.postDelayed({ pollAnswerForEndToEnd(attempt + 1) }, 3000)
+                return@runScript
+            }
+            log(
+                "E2E_POLL",
+                "attempt=$attempt count=${snap.responseCount} generating=${snap.generating} len=${snap.lastAnswerText.length}"
+            )
+            if (!snap.generating && snap.lastAnswerText.isNotBlank()) {
+                val outcome = nz.org.aotearoa.guandanscore.recognition.AiCardResponseParser()
+                    .parseDetailed(snap.lastAnswerText)
+                log("E2E_ANSWER", snap.lastAnswerText.take(600))
+                log(
+                    "E2E_PARSE",
+                    "cards=${outcome.cards.size} warnings=${outcome.warnings} " +
+                        "first=${outcome.cards.take(5)}"
+                )
+                return@runScript
+            }
+            webView.postDelayed({ pollAnswerForEndToEnd(attempt + 1) }, 3000)
+        }
+    }
+
+    /**
+     * AI-011：记录可见 WebView 的窗口基线，供后续切后台 / 重建对照。
+     *
+     * 视图侧：像素尺寸、density、是否 attachedToWindow、可见性、页面缩放。
+     * 页面侧：[PAGE_BASELINE] 返回 viewport 尺寸、滚动位置与 document 高度。
+     */
+    private fun logBaseline() {
+        val wv = webView
+        val dm = resources.displayMetrics
+        log(
+            "BASELINE_VIEW",
+            "view=${wv.width}x${wv.height} density=${dm.density} densityDpi=${dm.densityDpi} " +
+                "screen=${dm.widthPixels}x${dm.heightPixels} attachedToWindow=${wv.isAttachedToWindow} " +
+                "visibility=${wv.visibility} shown=${wv.isShown} scale=${wv.scale} " +
+                "parent=${wv.parent?.javaClass?.simpleName}"
+        )
+        runScript(PAGE_BASELINE) { log("BASELINE_PAGE", it) }
     }
 
     private fun runAdapterScript(tag: String, script: () -> String) {
@@ -295,9 +474,30 @@ open class AiProbeActivity : Activity() {
     private fun runScript(script: String, onResult: (String) -> Unit) {
         runOnUiThread {
             webView.evaluateJavascript(script) { raw ->
-                val text = raw?.trim()?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: "null"
-                onResult(pretty(text))
+                onResult(pretty(decodeJsResult(raw)))
             }
+        }
+    }
+
+    /**
+     * AI-133：`evaluateJavascript` 回传的是 **JSON 编码的字符串字面量**（含 `\n`、`\"`、`\\`、`\uXXXX`）。
+     * 旧实现只做 `removeSurrounding(\"\")` + `replace(\"\\\\\\\"\", \"\\\"\")`，无法还原换行/反斜杠/unicode 转义，
+     * 导致含引号的 JSON 数组回答无法被 [JsonParse.parse] 解析（`snapshot null`）。
+     * 这里用 [org.json.JSONTokener] 正确反序列化字符串字面量。
+     */
+    private fun decodeJsResult(raw: String?): String {
+        if (raw == null) return "null"
+        val t = raw.trim()
+        if (t.isEmpty() || t == "null") return "null"
+        return try {
+            val v = org.json.JSONTokener(t).nextValue()
+            when (v) {
+                is String -> v
+                org.json.JSONObject.NULL -> "null"
+                else -> v.toString()
+            }
+        } catch (_: Exception) {
+            t
         }
     }
 
@@ -322,13 +522,83 @@ open class AiProbeActivity : Activity() {
                 )
             val dir = java.io.File(cacheDir, "probe")
             dir.mkdirs()
-            val f = java.io.File(dir, "probe_upload.png")
-            f.writeBytes(png)
-            pendingChooserUri = Uri.fromFile(f)
-            log("PREP", "wrote ${f.absolutePath} (${f.length()} bytes); chooser will deliver it")
+            val f = java.io.File(dir, "probe_upload.jpg")
+
+            // AI-132：优先使用外部传入的真实手牌照片，便于端到端验证"图片→JSON"。
+            // AI-012：真实图先经 UploadImageEncoder 压成 JPEG（长边 1800 / 质量 85）。
+            val src = intent?.getStringExtra(EXTRA_TEST_IMAGE)?.takeIf { it.isNotBlank() }
+            if (src != null) {
+                if (encodeExternalImage(src, f)) {
+                    pendingChooserUri = Uri.fromFile(f)
+                    return
+                }
+                log("PREP", "real image $src 不可读，回退占位图")
+            }
+
+            // 占位图仍是 1×1 PNG，保持原文件名以免影响既有验收命令。
+            val placeholder = java.io.File(dir, "probe_upload.png")
+            placeholder.writeBytes(png)
+            pendingChooserUri = Uri.fromFile(placeholder)
+            log("PREP", "wrote placeholder ${placeholder.absolutePath} (${placeholder.length()} bytes); chooser will deliver it")
         } catch (e: Exception) {
             log("PREP", "failed: ${e.message}")
         }
+    }
+
+    /**
+     * AI-132 + AI-012：读入外部图片（绝对路径或 content:// URI），按 EXIF 旋正，
+     * 用 [UploadImageEncoder] 压成 JPEG 写到 [dest]。成功返回 true。
+     */
+    private fun encodeExternalImage(src: String, dest: java.io.File): Boolean {
+        return try {
+        val uri = Uri.parse(if (src.startsWith("content://") || src.startsWith("file://")) src else "file://$src")
+        val originalBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        if (originalBytes == null || originalBytes.isEmpty()) {
+            log("PREP", "read $src 为空")
+            return false
+        }
+        val decoded = android.graphics.BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size)
+        if (decoded == null) {
+            log("PREP", "decode $src 失败（${originalBytes.size} bytes）")
+            return false
+        }
+        val sourceW = decoded.width
+        val sourceH = decoded.height
+        val oriented = applyExifOrientation(decoded, originalBytes)
+        val result = nz.org.aotearoa.guandanscore.imaging.UploadImageEncoder.encode(oriented)
+        if (oriented !== decoded) oriented.recycle()
+        decoded.recycle()
+        dest.writeBytes(result.bytes)
+        log(
+            "PREP",
+            "encoded $src -> ${dest.name}: ${sourceW}x$sourceH → " +
+                "${result.width}x${result.height} q=${result.quality} scaled=${result.scaled} " +
+                "${result.byteCount} bytes (原图 ${originalBytes.size} bytes)"
+        )
+        result.byteCount > 0
+        } catch (e: Exception) {
+            log("PREP", "encodeExternalImage failed: ${e.message}")
+            false
+        }
+    }
+
+    /** 按 EXIF 方向把 [bitmap] 旋正；无方向信息或无旋转时返回原对象。 */
+    private fun applyExifOrientation(bitmap: android.graphics.Bitmap, bytes: ByteArray): android.graphics.Bitmap {
+        val degrees = try {
+            val exif = android.media.ExifInterface(java.io.ByteArrayInputStream(bytes))
+            when (exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+        } catch (e: Exception) {
+            log("PREP", "EXIF 读取失败，按原方向处理: ${e.message}")
+            0f
+        }
+        if (degrees == 0f) return bitmap
+        val matrix = android.graphics.Matrix().apply { postRotate(degrees) }
+        return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     /**
@@ -377,6 +647,73 @@ open class AiProbeActivity : Activity() {
      *
      * 注意：`dispatched=true` 不代表成功，必须紧接着点“附件检查”确认预览出现。
      */
+    /**
+     * AI-017：评估拖放（DragEvent/drop）能否替代 paste。
+     * 只派发合成 `dragenter`/`dragover`/`drop`；真实系统拖放需要外部输入设备，无法在 WebView 内合成。
+     */
+    private fun testDrop() {
+        val png1x1 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        val script = """
+            (function(name, mime, b64) {
+              var el = null;
+              try { el = document.querySelector('div[contenteditable="true"], textarea'); } catch (e) {}
+              if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+              var binary = atob(b64);
+              var bytes = new Uint8Array(binary.length);
+              for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              var file;
+              try { file = new File([bytes], name, { type: mime }); } catch (e) { return JSON.stringify({ ok: false, why: 'file-construct-failed' }); }
+              var dt = new DataTransfer();
+              dt.items.add(file);
+              el.focus();
+              var types = ['dragenter', 'dragover', 'drop'];
+              var results = {};
+              for (var k = 0; k < types.length; k++) {
+                try {
+                  var ev = new DragEvent(types[k], { dataTransfer: dt, bubbles: true, cancelable: true, composed: true });
+                  results[types[k]] = el.dispatchEvent(ev);
+                } catch (e) { results[types[k]] = 'throw:' + e.message; }
+              }
+              return JSON.stringify({ ok: true, results: results, bytes: bytes.length });
+            })(${JsonQuote.of("probe.png")}, ${JsonQuote.of("image/png")}, ${JsonQuote.of(png1x1)})
+        """.trimIndent()
+        runScript(script) { log("DROP", it) }
+    }
+
+    /**
+     * AI-017：评估系统剪贴板。把 PNG 放进 [android.content.ClipboardManager] 后聚焦输入框，
+     * 用原生 `KEYCODE_PASTE` 触发真实粘贴。这是唯一可能被页面当作可信粘贴的路径。
+     */
+    private fun testSystemClipboard() {
+        try {
+            val png = android.util.Base64.decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                android.util.Base64.DEFAULT
+            )
+            // FileProvider 只暴露 cache/photos/（res/xml/file_paths.xml），必须放这个目录下。
+            val dir = java.io.File(cacheDir, "photos").apply { mkdirs() }
+            val f = java.io.File(dir, "clipboard.png").apply { writeBytes(png) }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this, "$packageName.files", f
+            )
+            val clip = android.content.ClipData.newUri(contentResolver, "probe", uri)
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(clip)
+            log("CLIP", "set ${clip.itemCount} item(s), uri=$uri")
+            // 聚焦输入框后发送真实粘贴快捷键
+            runScript("document.querySelector('div[contenteditable=\"true\"], textarea')?.focus()") {
+                val root = webView.rootView
+                val t = android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_PASTE)
+                root.dispatchKeyEvent(t)
+                root.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_PASTE))
+                log("CLIP", "dispatched KEYCODE_PASTE")
+            }
+        } catch (e: Exception) {
+            log("CLIP", "failed: ${e::class.simpleName}: ${e.message}")
+        }
+    }
+
     private fun testPaste() {
         val png1x1 =
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -580,3 +917,33 @@ open class AiProbeActivity : Activity() {
         })()
     """.trimIndent()
 }
+
+/**
+ * AI-011：页面侧基线。只读，不触碰 Cookie / Storage / 图片字节。
+ *
+ * 返回 viewport 尺寸、滚动位置、文档高度与可见性，供切后台 / 重建后对比是否"页面实际更新"。
+ */
+private val PAGE_BASELINE = """
+    (function() {
+      var de = document.documentElement;
+      var b = document.body;
+      var out = {
+        ok: true,
+        href: location.href,
+        readyState: document.readyState,
+        visibility: document.visibilityState,
+        hidden: document.hidden,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio,
+        scrollX: Math.round(window.scrollX),
+        scrollY: Math.round(window.scrollY),
+        docClientW: de ? de.clientWidth : 0,
+        docClientH: de ? de.clientHeight : 0,
+        docScrollH: de ? de.scrollHeight : 0,
+        bodyScrollH: b ? b.scrollHeight : 0,
+        title: (document.title || '').slice(0, 80)
+      };
+      return JSON.stringify(out);
+    })()
+""".trimIndent()

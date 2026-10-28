@@ -156,6 +156,30 @@ class AiCardResponseParserTest {
     }
 
     @Test
+    fun parsesBareTopLevelArray() {
+        val text = """[{"rank":"A","suit":"SPADE"},{"rank":"Q","suit":"SPADE"},{"rank":"K","suit":"HEART"}]"""
+        val outcome = parser.parseDetailed(text)
+        assertEquals(3, outcome.cards.size)
+        assertTrue("不应退回兜底提取", outcome.warnings.none { it.contains("退回逐条") })
+        assertEquals(Suit.SPADE, outcome.cards[0].suit)
+        assertEquals(Rank.QUEEN, outcome.cards[1].rank)
+        assertEquals(Suit.HEART, outcome.cards[2].suit)
+    }
+
+    @Test
+    fun parsesBareArrayWithUiNoisePrefix() {
+        // DeepSeek 代码块把 “json / Copy / Download” 按钮文字也拼进了 textContent。
+        val text = """jsonCopyDownload[
+            {"rank":"9","suit":"DIAMOND"},
+            {"rank":"2","suit":"SPADE"}
+        ]"""
+        val outcome = parser.parseDetailed(text)
+        assertEquals(2, outcome.cards.size)
+        assertTrue(outcome.warnings.none { it.contains("退回逐条") })
+        assertEquals(Rank.NINE, outcome.cards[0].rank)
+    }
+
+    @Test
     fun promptDeclaresRequiredFields() {
         assertTrue(AiCardResponseParser.PROMPT.contains("\"cards\""))
         assertTrue(AiCardResponseParser.PROMPT.contains("最多27张"))

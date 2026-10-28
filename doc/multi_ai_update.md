@@ -1,13 +1,14 @@
-# 多 AI 源支持：配置页可选 DeepSeek / Gemini / 自定义 AI 源
+# 多 AI 源支持：配置页可选 ChatGPT / DeepSeek / Gemini / 自定义 AI 源
 
 > **依据：** `doc/ai_update.md`（Gemini WebView 单源设计）、`doc/ai_tasks.md`（阶段拆分）、
-> 参考实现 `SMSProxy/doc/ai_support.md`（WebView 上游模块化做法）。
+> `SMSProxy/doc/ai_support.md`（WebView 上游模块化做法）、
+> `/Users/onetreehill/Github/ChatGPTBridge/doc/image_upload.md`（ChatGPT 网页图片附件上传、请求编排、提交顺序与失败降级设计）。
 >
 > **本文性质：** 设计 + 实施清单。**尚未执行**。所有“完成”必须以真机证据为准，
-> 没有登录态下跑通的图片上传与识牌闭环，不得勾选。
+> 各网页源均须验证登录态、真实图片附件上传、提交、回答提取与识牌解析的完整闭环，不得仅凭脚本派发成功勾选。
 >
 > **一句话：** 把“识牌用哪个 AI”从硬编码 Gemini 改成**配置可选的源**，
-> 每个源是一个独立适配器；业务层（`AiRecognitionService`）只认 `AiSource` 接口。
+> 每个网页源是一个独立适配器；业务层（`AiRecognitionService`）只认 `AiSource` 接口。
 
 ---
 
@@ -30,11 +31,11 @@
 
 ### 1.2 目标
 
-1. 配置页能**显式选择 AI 源**：Gemini 网页版 / DeepSeek 网页版 / 自定义网页源 /（保留）HTTP API 源。
+1. 配置页能**显式选择 AI 源**：ChatGPT 网页版 / Gemini 网页版 / DeepSeek 网页版 / 自定义网页源 /（保留）HTTP API 源。
 2. 每个网页源 = 一个 `SiteAdapter`（选择器 + 脚本 + 登录判据）；驱动层（WebView 生命周期、提交、轮询、结束判定）**只有一份**。
 3. 业务层不认识任何站点名，只认 `AiSource`。
 4. 新增一个站点：**只新增适配器 + 预设**，不改 `AiRecognitionService`、不改 `MainActivity` 主流程、不改驱动层。
-5. 不引入官方 API Key 依赖（Gemini 网页版 / DeepSeek 网页版均复用网页登录态），HTTP API 源作为**可选**保留。
+5. 不引入官方 API Key 依赖（ChatGPT / Gemini / DeepSeek 网页版均复用网页登录态），HTTP API 源作为**可选**保留。
 
 ### 1.3 明确不做（本轮）
 
@@ -53,7 +54,7 @@ MainActivity / 设置页
         ▼
 AiSettingsStore ──► AiSourceRegistry  （内置预设 + 用户自定义）
         │                  │
-        │                  └─► SiteAdapter（GeminiAdapter / DeepSeekAdapter / CustomAdapter）
+        │                  └─► SiteAdapter（ChatGPTAdapter / GeminiAdapter / DeepSeekAdapter / CustomAdapter）
         ▼
 AiRecognitionService  ──►  AiSource 接口
         │                       │
@@ -69,7 +70,7 @@ WebViewHost（进程级单例 WebView + 窗口附着）
 
 **两条必须守住的线（继承 SMSProxy 的结论）：**
 
-1. **驱动层不知道站点。** `PageDriver` 里不允许出现任何 CSS 选择器、URL 字面量、`gemini`/`deepseek` 字样。
+1. **驱动层不知道站点。** `PageDriver` 里不允许出现任何 CSS 选择器、URL 字面量或 `chatgpt` / `gemini` / `deepseek` 等站点标识。
 2. **适配器不知道业务。** 适配器不碰 `Card`、不拼短信、不读设置；只回答“输入框在哪、怎么提交、回答节点在哪、是否已登录”。
 
 ---
@@ -216,6 +217,7 @@ class WebViewAiSource(
 
 ```kotlin
 enum class AiSourceId(val key: String, val label: String) {
+    CHATGPT_WEBVIEW("chatgpt_web", "ChatGPT 网页版"),
     GEMINI_WEBVIEW("gemini_web", "Gemini 网页版"),
     DEEPSEEK_WEBVIEW("deepseek_web", "DeepSeek 网页版"),
     CUSTOM_WEBVIEW("custom_web", "自定义网页源"),
@@ -234,10 +236,13 @@ object AiSourceRegistry {
 
 | key | 显示名 | transport | homeUrl | 需要 Key | 需要网页登录 |
 |---|---|---|---|---|---|
+| `chatgpt_web` | ChatGPT 网页版 | `WEBVIEW` | `https://chatgpt.com/` | 否 | 是 |
 | `gemini_web` | Gemini 网页版 | `WEBVIEW` | `https://gemini.google.com/app` | 否 | 是 |
 | `deepseek_web` | DeepSeek 网页版 | `WEBVIEW` | `https://chat.deepseek.com` | 否 | 是 |
 | `custom_web` | 自定义网页源 | `WEBVIEW` | 用户填写 | 否 | 是 |
 | `http_api` | HTTP API | `API` | — | 是 | 否 |
+
+`chatgpt_web` 使用 ChatGPT 网页登录态，不需要 OpenAI API Key。它与 `http_api` 是两种不同的传输路径：前者通过 `WebViewAiSource` 操作网页，后者继续使用 `AiRecognitionClient`。
 
 ---
 
@@ -330,6 +335,37 @@ DeepSeek 实测无 stop 元素时，`generating` 传 `false`，**不得**改成�
 
 ---
 
+### 5.5 ChatGPT 网页版适配器设计
+
+> **参考：** `/Users/onetreehill/Github/ChatGPTBridge/doc/image_upload.md`。该文档记录的是 Python / Playwright 桥接实现；Android 端应复用其中的附件处理原则，而不是直接照搬 Python 代码。ChatGPT 页面选择器、登录判据和附件预览判据均须在目标 Android WebView 上实测，不能把候选值当成已验证结果。
+
+#### 5.5.1 源注册与页面职责
+
+- 新增 `ChatGPTAdapter`，实现通用 `SiteAdapter` 接口；`siteKey` 为 `chatgpt`，默认首页为 `https://chatgpt.com/`。
+- 源 ID 使用 `chatgpt_web`，传输类型为 `WEBVIEW`，不需要 API Key，但需要用户在网页中登录。
+- 输入框、发送按钮、回答节点、登录判据、附件预览节点与页面修复脚本全部封装在适配器中，禁止把 ChatGPT 选择器或 URL 写入 `PageDriver`。
+- 选择器与脚本必须通过 `diagnoseScript()` 验证。登录状态不得只根据 URL、账户菜单或页脚推断；必须有足够证据区分登录页与已登录页。
+
+#### 5.5.2 图片附件上传与提交顺序
+
+ChatGPTBridge 的图片流程为“解析图片 → 获取图片字节 → 创建真实 `File` → 通过 `DataTransfer` 和 `ClipboardEvent('paste')` 附加 → 提交消息”。在本应用中，输入来自 `RecognizeRequest.jpegBytes`，适配器应将图片作为真实文件附件交给网页，而不是只把图片描述或 Base64 文本写进 prompt。
+
+1. **准备图片：** 使用请求中的 JPEG 字节、文件名与 MIME 类型构造附件；不要把 Base64 正文拼进用户可见的提示词。
+2. **填充文本：** 将识牌 prompt 写入 composer，并确认输入已成功。
+3. **附加图片：** 首选 `UploadStrategy.PASTE`，按目标 WebView 实测结果构造 `File`、`DataTransfer` 与合成 `paste` 事件。不要假定事件派发必然意味着网页接受了附件。
+4. **验证附件：** 随后执行 `verifyAttachmentScript()`，确认当前消息的附件预览确实出现。返回值必须表示网页已接受附件，而不能只表示找到输入框或派发了事件。
+5. **最后提交：** 仅当文本填充和附件校验均成功，才执行提交脚本。填充、上传、校验与提交需要明确的结构化结果，至少包含 `ok` 和 `why`。
+
+**失败策略：** 图片未能附加或无法确认附件预览时，返回 `AiSourceError.UploadFailed`，不得静默提交纯文本识牌请求，否则应用可能将没有看过图片的文字回答误认为识牌结果。若以后为 ChatGPT 增加 `FILE_CHOOSER` 回退，必须单独实现并通过真机验证，不能把 DeepSeek 的上传路径直接视为适用于 ChatGPT。
+
+#### 5.5.3 超时、资源与隐私
+
+- 图片附件与文本必须属于同一条待提交消息；重新创建 WebView 后，应重新附加该次请求所需图片，不能假定旧页面的附件状态仍然存在。
+- 对上传验证和回答等待设置明确超时，超时分类为 `UploadFailed` 或 `Timeout`，禁止无限等待；单元测试应覆盖脚本异常和网页拒绝附件的情况。
+- 不记录图片 Base64、登录 Cookie、访问令牌或密码；诊断日志只记录必要状态、错误原因和耗时。
+- 为输入字节数和 JavaScript 序列化开销设置合理边界。ChatGPTBridge 的 `IMAGE_PASTE_ENABLED`、`IMAGE_PASTE_MAX` 与 `IMAGE_DOWNLOAD_TIMEOUT_MS` 是其服务端配置，不应未经设计就原样复制为 Android 配置；本应用首先处理单张本地手牌照片，不需要为其引入远程图片下载逻辑。
+- 当前仍需验证 ChatGPT 页面改版、登录状态、合成 paste 事件和附件预览选择器的实际行为。正式验收以前，`ChatGPTAdapter` 不得标记为已验证。
+
 ## 6. 必须遵守的硬规则（来自 SMSProxy 的回归教训）
 
 | 编号 | 规则 | 原因 |
@@ -353,13 +389,14 @@ DeepSeek 实测无 stop 元素时，`generating` 传 `false`，**不得**改成�
 
 | 阶段 | 动作 | 出口条件 |
 |---|---|---|
-| **A 数据模型** | `AiTransport` 改名泛化；`AiSettings` 加 `sourceKey` / `homeUrl`；写迁移逻辑；`AiPresets` 加 deepseek / custom；补 `AiSettingsStoreTest` | 旧数据加载后行为不变；单测全绿；配置页能显示四个源 |
-| **B 配置页** | `showAiSettings()` 改成分组下拉：先选源，再按 `requiresApiKey` / `requiresWebLogin` 显隐字段；`http_api` 仍校验 HTTPS；网页源显示“打开登录页”按钮 | 选 “Gemini 网页版” 时不再要求 API Key（修掉当前 bug）；选 DeepSeek 显示对应默认值 |
+| **A 数据模型** | `AiTransport` 改名泛化；`AiSettings` 加 `sourceKey` / `homeUrl`；写迁移逻辑；`AiPresets` 加 ChatGPT / DeepSeek / custom；补 `AiSettingsStoreTest` | 旧数据加载后行为不变；单测全绿；配置页能显示五个源 |
+| **B 配置页** | `showAiSettings()` 改成分组下拉：先选源，再按 `requiresApiKey` / `requiresWebLogin` 显隐字段；`http_api` 仍校验 HTTPS；网页源显示“打开登录页”按钮 | 选择 ChatGPT / Gemini 网页版时均不要求 API Key；ChatGPT 与 DeepSeek 显示正确首页和默认值 |
 | **C 抽取适配层** | `SiteAdapter` 接口；`GeminiAdapter`（把 `GeminiSelectors` + `GeminiScripts` 收进去）；`WebViewBridge`；`WebViewHost`（进程级单例 + 窗口附着） | Gemini 现有行为不变；探测页可用新路径跑通诊断 |
 | **D 驱动层** | `PageDriver`（导航/就绪/提交/轮询）+ `WebViewAiSource`；`AiRecognitionService` 退化为薄壳或删除状态机 | Fake 源 + Fake 驱动单测全绿；Gemini 真机识牌闭环不回退 |
 | **E DeepSeek 适配** | `DeepSeekSelectors` / `DeepSeekScripts` / `DeepSeekAdapter`；两套上传策略 | 真机：登录态下上传手牌照片 → 回答被解析出 ≥ 1 张牌；`verifyAttachment` 通过 |
-| **F 接入 UI** | `recognizeOnline()` 走 `AiSourceRegistry.create(...).recognize()`；`probe` 页支持选源 | 选任一源都能识牌；失败文案分类正确 |
-| **G 清理** | 删除字符串嗅探 `isGemini()` / `isOpenAiChat()`（`http_api` 内部保留）；更新 `doc/ai_tasks.md` 勾选；补验收记录 | 无 `gemini`/`deepseek` 字样出现在驱动层 |
+| **F ChatGPT 适配** | `ChatGPTSelectors` / `ChatGPTScripts` / `ChatGPTAdapter`；实现图片附件粘贴与附件预览校验 | 真机登录态下上传手牌照片 → 附件预览验证通过 → 回答解析出 ≥ 1 张牌；上传失败不得提交纯文本 |
+| **G 接入 UI** | `recognizeOnline()` 走 `AiSourceRegistry.create(...).recognize()`；`probe` 页支持选源 | 所有已接入源均按各自验收步骤识牌；失败文案分类正确 |
+| **H 清理** | 删除字符串嗅探 `isGemini()` / `isOpenAiChat()`（`http_api` 内部保留）；更新 `doc/ai_tasks.md` 勾选；补验收记录 | 驱动层中不存在 `chatgpt` / `gemini` / `deepseek` 等站点标识 |
 
 **回滚点：** A/B 独立可回滚（只是配置层）；C 之后 Gemini 路径必须保持可跑，否则不进入 E。
 
@@ -370,9 +407,9 @@ DeepSeek 实测无 stop 元素时，`generating` 传 `false`，**不得**改成�
 ```
 AI Provider 设置
 ┌──────────────────────────────────────────┐
-│ AI 源   [ Gemini 网页版          ▼ ]     │   ← 四个预设 + “＋ 新增…”
-│ 名称    [ Gemini 网页版                ] │
-│ 首页    [ https://gemini.google.com/app] │   ← 仅网页源显示
+│ AI 源   [ ChatGPT 网页版        ▼ ]     │   ← 五个预设 + “＋ 新增…”
+│ 名称    [ ChatGPT 网页版              ] │
+│ 首页    [ https://chatgpt.com/          ] │   ← 仅网页源显示
 │         [ 打开登录页 ]  ● 已登录 / ○ 未登录 │
 ├──────────────────────────────────────────┤
 │ （仅 http_api 显示）                      │
@@ -395,25 +432,26 @@ AI Provider 设置
 
 | 对象 | 用例 |
 |---|---|
-| `AiSettingsStore` | 旧数据（无 `transport`）→ `http_api`；`GEMINI_WEBVIEW` → `gemini_web`；加 deepseek 预设后 `loadAll()` 不丢用户 profile；切 profile 后 `load()` 返回正确 `sourceKey` |
-| `AiSourceRegistry` | 四个 `sourceKey` 各自映射到正确实现类型；未知 key 回退 `http_api` 并告警 |
-| `GeminiAdapter` / `DeepSeekAdapter` | 脚本 JSON 可解析；`why` 字段存在；prompt 含引号/换行/`$` 时不破坏脚本；Base64 参数正确转义 |
+| `AiSettingsStore` | 旧数据（无 `transport`）→ `http_api`；`GEMINI_WEBVIEW` → `gemini_web`；新增 ChatGPT / DeepSeek 预设后 `loadAll()` 不丢用户 profile；切 profile 后 `load()` 返回正确 `sourceKey` |
+| `AiSourceRegistry` | 五个 `sourceKey` 各自映射到正确实现类型；未知 key 回退 `http_api` 并告警 |
+| `ChatGPTAdapter` / `GeminiAdapter` / `DeepSeekAdapter` | 脚本 JSON 可解析；`why` 字段存在；prompt 含引号/换行/`$` 时不破坏脚本；图片参数正确转义；附件派发与附件验证分别测试 |
+| `ChatGPTAdapter` 图片上传 | 上传成功必须有附件预览证据；paste 被拒、附件未出现、脚本报错或超时均返回 `UploadFailed`，不得继续提交纯文本 |
 | `SubmitOutcome` 解析 | `ok=false` 必须带 `why`；`attached=false` 不得被当成成功 |
 | `GenerationWatcher` | 现有用例保持；补一条“全站无 stop 元素也能完成” |
 | 迁移 | 加密的 `api_key` 在改名后仍能解密 |
 
 ### 9.2 真机验收（按顺序）
-
 1. 选 “Gemini 网页版”，**不填 API Key**，点联网识图 → 不再弹“请先填写 API Key”。
-2. 未登录时 → `NotLoggedIn` 文案，而不是超时。
-3. 登录后带手牌照片 → 解析出 ≥ 1 张牌。
-4. 切到 “DeepSeek 网页版”，同一张照片 → 同上（**这是本任务的核心验收**）。
-5. 两源来回切两次 → 各自会话不串、不覆盖。
-6. 后台（Launcher 在前台）跑一次 → 不因无窗口而超时。
-7. 断网 → 明确失败文案，不挂死。
-8. 上传被拒（两条策略都失败）→ `UploadFailed`，**不得**提交纯文本。
-9. 回答节点数不增加但文本变化（追问）→ 得到新答案，不返回上一轮。
-10. 自定义网页源填错误 URL → `NotReady`，给出具体原因。
+2. 选 “ChatGPT 网页版”，**不填 API Key**，登录后上传手牌照片 → 附件预览验证通过，解析出 ≥ 1 张牌。
+3. ChatGPT 未登录时 → `NotLoggedIn` 文案，而不是超时。
+4. ChatGPT paste 被拒、附件预览未出现或附件脚本失败 → 返回 `UploadFailed`，**不得**提交纯文本。
+5. 选 “DeepSeek 网页版”，同一张照片 → 附件验证通过并解析出 ≥ 1 张牌（网页多源核心验收）。
+6. Gemini、ChatGPT、DeepSeek 来回切换 → 不串会话、不覆盖 profile。
+7. 后台（Launcher 在前台）分别跑各网页源 → 不因无窗口而超时。
+8. 断网 → 明确失败文案，不挂死。
+9. 上传被拒（支持的上传策略都失败）→ `UploadFailed`，**不得**提交纯文本。
+10. 回答节点数不增加但文本变化（追问）→ 得到新答案，不返回上一轮。
+11. 自定义网页源填错误 URL → `NotReady`，给出具体原因。
 
 ### 9.3 每次改选择器后
 
@@ -427,24 +465,24 @@ AI Provider 设置
 
 | 风险 | 影响 | 缓解 |
 |---|---|---|
-| DeepSeek / Gemini 前端改版 | 选择器失效，整源挂 | 选择器集中 + `diagnose()` + 明确报错（M9） |
+| ChatGPT / DeepSeek / Gemini 前端改版 | 选择器失效，整源挂 | 选择器集中 + `diagnose()` + 明确报错（M9）；ChatGPT 附件必须独立验证，不用脚本派发结果冒充上传成功 |
 | 华为 WebView 对合成 paste 不友好 | 图片上不去 | 双策略 + `verifyAttachment` 硬校验 + `FILE_CHOOSER` 回退 |
-| 两站点风控/验证码 | 登录态失效 | 手动登录入口 + `NotLoggedIn` 显式上报，不重试到封号 |
+| 网页源风控/验证码 | 登录态失效 | 手动登录入口 + `NotLoggedIn` 显式上报，不重试到封号 |
 | 后台渲染不出帧 | 永远超时 | `WebViewHost` overlay 优先（M2）+ 健康检查暴露窗口状态 |
 | 配置迁移写坏用户 profile | 丢 Key / 丢源 | 迁移只新增字段、不改既有语义；单测覆盖旧数据 |
-| 抽象过度 | 加一个源要改五个文件 | 接口只留 §3 那些方法；驱动层禁止站点字样（阶段 G 的验收项） |
+| 抽象过度 | 加一个源要改五个文件 | 接口只留 §3 那些方法；驱动层禁止站点字样（阶段 H 的验收项） |
 | 网页自动化合规 | 账户限制 | 上线前产品侧评估，遵守站点条款；不用 API Key ≠ 无风险 |
 
 ---
 
 ## 11. 待确认问题（需用户决策）
 
-1. **DeepSeek 是否作为首发源？** 若是，阶段 E 与 C/D 并行排期；若否，先只做 A/B（修配置 bug）。
+1. **ChatGPT 与 DeepSeek 的首发顺序？** 建议先完成 A/B（数据模型与配置 bug），再分别完成 DeepSeek 和 ChatGPT 的真机图片上传闭环；没有真实附件验收证据的源不得标记完成。
 2. **自定义网页源的编辑粒度：** 只允许填 `homeUrl`（选择器用内置默认），还是允许用户填选择器？
    建议先只填 URL + 选“站点类型”，避免把选择器暴露成用户字段。
-3. **HTTP API 是否保留在同一配置页？** 建议保留为第四个选项，但默认折叠。
+3. **HTTP API 是否保留在同一配置页？** 建议保留为第五个选项，但默认折叠。
 4. **`AiRecognitionService` 是否删除？** 建议保留类名与 `Result` 形状（UI 依赖），只把状态机下沉到 `WebViewAiSource`。
-5. **上传成功判据：** Gemini 的附件预览选择器尚未实测（当前 `verifyAttachment` 是猜测候选）。
+5. **上传成功判据：** Gemini 与 ChatGPT 的附件预览选择器尚待真机验证；需登录态设备数据定稿，在此之前不得勾选任何“上传已验证”。
    需要登录态真机数据后定稿，在此之前不得勾选任何“上传已验证”。
 
 ---
@@ -456,4 +494,5 @@ AI Provider 设置
 | `doc/ai_update.md` | 单源（Gemini）WebView 设计；本文把其“上游接口”泛化为多源 |
 | `doc/ai_tasks.md` | 阶段 0–5 任务清单；本文新增“多源”子项，**不替换**其验收标准 |
 | `SMSProxy/doc/ai_support.md` | 驱动层、窗口宿主、结束判定、排障方法论的来源；本文只取站点无关部分 |
+| `/Users/onetreehill/Github/ChatGPTBridge/doc/image_upload.md` | ChatGPTBridge 的图片解析、真实文件附件粘贴、提交顺序、失败降级与安全边界；Android 实现须针对 WebView 重新验证 |
 | `skills/web-to-openai-api` | 网页转 API 的通用方法论；适配器设计与其“选择器集中 + 结构化验签”一致 |

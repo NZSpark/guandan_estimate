@@ -94,6 +94,11 @@ interface SiteAdapter {
     /** 只读诊断。 */
     fun diagnoseScript(): String
 
+    /**
+     * AI-008D：页面结构深度探测（只读）。默认无实现；需要精确结构事实的站点覆盖它。
+     */
+    fun deepProbeScript(): String = ""
+
     /** 判定是否未登录。 */
     fun loginCheckScript(): String
 

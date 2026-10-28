@@ -79,6 +79,94 @@ object DeepSeekScripts {
         })()
     """.trimIndent()
 
+    /**
+     * AI-008D：DeepSeek 页面结构深度探测（只读）。
+     *
+     * 在 [diagnose] 的计数之外，回答几个驱动层必须依赖的事实：
+     * - 输入框是否**唯一**且是**最内层**（外层 wrapper 也会命中选择器，写错会填到壳上）；
+     * - 发送按钮的**可点击判据**（`disabled` / `aria-disabled` / 尺寸为 0 都不能点）；
+     * - 回答节点的**容器标识**（class 前缀、层级深度），供快照脚本稳定定位；
+     * - 是否存在 **Shadow DOM**（有则 `querySelectorAll` 会漏，必须改遍历方式）。
+     */
+    fun deepProbe(): String = """
+        (function() {
+          function all(sel) {
+            try { return Array.prototype.slice.call(document.querySelectorAll(sel)); } catch (e) { return []; }
+          }
+          function box(el) {
+            if (!el) return null;
+            var r = el.getBoundingClientRect();
+            return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left), y: Math.round(r.top) };
+          }
+          function cls(el) {
+            if (!el) return '';
+            var c = el.className;
+            if (typeof c === 'object' && c && c.baseVal != null) c = c.baseVal;
+            return (c || '').toString().split(/\\s+/).filter(function (s) { return s.length > 0; }).slice(0, 4).join(' ');
+          }
+
+          var inputs = all(${q(DeepSeekSelectors.input())});
+          var input = inputs.length > 0 ? inputs[0] : null;
+          // 最内层判定：输入框内部不应再包含可编辑节点。
+          var innerEditable = 0;
+          if (input) {
+            try { innerEditable = input.querySelectorAll('[contenteditable="true"], textarea').length; } catch (e) {}
+          }
+
+          var sendEl = all(${q(DeepSeekSelectors.send())});
+          var send = sendEl.length > 0 ? sendEl[0] : null;
+          var sendBox = box(send);
+          var sendDisabled = !!(send && (send.disabled === true ||
+            (send.getAttribute && send.getAttribute('aria-disabled') === 'true')));
+          var sendClickable = !!send && !sendDisabled && sendBox !== null && sendBox.w > 0 && sendBox.h > 0;
+
+          var responses = all(${q(DeepSeekSelectors.response())});
+          var lastResponse = responses.length > 0 ? responses[responses.length - 1] : null;
+          var depth = 0, walk = lastResponse;
+          while (walk && walk.parentElement && depth < 32) { walk = walk.parentElement; depth++; }
+
+          // Shadow DOM：直接扫所有已知宿主 + 递归 open shadowRoot 计数。
+          var shadowHosts = 0;
+          (function scan(root) {
+            if (!root || !root.querySelectorAll) return;
+            var hosts = root.querySelectorAll('*');
+            for (var i = 0; i < hosts.length; i++) {
+              if (hosts[i].shadowRoot) { shadowHosts++; if (shadowHosts < 50) scan(hosts[i].shadowRoot); }
+            }
+          })(document);
+
+          return JSON.stringify({
+            ok: true,
+            href: location.href,
+            readyState: document.readyState,
+            innerHeight: window.innerHeight,
+            innerWidth: window.innerWidth,
+            dpr: window.devicePixelRatio || 1,
+            inputCount: inputs.length,
+            inputUnique: inputs.length === 1,
+            inputTag: input ? input.tagName.toLowerCase() : '',
+            inputId: input ? (input.id || '') : '',
+            inputClass: cls(input),
+            inputEditable: !!(input && (input.isContentEditable || (input.tagName || '').toLowerCase() === 'textarea')),
+            inputInnerEditableCount: innerEditable,
+            inputIsInnermost: innerEditable === 0,
+            inputBox: box(input),
+            sendCount: sendEl.length,
+            sendTag: send ? send.tagName.toLowerCase() : '',
+            sendAriaLabel: send ? (send.getAttribute('aria-label') || '') : '',
+            sendDisabled: sendDisabled,
+            sendBox: sendBox,
+            sendClickable: sendClickable,
+            responseCount: responses.length,
+            responseTag: lastResponse ? lastResponse.tagName.toLowerCase() : '',
+            responseClass: cls(lastResponse),
+            responseDepth: depth,
+            shadowHostCount: shadowHosts,
+            hasShadowDom: shadowHosts > 0
+          });
+        })()
+    """.trimIndent()
+
     /** 登录检测：必须同时有密码框与登录 UI。 */
     fun loginCheck(): String = """
         (function() {

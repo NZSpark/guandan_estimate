@@ -57,6 +57,15 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
 
     override fun verifyAttachmentScript(): String = GeminiScripts.verifyAttachment()
 
+    /**
+     * AI-015：FILE_CHOOSER 回退路径。JS `.click()` 预期因缺 user activation 失败，
+     * 真实可行的是 [uploadIconScript] + 驱动层原生触摸。
+     */
+    override fun uploadTriggerScript(): String = GeminiScripts.uploadTrigger()
+
+    /** AI-015：`Upload and tools` 按钮的视口坐标，供原生触摸触发 `onShowFileChooser`。 */
+    override fun uploadIconScript(): String = GeminiScripts.locateUploadIcon()
+
     override fun pageFixScript(): String = ""
 
     /**
