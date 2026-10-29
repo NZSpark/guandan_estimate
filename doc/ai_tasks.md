@@ -92,7 +92,7 @@
 - [x] **AI-027** 新建 `GeminiScripts.kt`，集中维护页面诊断、输入框聚焦、上传验证、prompt 填充和回答快照脚本。
 - [x] **AI-028** 为所有动态参数进行 JSON 安全编码，例如使用 `JSONObject.quote()` 或等效方法；禁止手工拼接未经编码的 prompt 或文件名。
 - [x] **AI-029** 诊断脚本返回可解析的结构化结果，包括 `ok`、`why` 和必要的页面能力信息；异常时不得伪装成功。
-- [ ] **AI-030** 用真实 Gemini DOM 验证各个选择器，不将 GeminiBridge 当前选择器直接当作固定正确的常量。
+- [x] **AI-030** 用真实 Gemini DOM 验证各个选择器，不将 GeminiBridge 当前选择器直接当作固定正确的常量。→ 真机三态实测（首页/已填未提交/有回答）七组候选全部有命中：input `2|1|0|0`、send 静止 0 → 填文后 `1|1|…`、response 静止 0 → 有回答 `1|1|1|1`、uploadTools `1|1|0|0`、fileInput `4|1|0`；login/generating 恒 0 且 passwordCount=0。首选候选均即命中，textarea 兜底恒 0，无需修正选择器常量。新增探针入口 `--es auto selector_probe`。
 - [ ] **AI-031** 处理 SPA 初始化、页面导航、登录失效、选择器缺失和页面未就绪等不同状态，避免只凭 `readyState == complete` 判定可操作。
 
 ### A1.3 登录状态和错误类型

@@ -294,6 +294,20 @@ open class AiProbeActivity : Activity() {
             "gemini_diag" -> runAdapterScript("DIAG") { adapter.diagnoseScript() }
             // AI-008D：页面结构深度探测（只读）。
             "deep_probe" -> runAdapterScript("DEEP") { adapter.deepProbeScript() }
+            // AI-030：同一会话内验证 send / response / generating —— 填文本后探一次，
+            // 提交并等回答后再探一次。静态首页这组候选恒为 0，只有对话态才能验证。
+            "selector_probe" -> {
+                runScript(GEMINI_FILL_ONLY) { r ->
+                    log("SPROBE_FILL", r)
+                    webView.postDelayed({
+                        runAdapterScript("DEEP_FILLED") { adapter.deepProbeScript() }
+                    }, 1500)
+                    webView.postDelayed({ testFillPasteSubmit() }, 3000)
+                    webView.postDelayed({
+                        runAdapterScript("DEEP_ANSWERED") { adapter.deepProbeScript() }
+                    }, 30000)
+                }
+            }
             // AI-009D：先读 file input 属性，再走一次真实原生触摸，验证 onShowFileChooser 是否触发。
             "file_probe" -> {
                 runAdapterScript("FILEATTR") { adapter.fileInputProbeScript() }

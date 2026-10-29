@@ -73,6 +73,14 @@
 - `imaging/UploadImageEncoder`：长边上限 1800、JPEG q=85、超 1.5 MB 逐级降到 60、只缩不放、等比；纯算术 `targetSize` / `shouldDownscale` / `nextQuality`，单测 11 例。
 - 探针 `prepareChooserImage`：真实图 → 解码 → EXIF 旋正 → 压缩 → `probe/probe_upload.jpg`，日志含原尺寸→目标尺寸/q/scaled/字节数；占位图仍为 1×1 PNG。
 
+### 已完成（AI-030 真机验证七组选择器）
+
+- 真机（LIO-N29 / Android 10 / webview 114）三态实测：首页静止 / 已填文本未提交 / 有回答。
+- 结果：`input` `2|1|0|0`（三态一致）、`send` 静止 `0|0|0|0|0|0` → 填文后 `1|1|0|0|0|0`、`response` 静止 `0|0|0|0` → 有回答 `1|1|1|1`、`uploadTools` `1|1|0|0`、`fileInput` `4|1|0`、`login`/`generating` 恒 0、`passwordCount=0`。
+- 结论：七组候选全部至少一条真机命中；每组首选候选即命中，无需兜底；`textarea` 兜底（input 第 4 条）三态恒 0，说明当前 Gemini 不用 textarea。**无需修正任何选择器常量**。
+- `send`/`response` 静止页为 0 是页面本来没有这些元素，不是选择器错——这正是 AI-030 要排除的误判，已在文档中记录，避免后人再当缺陷排查。
+- 新增探针入口 `--es auto selector_probe`：同一 Activity 内 填文本→探针(`DEEP_FILLED`)→提交→等 30s→再探针(`DEEP_ANSWERED`)，可重复执行该验证。
+
 ### 已完成（AI-030 逐候选选择器探针）
 
 - `GeminiScripts.selectorProbe()`：按 `INPUT/SEND/RESPONSE/UPLOAD_TOOLS/FILE_INPUT/LOGIN/GENERATING` 七组候选**逐条**数命中，返回 `input:"0|0|1|1"` 形式的计数串 + 每组 `<key>First`（从 0 起第一个非 0 下标），另带 `passwordCount` / `href` / `readyState`。只读：不点击、不派发事件、不读 Cookie / Storage、无同步忙等。
@@ -107,7 +115,7 @@
 无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-030（用真实 Gemini DOM 验证各选择器，不把 GeminiBridge 现有选择器当既定正确常量；需真机）。
+1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-031（处理 SPA 初始化 / 导航 / 登录失效 / 选择器缺失 / 页面未就绪等状态，不得只凭 readyState == complete 判定可操作）。
    另：AI-021 / AI-022 / AI-023 / AI-024 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread、无主线程阻塞」「容器不可用时不挂假 Attached」。
 2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
 3. 阶段 7 UI 按 P0→P1→P2 实施。
