@@ -96,6 +96,14 @@ open class AiProbeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // AI-077：旋转 / Activity 重建时用来区分「同一实例」与「新建实例」。
+        // 此时 logView/output 尚未创建，只能用 Log.i；宿主是进程级的，
+        // 重建不应重新创建 WebView，也不应丢登录态。
+        Log.i(
+            TAG,
+            "LIFECYCLE: onCreate pid=${android.os.Process.myPid()} " +
+                "restored=${savedInstanceState != null}"
+        )
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
@@ -221,6 +229,7 @@ open class AiProbeActivity : Activity() {
     }
 
     override fun onDestroy() {
+        log("LIFECYCLE", "onDestroy pid=${android.os.Process.myPid()} finishing=$isFinishing")
         if (::host.isInitialized) {
             // 不调用 destroy()：页面与登录态属于整个进程；本页只解除挂接与回调注入。
             host.onPageFinished = null

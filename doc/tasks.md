@@ -7,7 +7,7 @@
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
-| `doc/ai_tasks.md` | AI 识牌迁移与多源 WebView 任务（阶段 0–8、全局 G-01~G-25、执行记录） | 209/231 完成 |
+| `doc/ai_tasks.md` | AI 识牌迁移与多源 WebView 任务（阶段 0–8、全局 G-01~G-25、执行记录） | 212/231 完成 |
 | `doc/ui_design.md` | UI 全面重设计规格（主工作台、手牌编辑、结果呈现、AI 源管理、网页登录页） | 已实施（UI-001~022） |
 | `doc/multi_ai_update.md` | 多 AI 源架构设计（ChatGPT / DeepSeek / Gemini / 自定义网页 / HTTP API） | 设计依据 + §5.6 实测记录 |
 | `doc/ai_update.md` | 早期 Gemini 单源迁移设计 | 历史依据 |
@@ -21,6 +21,7 @@
 - 多源抽象层：`recognition/source`、`recognition/site`、`recognition/webview`（站点无关驱动）。
 - DeepSeek 真机闭环：登录态跨进程保持；诊断 input=1/send=1/file=1；合成 paste 后附件预览出现；离屏识牌 `source_e2e` 27 张、连续两图/追问 `source_e2e_twice` 互不串线。
 - 共享宿主：登录/诊断页与主界面共用同一 WebView，可见 ↔ 离屏切换无崩溃；冷启动「未挂接」提示后打开 AI 页面即恢复。
+- 生命周期与迁移：旋转触发 Activity 重建但复用同一 WebView；识牌中切后台 8 秒返回仍完成 27 张；旧格式设置迁移后登录态保留。
 - Gemini 真机闭环：填文本 → 合成 paste 注入图片 → 点 `Send message` → 收到回答。
 - AI 设置页源选择与按源显隐字段；网页源免 API Key。
 - `AiProbeActivity` 多站点探测页 + `--es auto` 无人值守入口（e2e / source_e2e / source_e2e_twice / offscreen 等）。

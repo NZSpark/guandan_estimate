@@ -411,6 +411,10 @@ ChatGPTBridge 的图片流程为“解析图片 → 获取图片字节 → 创�
 | 探针销毁 | 主界面 `onDestroy` 不再 `destroy()` 共享 WebView：真机日志证实旧实现会把登录页正在用的实例销毁，导致返回后永远「未挂接」 |
 | 离屏提交 | 生产驱动 `source_e2e`：可见 → 离屏 → PASTE → 附件确认 → 提交 → `SOURCE_E2E_OK cards=27 status=Offscreen` |
 | 视口指标 | 可见 `1176x1801`（页面 `innerHeight=601`）；离屏 `1176x2328`（`innerHeight=776`，DPR 3 → 392×776 CSS px），高于 `AttachGate` 阈值 |
+| 旋转 / Activity 重建 | 探针页横竖屏各触发一次 `onDestroy → onCreate(restored=true)`：同一 pid、**无** `WebView created`，重新 `Attached 2328x679` / `1176x1801`，无崩溃 |
+| 切后台中识牌 | 提交后 5 秒按 Home（宿主 `detached`），8 秒后返回重新 `Attached 1176x1801`，任务继续并完成 `cards=27`；健康结论必须以回答更新为准 |
+| 进程重启 | `force-stop` + `kill` 后新 pid 首启 `WebView created`，DeepSeek 登录态保留；主界面先报「未挂接」，打开 AI 页面后恢复「网页可用」 |
+| 设置迁移 | 旧格式 prefs（仅 provider/endpoint/model/api_key）启动后迁移到 DeepSeek 默认 profile，随后健康检查仍为「网页可用」；代码无 Cookie / WebStorage 清理调用 |
 
 #### 5.6.4 与 §5.3 的差异
 

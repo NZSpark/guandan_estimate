@@ -285,8 +285,8 @@
 
 - [x] **AI-075** 区分页面尚在初始化、元素暂未命中、登录失效、导航失败、窗口失效和真正页面异常。（`PageStateClassifier` 五态 + `isLoginUrl` URL 判据，顺序固定；`awaitReady` 遇 NEEDS_USER 立即中止并带原因。导航失败/窗口失效分别由 `AiSourceError.NotReady`（含宿主未挂接）与 `WebViewHost` 状态机表达。`VIEWPORT_UNHEALTHY` 仅单测覆盖。）
 - [x] **AI-076** 健康检查使用低干扰的只读操作；生成过程中不得通过 reload、导航或频繁脚本探针打断正在进行的识牌任务。（`PageOps.pageState()` 只读、不导航；`healthCheck` 走它而非 `ensureLoaded`；`generating` 时直接返回缓存；`PageOps.setReloadSuspended` 在 `recognize` 全程暂停自动 reload。）
-- [ ] **AI-077** 验证屏幕旋转、Activity 重建、离开和返回 Gemini 页面以及应用进程重启后的 WebView 行为。 → 现状（2026-10-30）：需真机旋转/Activity 重建/进程重启记录；`MainActivity` 固定 portrait，旋转场景本身受限。
-- [ ] **AI-078** 在切后台及返回前台时记录尺寸、窗口挂接和实际回答更新情况，不能只以 `isAttachedToWindow`、URL 或 JS 可执行作为健康结论。 → 现状（2026-10-30）：需切后台/回前台记录尺寸、挂接状态与真实回答更新；尚未执行。
+- [x] **AI-077** 验证屏幕旋转、Activity 重建、离开和返回 Gemini 页面以及应用进程重启后的 WebView 行为。 → 结果（2026-10-30）：真机：探针页转横屏触发 `onDestroy`→`onCreate(restored=true)`，同一 pid、无 `WebView created`，重新 `Attached 2328x679`；转回竖屏同样重建并 `Attached 1176x1801`。离开并返回 Gemini 页面（`gemini.google.com/app`）无崩溃、宿主复用。`force-stop`+`kill` 后新 pid 启动 `WebView created`，打开 AI 页面再返回主界面为「网页可用」，DeepSeek 登录态保留。主界面固定 portrait，横屏不适用。
+- [x] **AI-078** 在切后台及返回前台时记录尺寸、窗口挂接和实际回答更新情况，不能只以 `isAttachedToWindow`、URL 或 JS 可执行作为健康结论。 → 结果（2026-10-30）：真机：`source_e2e` 提交后第 5 秒按 Home 切后台，宿主 `detached (webview + session kept)`；8 秒后返回 `attach status=Attached 1176x1801`，识牌继续并完成 `SOURCE_E2E_OK cards=27 status=Attached`。后台期间不能只凭挂接状态判断健康，实际回答确实更新。
 - [x] **AI-079** 初版以可见 WebView 路径为验收基线；只有后台识牌成为明确需求时，才独立评估 overlay、额外窗口宿主、前台服务和保活方案。 → 结果（2026-10-30）：初版已越过可见基线：AI-165~171 采用 1×1 离屏宿主 + 全屏像素 layout，主界面不插可见 WebView；无 overlay 权限时回退 decorView 1dp 容器。
 - [x] **AI-080** 对页面恢复和重试设置次数上限及退避策略；恢复失败时呈现诊断结果，不无限 reload 或无限等待。（`ReadyRetryPolicy`：300ms 起 ×1.5 退避封顶 1200ms、reload ≤1 次、生成中/刚导航不得 reload；`awaitReady` 超时把 `PageStateClassifier.reason` 写入 `lastReadyFailure` → `AiSourceError.NotReady` → 设置页显示原因。）
 
@@ -320,7 +320,7 @@
 - [x] **AI-092** 将旧 Gemini API profile 平滑迁移到 Gemini WebView 模式，保留其它无关设置及 OpenAI/custom API 配置。
 - [x] **AI-093** WebView 模式正常运行后，确认旧 Gemini Key 不再参与识牌调用，且设置 UI 不再要求用户填写该 Key。 → 结果（2026-10-30）：网页源不再读 Key；`LegacyKeyCleanup.plan` 在每次 persist 前清空 WEBVIEW profile 的 `apiKey`；设置页网页源不显示 Key 字段。
 - [x] **AI-094** 在确认迁移成功后，有序清理旧 Gemini Key 密文及不再使用的 Keystore alias；不在迁移、日志或异常中输出 Key。 → 结果（2026-10-30）：`dropKeystoreAliasIfUnused()` 仅当没有任何 profile 持有 Key 时删除 alias，并在每次 `persist` 清理后自动调用；判定为纯函数，`LegacyKeyCleanupTest` 覆盖，日志与异常均不含 Key。
-- [ ] **AI-095** 验证 WebView Cookie、DOM Storage 和登录状态未被设置迁移误清除；解释用户需要在网页中手动登录。 → 现状（2026-10-30）：需真机确认设置迁移未清 Cookie/DOM Storage；代码未调用清理接口，但未取证。
+- [x] **AI-095** 验证 WebView Cookie、DOM Storage 和登录状态未被设置迁移误清除；解释用户需要在网页中手动登录。 → 结果（2026-10-30）：真机迁移演练：备份 `ai_provider_settings.xml` 后写入仅含 provider/endpoint/model/api_key 的旧格式 → 启动后正确迁移到 DeepSeek 默认 profile；打开 AI 页面再返回，健康态为「网页可用」，Cookie/登录态保留。代码无 `removeAllCookies` / `clearCache` / `WebStorage.deleteAllData` 调用，迁移只读写 SharedPreferences 与 Keystore；DOM Storage 未直接读取（探针按隐私约束不读 cookie/localStorage），由 `domStorageEnabled=true` 且无清理路径佐证。测试后已还原原配置（1262 字节）。
 
 ### A5.2 文档与发布验证
 
@@ -451,7 +451,7 @@
 - [x] **G-04** 只读取当前任务的新回答，不接受旧回答、用户问题回显或空容器。 → 结果（2026-10-30）：发送前基线 + `GenerationWatcher`；旧回答、prompt 回显、空节点均有单测。
 - [x] **G-05** `AiCardResponseParser` 严格校验模型输出并产生合法的项目 `Card` 列表或明确错误。 → 结果（2026-10-30）：`AiCardResponseParser` 严格校验 rank/suit/数量，非法结果返回警告或 `ParseFailed`。
 - [x] **G-06** 本地 OCR、模板匹配、图像编码解码、手动校对及评分功能保持不变。 → 结果（2026-10-30）：本地 OCR、模板匹配、`VisualCardCodec`、手动校对与 `HandScorer` 未重写；全部既有单测通过。
-- [ ] **G-07** Activity 重建、任务取消、登录失效、上传超时和重试均有明确且可恢复的行为。 → 现状（2026-10-30）：取消/登录失效/上传超时/重试已有单测；Activity 重建与旋转仍未真机验证，不能整体勾选。
+- [ ] **G-07** Activity 重建、任务取消、登录失效、上传超时和重试均有明确且可恢复的行为。 → 现状（2026-10-30）：Activity 重建已真机验证（旋转重建、宿主复用、登录态保留）；取消、登录失效、重试有单测。上传 20s 超时路径有实现但无直接单测或真机证据，故不整体勾选。
 - [x] **G-08** 日志与诊断不泄露密码、Cookie、令牌或完整图片 Base64。 → 结果（2026-10-30）：URL 进日志前经 `UrlRedactor`；无 Cookie / 密码 / 令牌 / Base64 输出；`WebViewSecurityConfigTest` 8 例、`UrlRedactorTest` 7 例。
 - [x] **G-09** 旧 Gemini Key 已按迁移策略处理，OpenAI/custom API profile 保持兼容。 → 结果（2026-10-30）：`LegacyKeyCleanup` 清空网页源旧 Key、无 Key 时才删 alias；HTTP API profile 与校验保留。
 - [ ] **G-10** 单元测试、构建和目标设备真实会话验收均有可核对的执行记录。 → 现状（2026-10-30）：单测与构建记录完整，DeepSeek/Gemini 有真机会话记录；ChatGPT 真机会话缺失，不满足“均有记录”。
@@ -470,12 +470,13 @@
 - [x] **G-18** 输入照片与输出图片状态分离；手牌或级牌变更后旧评分会失效，UI 不独立计算等级或重新评分。 → 结果（2026-10-30）：`WorkbenchState` 分离输入图 `inputBitmap` 与输出图 `outputBitmap`；手牌或级牌变更调用 `ScoreState.invalidate()`；UI 不独立算等级或评分。
 - [x] **G-19** 所有 UI 状态、健康状态、评分数值和图片保存结果均来自真实业务状态；失败时保留仍然有效的用户数据。 → 结果（2026-10-30）：状态驱动渲染：健康态、评分、图片保存结果均来自业务状态；失败路径保留当前手牌与本地识别结果。
 - [x] **G-20** 配置档操作、五种 AI 源字段显隐、网页源免 API Key、API 配置校验及网页登录返回后的健康状态刷新均已验证。 → 结果（2026-10-30）：五源字段显隐、网页源免 Key、API HTTPS/Key 校验均有代码与单测；真机验证「打开登录页 → 返回主界面」后健康状态刷新为「网页可用」（UI-019）。
-- [ ] **G-21** 窄屏、横屏、字体缩放、TalkBack 与触控目标已验证；测试、构建和实际 Android 设备验收结果有记录。 → 现状（2026-10-30）：横屏、字体缩放、TalkBack 尚未真机取证；布局仅按 48dp 与 contentDescription 约束。
+- [ ] **G-21** 窄屏、横屏、字体缩放、TalkBack 与触控目标已验证；测试、构建和实际 Android 设备验收结果有记录。 → 现状（2026-10-30）：窄屏 720x1280/360dpi 下主界面正常渲染、按钮在屏内；系统字体 1.3× 下标题/按钮/状态行完整显示，无崩溃；默认缩放下 9 个可点击控件实测 48~52dp，均达到 48dp 触控目标（滚动后测量，排除屏幕底边裁切）。主界面锁定 portrait，无横屏布局（探针页横屏 2328x679 可挂接）；设备未安装 TalkBack/读屏服务，无法取证。故仍未整体勾选。
 
 ## 任务执行记录
 
 | 日期 | 任务编号/阶段 | 结果 | 证据或问题 | 后续动作 |
 |---|---|---|---|---|
+| 2026-10-30 | AI-077/078/095、G-07/G-21 复核 | 生命周期与设置迁移真机通过 | 旋转触发重建但复用同一 WebView（`created` 无重复）；识牌中切后台 8 秒返回仍完成 27 张；旧格式 prefs 迁移后登录态保留；窄屏/1.3× 字体/48dp 触控实测通过；G-07 因上传超时无直接证据、G-21 因 TalkBack 未安装与竖屏锁定保持未勾选 | 剩余 ChatGPT 真机（AI-158~163、G-15/G-23~25）、Gemini 设备回归（AI-089/090）、三源横向与 API（AI-148/149/154/155）、G-10 |
 | 2026-10-30 | 阶段 8 / AI-133/134/168/169/170/178、G-17/G-20 | DeepSeek 离屏端到端与共享宿主三态真机通过 | LIO-N29：`source_e2e` 27 张；`source_e2e_twice` 27→22 张互不串线；可见 1176x1801 → 离屏 1176x2328（innerHeight 776）；冷启动「未挂接」→ 打开 AI 页面 → 返回「网页可用」（同 pid 15623）；单测 321 项全绿 | 继续 ChatGPT 真机（AI-158~163）、旋转/重建（AI-077/078）、三源横向（AI-148/149/154）、G-21 人工取证 |
 | 2026-10-29 | 多源任务清单同步 | 已更新任务定义，待实施/验证 | 根据 `doc/multi_ai_update.md` 纳入 ChatGPT 网页源：新增适配器与单测、真机图片闭环、第五个源预设与设置回归、三网页源横向验收及 G-22~G-25。未将设计要求视为实现或真机验收证据 | 按 AI-156~164 完成适配器、配置与测试；随后执行 AI-158~163 真机闭环并更新多源设计记录 |
 | 2026-10-28 | 阶段 7 / UI-001~022 | 已分解，待实施 | 依据 `doc/ui_design.md` 新增 UI 任务；未将设计规格视为实现证据，所有 UI 任务保持未勾选 | 按 P0→P1→P2 实施并逐步验证 |
