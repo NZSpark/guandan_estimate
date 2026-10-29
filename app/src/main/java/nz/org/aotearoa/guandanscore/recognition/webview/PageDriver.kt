@@ -99,7 +99,13 @@ class PageDriver(
         return awaitReady()
     }
 
-    /** 等待页面可操作：有输入框且视口非零。 */
+    /**
+     * 等待页面可操作：有输入框且视口非零。
+     *
+     * 轮询间隔用可注入的 [sleepMillis]（AI-023）：真实运行时它是 `Thread.sleep`，
+     * 因此**只能在 worker 线程**调用；单测注入 no-op 以免真的睡。主线程调用由
+     * [awaitReadyOnWorker] 之外的调用方负责避免，这里不做隐式切线程。
+     */
     fun awaitReady(): Boolean {
         val deadline = nowMillis() + READY_TIMEOUT_MILLIS
         while (nowMillis() < deadline) {
@@ -276,8 +282,14 @@ class PageDriver(
         return false
     }
 
+    /**
+     * 同步壳：把挂起的 [WebViewBridge.evaluateRaw] 变成同步返回。
+     *
+     * 经 [BlockingBridge] 统一把关（AI-023）：主线程调用会立即失败，而不是
+     * 卡在 `runBlocking` 上等一个永远排不上主线程的回调。合法调用方是 worker 线程。
+     */
     private fun runBlockingEvaluate(script: String): String =
-        kotlinx.coroutines.runBlocking { bridge.evaluateRaw(script) }
+        BlockingBridge.awaitBlocking("PageDriver.evaluate") { bridge.evaluateRaw(script) }
 
     private fun jsonQuote(raw: String): String = JsonQuote.of(raw)
 }

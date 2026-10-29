@@ -75,6 +75,8 @@
 
 ## 上次完成
 
+2026-10-29 · AI-023 JS 回调 ↔ 协程/同步壳的死锁防线（离线完成）：确认既有机制合法前提是「`AiSource.recognize` 在 worker 线程同步调用」，但 `PageDriver.runBlockingEvaluate` 的 `runBlocking` 在主线程会**静默永久卡死**（回调永远排不上主线程），此前无任何防线。新增 `recognition/webview/BlockingBridge`：`awaitBlocking(where, onMain, block)` 在主线程**进入挂起块之前**抛 `IllegalStateException`（消息含 AI-023 与调用点），worker 线程才 `runBlocking`；`isMainThread()` 对纯 JVM 单测降级为 false。`PageDriver.runBlockingEvaluate` 接入；`awaitReady`/`verifyAttachment`/`awaitSubmitStarted` 补 KDoc 说明 `sleepMillis`（默认 `Thread.sleep`）只能在 worker 线程、单测注入 no-op。新增 `BlockingBridgeTest` 3 例。`testDebugUnitTest --rerun-tasks` + `assembleDebug` BUILD SUCCESSFUL。
+
 2026-10-29 · AI-022 主线程契约显式化（离线完成）：审计确认执行路径本已正确（`WebViewHost` 全方法 `requireMainThread()`、`WebViewBridge` 全部 `main.post`、探针 `runScript` 走 `runOnUiThread`），缺的是**契约与断言**。改动：① `WebViewHost.currentWebView()` 加 `requireMainThread()`，消息带线程名；② `PageOps` 补线程契约 KDoc（可后台调用，实现方负责切主线程，调用方不得主线程阻塞）；③ `AiProbeActivity` 新增 `requireUiThread(where)` 并在 `switchTo`/`prepareChooserImage`/`tapUploadIcon` 三处断言。`testDebugUnitTest --rerun-tasks` + `assembleDebug` BUILD SUCCESSFUL。
 
 2026-10-29 · AI-021 宿主生命周期语义显式化（离线完成，待真机复测）：`WebViewHost.detachFromVisible()` = 仅移除，WebView / Cookie / DOM Storage / 页面全保留，状态 NotAttached，可 `attach()` 挂回；`destroy()` = 终态，释放挂起 filePathCallback → 清离屏残留 → `WebView.destroy()` → 置空引用 + `currentUrl` / `navigatedTarget` / `pendingUploadUri`，状态 NotCreated，下次重建。顺手修：① `removeHostFromParent()` 在 Attached 时回落 NotAttached（attach 失败重挂不再留假 Attached）；② 新增 `navigatedTarget`，destroy 清零，避免重建后 `ensureLoaded()` 跳过导航；③ `MainActivity.onDestroy()` 补 `webHost.destroy()`（此前 Activity 销毁不清理宿主），onPause 仍为 detach。`testDebugUnitTest --rerun-tasks` BUILD SUCCESSFUL。
@@ -92,9 +94,8 @@
 无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-023（JS 回调 ↔ 协程/异步等待，避免 UI 线程轮询 sleep 或阻塞等待）。
-   注意：AI-023 与现有实现直接冲突——`PageDriver.runBlockingEvaluate()` 用 `runBlocking` 包裹 `bridge.evaluateRaw`，而 `evaluateRaw` 把回调 post 到主线程；若调用方本就在主线程将直接死锁，需先确认真实调用线程。
-   另：AI-021 / AI-022 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread」。
+1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-024（同一 WebView 同一时刻最多一个父容器；挂接/重试要检查有效窗口与页面实际更新，不只看 `parent` 是否为空）。
+   另：AI-021 / AI-022 / AI-023 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread、无主线程阻塞」。
 2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
 3. 阶段 7 UI 按 P0→P1→P2 实施。
 4. 把探针 e2e 能力沉淀为正式入口（EXTRA_TEST_IMAGE 已具备，考虑接入真实拍照流程）。
