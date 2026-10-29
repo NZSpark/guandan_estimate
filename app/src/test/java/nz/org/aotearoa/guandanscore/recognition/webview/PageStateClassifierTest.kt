@@ -147,6 +147,13 @@ class PageStateClassifierTest {
         )
     }
 
+    /** AI-036：宿主未挂接要能被表达，且必须归为「求人」而不是重试/重载。 */
+    @Test
+    fun hostNotAttachedNeedsUser() {
+        assertEquals(PageAction.NEEDS_USER, PageStateClassifier.actionFor(PageState.HOST_NOT_ATTACHED))
+        assertTrue(PageStateClassifier.reason(PageState.HOST_NOT_ATTACHED, null).contains("挂接"))
+    }
+
     @Test
     fun reasonToleratesNullDiagnose() {
         // 诊断本身失败时不能抛，得给出可读原因。

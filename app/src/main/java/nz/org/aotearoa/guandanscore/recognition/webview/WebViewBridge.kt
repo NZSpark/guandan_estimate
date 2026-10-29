@@ -2,6 +2,7 @@ package nz.org.aotearoa.guandanscore.recognition.webview
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.WebView
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -23,6 +24,9 @@ class WebViewBridge(private val host: WebViewHost) {
             if (!cont.isActive) return@post
             val view = host.currentWebView()
             if (view == null) {
+                // 空串对上层是「脚本返回了空」与「根本没有页面」的同一信号，
+                // 会被误判成「页面未就绪」（AI-036）。至少留下可检索的痕迹。
+                Log.w(TAG, "evaluateRaw: webView is null (host not attached)")
                 cont.resume("")
                 return@post
             }
@@ -49,6 +53,8 @@ class WebViewBridge(private val host: WebViewHost) {
     }
 
     companion object {
+        private const val TAG = "WebViewBridge"
+
         /**
          * `evaluateJavascript` 对字符串结果返回带引号的 JSON 字面量。
          * 纯逻辑，可单测：`"\"a\\nb\""` → `a<换行>b`。

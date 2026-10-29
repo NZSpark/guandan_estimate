@@ -84,6 +84,24 @@
 
 未取证：横屏 / 字体缩放 / TalkBack 实测（仅代码层 48dp 与 contentDescription 保证）；登录页往返（UI-019）待阶段 8 离屏宿主就绪后复验。
 
+### 已完成（AI-036「DeepSeek 已登录却显示不可用」根因修复，真机验证）
+
+**根因**：健康检查链路两处串联失真。
+1. `AiSettingsScreen.checkHealth` 以 `host = null` 建源，registry 回退到 `WebViewHost.get(context)` 单例；进程内若尚未挂接过页面，该宿主 `currentWebView() == null`。
+2. `WebViewBridge.evaluateRaw` 在 `view == null` 时静默 `resume("")` → `PageDriver.pageState()` 的 `diagnose()` 解析失败返回 `null` → `WebViewAiSource.healthCheck()` 把 `null` 当「实现不支持只读诊断」落到 `legacyHealthProbe()` → `ensureLoaded()` false → 笼统 `Unavailable("页面未就绪")`。已登录也显示不可用，且真实原因（宿主未挂接）丢失。
+
+**改动**：
+- 新增 `PageState.HOST_NOT_ATTACHED`（宿主问题，既非账号也非选择器），`PageAction.NEEDS_USER`，reason 文案「AI 页面未挂接（请先打开一次 AI 页面）」。
+- `PageDriver.pageState()`：主线程查 `host.currentWebView()`，为 null 直接返回 `HOST_NOT_ATTACHED` 并 `Log.w`，不再返回 null 触发降级。
+- `WebViewAiSource.healthCheck()`：显式映射 `HOST_NOT_ATTACHED → Unavailable(reason)`。
+- `AiSettingsScreen.checkHealth`：`host = null` 改为 `WebViewHost.get(applicationContext)`（与主界面同一单例）。
+- `WebViewBridge.evaluateRaw`：WebView 为空时 `Log.w("webView is null (host not attached)")`，避免静默空串。
+- 单测 +3：`PageStateClassifierTest.hostNotAttachedNeedsUser`、`WebViewAiSourceTest.healthCheckMapsHostNotAttachedToUnavailableWithHint`。
+
+**验证**：`testDebugUnitTest assembleDebug` BUILD SUCCESSFUL，296 tests 0 failures；真机 LIO-N29 冷启动显示「页面暂不可用（AI 页面未挂接（请先打开一次 AI 页面））」，不再是笼统「页面未就绪」。
+
+**新发现阻塞（UI-019 的实质）**：`AiProbeActivity` 自建 `WebView(this)`，**从不挂到共享 `WebViewHost` 单例**。因此从「登录」入口打开 DeepSeek（真机确认已登录、输入框在）并返回主界面后，共享宿主仍是 `NotAttached`，联网识图不可用。登录态本身通过 `CookieManager` 全局共享，隔离的只是宿主对象。修复需让 `AiProbeActivity` 使用共享宿主（或登录页与会话宿主统一），属阶段 8 离屏宿主范畴，未在本轮实施。
+
 ### 已完成（AI-018 带图/不带图对照，真机实测）
 
 - 探针新增 `--es auto textonly`：prompt 与 `e2e` 逐字相同但不上传附件。

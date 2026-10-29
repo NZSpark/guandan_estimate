@@ -101,6 +101,10 @@ class WebViewAiSource(
                     SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
                 state == PageState.VIEWPORT_UNHEALTHY ->
                     SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
+                // AI-036：宿主没挂接是宿主问题，既不是未登录也不是「页面未就绪」。
+                // 必须给出可执行提示，而不是走 legacyHealthProbe 报一句笼统失败。
+                state == PageState.HOST_NOT_ATTACHED ->
+                    SourceHealth.Unavailable(PageStateClassifier.reason(state, null))
                 else -> SourceHealth.Unavailable("未知页面状态")
             }
         } catch (e: AiSourceError) {

@@ -267,6 +267,17 @@ class WebViewAiSourceTest {
         assertTrue(source(pages).healthCheck() is SourceHealth.Unavailable)
     }
 
+    /** AI-036：宿主未挂接要明确报出可执行原因，不能被当成未登录或「页面未就绪」。 */
+    @Test
+    fun healthCheckMapsHostNotAttachedToUnavailableWithHint() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.HOST_NOT_ATTACHED
+        }
+        val h = source(pages).healthCheck()
+        assertTrue(h is SourceHealth.Unavailable)
+        assertTrue((h as SourceHealth.Unavailable).reason.contains("挂接"))
+    }
+
     @Test
     fun healthCheckMapsReadyToReady() {
         val pages = object : PageOps by FakePageOps() {

@@ -22,6 +22,7 @@ import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceRegistry
 import nz.org.aotearoa.guandanscore.recognition.source.SourceHealth
+import nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost
 import java.util.UUID
 
 /**
@@ -289,9 +290,13 @@ class AiSettingsScreen(
     private fun checkHealth(settings: AiSettings, done: (String) -> Unit) {
         Thread({
             val text = try {
+                // AI-036：必须用**已挂接**的共享宿主。传 host = null 会让 registry 取
+                // WebViewHost.get(context) 单例——若本进程还没打开过 AI 页面，那是全新未挂接
+                // 宿主，currentWebView() 为 null → 诊断脚本读不到 → 被降级成「不可用」，
+                // 用户明明已登录也看到失败。
                 val source = AiSourceRegistry.create(
                     settings,
-                    host = null,
+                    host = WebViewHost.get(activity.applicationContext),
                     context = activity.applicationContext
                 )
                 when (val h = source.healthCheck()) {

@@ -25,6 +25,16 @@ enum class PageState {
 
     /** 出现密码框或登录 UI：需要用户重新登录，重试无用。 */
     LOGIN_REQUIRED,
+
+    /**
+     * AI-036：宿主尚未挂接 WebView（`currentWebView() == null`，例如冷启动、
+     * 进程重建后还没打开过 AI 页面、切后台被回收）。
+     *
+     * 这是**宿主问题**，不是页面问题、更不是账号问题：既不能当成「未登录」，
+     * 也不能落到「不支持只读诊断」的旧探测路径去报一句笼统的「页面未就绪」。
+     * 处置是提示用户打开一次 AI 页面（[PageAction.NEEDS_USER]）。
+     */
+    HOST_NOT_ATTACHED,
 }
 
 /** 分类后建议的处置动作。调用方据此决定「等 / 重载 / 报错 / 求人」。 */
@@ -88,6 +98,7 @@ object PageStateClassifier {
         PageState.COMPOSER_MISSING -> PageAction.RELOAD
         PageState.VIEWPORT_UNHEALTHY -> PageAction.NEEDS_USER
         PageState.LOGIN_REQUIRED -> PageAction.NEEDS_USER
+        PageState.HOST_NOT_ATTACHED -> PageAction.NEEDS_USER
     }
 
     /** 人类可读原因，用于日志与 AiSourceError.NotReady。 */
@@ -97,5 +108,6 @@ object PageStateClassifier {
         PageState.COMPOSER_MISSING -> "输入框缺失（inputCount=" + (d?.inputCount ?: 0) + "）"
         PageState.VIEWPORT_UNHEALTHY -> "视口高度异常（innerHeight=" + (d?.innerHeight ?: 0) + "）"
         PageState.LOGIN_REQUIRED -> "需要重新登录"
+        PageState.HOST_NOT_ATTACHED -> "AI 页面未挂接（请先打开一次 AI 页面）"
     }
 }

@@ -229,10 +229,17 @@ class PageDriver(
      *
      * 与 [probeLiveness] 的区别：后者只在已挂接且可求值时有意义，且在未就绪时
      * 会继续探活；这里只取一次静态诊断并分类，供健康检查与 UI 使用。
-     * 求值失败（WebView 已销毁 / 未挂接）返回 null，由调用方当作不可用，
-     * 而不是当作未登录。
+     * 求值失败（WebView 已销毁 / 未挂接）返回 [PageState.HOST_NOT_ATTACHED]，
+     * **不再返回 null**：null 的语义是「实现不支持只读诊断」，会让调用方退回旧的
+     * `ensureLoaded + isLoggedIn` 路径，把「宿主没挂接」这个明确事实降级成一句笼统的
+     * 「页面未就绪」，用户已登录也会看到「不可用」（AI-036 真机回归）。
+     * 只有支持只读诊断、但脚本求值结果不可解析时才返回 null。
      */
     override fun pageState(): PageState? {
+        if (runOnMainSync("PageDriver.currentWebView") { host.currentWebView() } == null) {
+            Log.w(TAG, "pageState: webView is null (host not attached)")
+            return PageState.HOST_NOT_ATTACHED
+        }
         val diag = diagnose() ?: return null
         lastProbeDiagnose = diag
         val state = PageStateClassifier.classify(diag, adapter.isLoginUrl(diag.href))
