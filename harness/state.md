@@ -46,7 +46,9 @@
 - 新增 `ReadyRetryPolicy`（纯函数）：300ms 起 ×1.5 退避封顶 1200ms、reload ≤1 次、生成中/刚导航不得 reload，并给出跳过原因供日志；`awaitReady` 超时把分类原因写进 `lastReadyFailure` → `AiSourceError.NotReady`。
 - `AiSettingsDialog.healthProvider` 契约改为异步 `(AiSettings, (String) -> Unit) -> Unit`，先显示「检测中…」；`MainActivity` 用 worker 线程跑健康检查再回主线程，避开 AI-023 的主线程 `runBlocking` 死锁防线。
 - 新增 `ReadyRetryPolicyTest`（5）+ `ReloadSuspensionTest`（3）+ `WebViewAiSourceTest` 6 例；`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。
-- 待真机：三态（READY / LOGIN_REQUIRED / COMPOSER_MISSING）在设置页的展示，以及「生成中不被打断」的实测。`VIEWPORT_UNHEALTHY` 仍缺真机构造手段。
+- **真机复测（LIO-N29 / Android 10，18:00~18:05）**：Gemini 已登录首页 `READY / PROCEED`（input=2 file=1 login=1 password=0）；DeepSeek 重定向 `/sign_in` 时 DOM 全 0（input/send/login/password 均 0）仍正确判 `LOGIN_REQUIRED / NEEDS_USER`，证明 URL 判据是唯一有效依据。
+- **未取得证据的两项**：① `VIEWPORT_UNHEALTHY` 仍无真机构造手段；② 「生成中暂停 reload」被前置阻塞挡住——Gemini 原生触摸上传 `attached=false`（e2e 按 AI-123 中止，防线本身正确），改走粘贴路径 `filled/pasted/submitted=true` 但 `processSession → net::ERR_FAILED`（同一域名 ping 通，非断网，疑登录态/风控）。二者分别对应未完成的 AI-015 与 AI-089。
+- 真机操作备忘：`am force-stop` 在本机不生效（pid 不变、`--es auto` 不被消费），须 `am force-stop` + `am kill` 组合；`logcat -c` 不清主缓冲，会混入 10-25 旧日志，必须用 `logcat -d --pid=$(pidof ...)` 按进程过滤。
 
 ### 未完成
 
