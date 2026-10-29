@@ -117,6 +117,12 @@ class MainActivity : AppCompatActivity() {
 
         // AI-165：主界面不再插入可见 WebView 容器。网页登录走独立页面（UI-018）。
         webHost.setAttachTarget { null }
+        // AI-166/AI-167：识牌改走离屏挂接 —— 锚点 1×1 不可见，但 WebView 按全屏像素
+        // layout，`innerHeight` 等于屏高，页面会出帧、文件选择器也照常触发。
+        webHost.setOffscreenAnchorProvider { anchor ->
+            val root = findViewById<android.view.ViewGroup>(android.R.id.content)
+            root?.addView(anchor, android.view.ViewGroup.LayoutParams(1, 1))
+        }
 
         refreshSourceState()
         render()

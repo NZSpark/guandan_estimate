@@ -347,6 +347,9 @@ open class AiProbeActivity : Activity() {
                 }, 3000)
             }
             "baseline" -> logBaseline()
+            // AI-166/AI-167：离屏挂接自检。
+            "offscreen" -> runOffscreenSelfCheck()
+            "offscreen_e2e" -> runOffscreenE2E()
             "e2e" -> runEndToEnd()
             "textonly" -> runTextOnlyControl()
             else -> log("AUTO", "unknown mode")
@@ -480,6 +483,154 @@ open class AiProbeActivity : Activity() {
             }
             webView.postDelayed({ pollAnswerForEndToEnd(attempt + 1) }, 3000)
         }
+    }
+
+    /**
+     * AI-166/AI-167 离屏 + 文件选择器闭环。
+     *
+     * 与 [runOffscreenSelfCheck] 共用挂接方式，但走真实业务路径
+     * [PageDriver.prepareFileChooserUpload]：写 cache → FileProvider → prepareUpload
+     * → 原生触摸上传图标 → `onShowFileChooser` 回填。
+     * 验证点是「离屏 WebView 也能产生 user activation 并触发文件选择器」，
+     * 这是可见挂接与离屏挂接唯一的语义差异所在。
+     */
+    private fun runOffscreenE2E() {
+        val host = nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost.get(this)
+        host.setAttachTarget { null }
+        host.setOffscreenAnchorProvider { anchor ->
+            (window.decorView as android.view.ViewGroup).addView(
+                anchor,
+                android.view.ViewGroup.LayoutParams(1, 1)
+            )
+        }
+        log("OFFSCREEN_E2E", "=== 1/4 attach ===")
+        val attached = host.attachOffscreenViaProvider()
+        log("OFFSCREEN_E2E_ATTACH", "attached=$attached status=${host.status()}")
+        if (!attached) {
+            log("OFFSCREEN_E2E_FAIL", "attach failed status=${host.status()}")
+            return
+        }
+        val wv = host.currentWebView()
+        if (wv == null) {
+            log("OFFSCREEN_E2E_FAIL", "webView is null after attach")
+            return
+        }
+        // 用驱动层跑，才能覆盖 prepareFileChooserUpload 的真实分支。
+        val bridge = nz.org.aotearoa.guandanscore.recognition.webview.WebViewBridge(host)
+        val driver = nz.org.aotearoa.guandanscore.recognition.webview.PageDriver(adapter, host, bridge)
+        log("OFFSCREEN_E2E", "=== 2/4 navigate ===")
+        wv.loadUrl(adapter.homeUrl)
+        wv.postDelayed({
+            log("OFFSCREEN_E2E", "=== 3/4 prepareFileChooserUpload ===")
+            val bytes = readTestImageBytes()
+            if (bytes == null) {
+                log("OFFSCREEN_E2E_FAIL", "no test image bytes")
+                return@postDelayed
+            }
+            // AI-023：prepareFileChooserUpload 内部 runOnMainSync 阻塞等 JS 回调，
+            // 主线程调用会直接抛 IllegalStateException。必须放到后台线程。
+            val driverRef = driver
+            val wvRef = wv
+            Thread {
+                val prepared = try {
+                    driverRef.prepareFileChooserUpload("probe_upload.jpg", "image/jpeg", bytes)
+                } catch (e: Exception) {
+                    log("OFFSCREEN_E2E_FAIL", "prepareFileChooserUpload threw: ${e.message}")
+                    false
+                }
+                runOnUiThread {
+                    log("OFFSCREEN_E2E_PREPARE", "prepared=$prepared")
+                    verifyOffscreenAttachment(wvRef)
+                }
+            }.start()
+        }, 5000)
+    }
+
+    /** 离屏 e2e 的附件验证（主线程）。 */
+    private fun verifyOffscreenAttachment(wv: android.webkit.WebView) {
+            wv.postDelayed({
+                log("OFFSCREEN_E2E", "=== 4/4 verify ===")
+                wv.evaluateJavascript(adapter.verifyAttachmentScript()) { raw ->
+                    val text = nz.org.aotearoa.guandanscore.recognition.webview.WebViewBridge
+                        .unescapeJsonString(raw)
+                    val o = JsonParse.parse(raw)
+                    val ok = o != null && adapter.parseAttachment(o)
+                    log("OFFSCREEN_E2E_VERIFY", "attached=$ok raw=$text")
+                    if (ok) {
+                        log("OFFSCREEN_E2E_OK", "offscreen file chooser round-trip succeeded")
+                    } else {
+                        log("OFFSCREEN_E2E_FAIL", "attachment not confirmed")
+                    }
+                }
+            }, 6000)
+    }
+
+    /** 读测试图字节：优先 [EXTRA_TEST_IMAGE]，否则用占位 PNG。 */
+    private fun readTestImageBytes(): ByteArray? {
+        val src = intent?.getStringExtra(EXTRA_TEST_IMAGE)?.takeIf { it.isNotBlank() }
+        if (src != null) {
+            try {
+                val uri = Uri.parse(if (src.startsWith("content://") || src.startsWith("file://")) src else "file://$src")
+                contentResolver.openInputStream(uri)?.use { return it.readBytes() }
+            } catch (e: Exception) {
+                log("OFFSCREEN_E2E", "read test image failed: ${e.message}")
+            }
+        }
+        return android.util.Base64.decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+            android.util.Base64.DEFAULT
+        )
+    }
+
+    /**
+     * AI-166/AI-167 离屏挂接自检。
+     *
+     * 要回答的问题只有一个：主界面不插可见 WebView 时，页面还能不能出帧。
+     * 因此这里不复用本页的可见 `webView`，而是用进程级 WebViewHost 走一遍挂接，
+     * 再读两个硬指标：挂接状态必须是 Offscreen，`window.innerHeight` 必须过
+     * `AttachGate.MIN_VIEWPORT_HEIGHT`。任一不过都打 `OFFSCREEN_FAIL`，便于 adb grep。
+     */
+    private fun runOffscreenSelfCheck() {
+        val host = nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost.get(this)
+        // 主界面刻意不提供可见容器（AI-165）；这里照样置空，模拟真实场景。
+        host.setAttachTarget { null }
+        host.setOffscreenAnchorProvider { anchor ->
+            (window.decorView as android.view.ViewGroup).addView(
+                anchor,
+                android.view.ViewGroup.LayoutParams(1, 1)
+            )
+        }
+        log("OFFSCREEN", "=== 1/3 attach ===")
+        val attached = host.attachOffscreenViaProvider()
+        log(
+            "OFFSCREEN_ATTACH",
+            "attached=$attached status=${host.status()} " +
+                "layout=${host.lastLayoutWidth}x${host.lastLayoutHeight}"
+        )
+        val wv = host.currentWebView()
+        if (wv == null) {
+            log("OFFSCREEN_FAIL", "webView is null after attach")
+            return
+        }
+        log("OFFSCREEN", "=== 2/3 navigate ===")
+        wv.loadUrl(adapter.homeUrl)
+        wv.postDelayed({
+            log("OFFSCREEN", "=== 3/3 probe ===")
+            wv.evaluateJavascript(PAGE_BASELINE) { raw ->
+                val text = nz.org.aotearoa.guandanscore.recognition.webview.WebViewBridge
+                    .unescapeJsonString(raw)
+                log("OFFSCREEN_PAGE", text)
+                val innerHeight = Regex("[\"]innerHeight[\"]\\s*:\\s*(\\d+)")
+                    .find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val why = nz.org.aotearoa.guandanscore.recognition.webview.AttachGate
+                    .viewportRejectReason(innerHeight)
+                if (why == null) {
+                    log("OFFSCREEN_OK", "innerHeight=$innerHeight layout=${host.lastLayoutWidth}x${host.lastLayoutHeight}")
+                } else {
+                    log("OFFSCREEN_FAIL", why)
+                }
+            }
+        }, 5000)
     }
 
     /**

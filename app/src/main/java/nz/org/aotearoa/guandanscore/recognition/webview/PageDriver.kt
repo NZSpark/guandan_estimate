@@ -124,11 +124,23 @@ class PageDriver(
         val attachStatus = runOnMainSync("PageDriver.attach") {
             host.destroy()
             host.attach()
-            host.status()
+            var status = host.status()
+            // AI-166/AI-167：主界面刻意不插可见 WebView（AI-165），可见挂接必然失败。
+            // 此时退到离屏挂接：窗口 1×1 但 WebView 按全屏像素 layout，
+            // innerHeight 仍等于屏高，识牌与文件选择器都正常。
+            if (status != WindowStatus.Attached) {
+                Log.i(TAG, "ensureLoaded: visible attach failed ($status), trying offscreen")
+                if (host.attachOffscreenViaProvider()) {
+                    status = host.status()
+                }
+            }
+            status
         }
-        if (attachStatus != WindowStatus.Attached) {
+        // Offscreen 与 Attached 对驱动层等价可用，区别只在用户是否看得见。
+        if (attachStatus != WindowStatus.Attached && attachStatus != WindowStatus.Offscreen) {
             throw AiSourceError.NotReady("WebView 未挂接窗口；请在应用界面内打开或授予悬浮窗权限")
         }
+        Log.i(TAG, "ensureLoaded: attached as $attachStatus")
         navigatedTo = target
         runOnMainSync("PageDriver.navigatedTarget") { host.navigatedTarget = target }
         bridge.evaluateOnMain("location.href = ${jsonQuote(target)};") {}

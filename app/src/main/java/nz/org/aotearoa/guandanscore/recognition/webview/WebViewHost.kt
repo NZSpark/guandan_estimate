@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -16,6 +17,16 @@ import android.widget.FrameLayout
 sealed interface WindowStatus {
     /** 已挂进可见容器。 */
     data object Attached : WindowStatus
+
+    /**
+     * 已挂进**离屏宿主**（AI-166/AI-167）。
+     *
+     * 语义与 [Attached] 不同：用户看不到 WebView，但它在视图树里、有真实全屏 layout
+     * （`displayMetrics.widthPixels × heightPixels`），因此 `innerHeight` 等于屏高、
+     * 页面会出帧、`evaluateJavascript` 与 DOM 测量都正常。
+     * 对驱动层而言它与 [Attached] **等价可用**，区别只在于是否需要用户可见。
+     */
+    data object Offscreen : WindowStatus
 
     /** 有 WebView 但没有任何父容器。页面不会出帧，AI 会超时。 */
     data object NotAttached : WindowStatus
@@ -88,6 +99,21 @@ class WebViewHost private constructor(private val appContext: Context) {
     /** 离屏测量容器：先给它真实尺寸，WebView 才有非零视口。 */
     private var offscreenHost: FrameLayout? = null
 
+    /**
+     * 离屏挂接容器（AI-166）：1×1 的不可见 FrameLayout，只作为视图树锚点。
+     * WebView 在其中按全屏像素 measure/layout，窗口小不代表视口小。
+     */
+    private var offscreenAnchor: FrameLayout? = null
+
+    /** 最近一次离屏挂接的 WebView layout 尺寸，供日志与断言使用（AI-167）。 */
+    @Volatile
+    var lastLayoutWidth: Int = 0
+        private set
+
+    @Volatile
+    var lastLayoutHeight: Int = 0
+        private set
+
     /** 当前挂接的可见父容器。 */
     @Volatile
     private var visibleParent: FrameLayout? = null
@@ -102,6 +128,16 @@ class WebViewHost private constructor(private val appContext: Context) {
     /** 由宿主注入：如何把 WebView 挂到可见容器里。 */
     @Volatile
     private var attachTargetProvider: (() -> FrameLayout?)? = null
+
+    /**
+     * 由宿主注入：离屏挂接的视图树锚点（AI-166/AI-167）。
+     *
+     * 与 [attachTargetProvider] 的分工：那个要的是**可见**容器（用户看得见页面）；
+     * 这个要的是任意一个 `isAttachedToWindow` 的视图，只用来让 WebView 进入视图树。
+     * 主界面刻意不插可见 WebView（AI-165），因此识牌只能走离屏路径。
+     */
+    @Volatile
+    private var offscreenAnchorProvider: ((FrameLayout) -> Unit)? = null
 
     /** 由宿主注入：文件选择器接管。 */
     @Volatile
@@ -224,6 +260,76 @@ class WebViewHost private constructor(private val appContext: Context) {
         return ok
     }
 
+    /**
+     * 离屏挂接（AI-166）：把 WebView 挂进 1×1 不可见容器，但按全屏像素 layout。
+     *
+     * 为什么不是直接 1px×1px layout：那样 `innerHeight == 1`，DeepSeek composer 会塌陷，
+     * 比不挂接更糟（见 `doc/ai_tasks.md` 阶段 8 的约束提醒）。正确做法是
+     * **窗口小 + WebView layout 全屏**，`innerHeight` 才能等于屏高。
+     *
+     * 调用方需自行保证 [anchor] 已经 `addView` 到某个 `isAttachedToWindow` 的视图树里；
+     * 本方法只负责子视图尺寸与状态，不替调用方创建窗口（那需要 Activity/WindowManager）。
+     *
+     * @return 挂接是否成功；失败时状态回落 [WindowStatus.NotAttached]
+     */
+    fun attachOffscreen(anchor: FrameLayout): Boolean {
+        requireMainThread()
+        val view = ensureWebView()
+        val metrics = appContext.resources.displayMetrics
+        val w = metrics.widthPixels
+        val h = metrics.heightPixels
+        if (w <= 0 || h <= 0) {
+            windowStatus = WindowStatus.NotAttached
+            Log.w(TAG, "attachOffscreen: bad displayMetrics ${w}x$h")
+            return false
+        }
+        enforceSingleParent(view)
+        val params = FrameLayout.LayoutParams(w, h)
+        try {
+            anchor.removeAllViews()
+            anchor.addView(view, params)
+        } catch (e: IllegalStateException) {
+            windowStatus = WindowStatus.NotAttached
+            Log.e(TAG, "attachOffscreen: addView failed", e)
+            return false
+        }
+        // 窗口只有 1×1，必须显式 measure/layout 到全屏，否则子视图只有锚点大小。
+        anchor.measure(
+            View.MeasureSpec.makeMeasureSpec(1, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1, View.MeasureSpec.EXACTLY)
+        )
+        anchor.layout(0, 0, 1, 1)
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
+        )
+        view.layout(0, 0, w, h)
+        offscreenAnchor = anchor
+        visibleParent = null
+        lastLayoutWidth = view.width
+        lastLayoutHeight = view.height
+        windowStatus = WindowStatus.Offscreen
+        Log.i(
+            TAG,
+            "attachOffscreen: window=1x1 webviewLayout=${view.width}x${view.height} " +
+                "display=$w×$h anchorAttached=${anchor.isAttachedToWindow}"
+        )
+        return true
+    }
+
+    /** 从离屏宿主摘下（保留 WebView 与会话）。 */
+    fun detachFromOffscreen() {
+        requireMainThread()
+        val anchor = offscreenAnchor
+        val view = webView
+        if (anchor != null && view != null && view.parent === anchor) {
+            anchor.removeView(view)
+        }
+        offscreenAnchor = null
+        if (windowStatus == WindowStatus.Offscreen) windowStatus = WindowStatus.NotAttached
+        Log.i(TAG, "detachFromOffscreen: webview kept, status=$windowStatus")
+    }
+
     /** 供驱动层写 cache 文件用（FileProvider 需要 Context 与 packageName）。 */
     fun appContextForFiles(): Context? = appContext
 
@@ -232,6 +338,46 @@ class WebViewHost private constructor(private val appContext: Context) {
     /** 设置可见父容器的来源。Activity `onResume` 时重新提供，`onPause` 后置空。 */
     fun setAttachTarget(provider: (() -> FrameLayout?)?) {
         attachTargetProvider = provider
+    }
+
+    /**
+     * 设置离屏锚点挂接器（AI-166）。
+     *
+     * 回调收到一个 1×1 的不可见 `FrameLayout`，宿主负责把它 `addView` 到
+     * **已 attached 到窗口**的视图树里（通常是 `decorView` / `android.R.id.content`）。
+     * 宿主不接管（传 null，或回调里不加进视图树）时 [attachOffscreenViaProvider] 返回 false。
+     */
+    fun setOffscreenAnchorProvider(provider: ((FrameLayout) -> Unit)?) {
+        offscreenAnchorProvider = provider
+    }
+
+    /**
+     * 按当前注入的 provider 做离屏挂接（AI-166）。主线程调用。
+     *
+     * @return 是否已进入视图树并完成全屏 layout；false 表示没有可用锚点，
+     *   调用方应回落可见挂接或报未就绪
+     */
+    fun attachOffscreenViaProvider(): Boolean {
+        requireMainThread()
+        val provider = offscreenAnchorProvider
+        if (provider == null) {
+            Log.w(TAG, "attachOffscreenViaProvider: no provider registered")
+            return false
+        }
+        val anchor = FrameLayout(appContext)
+        return try {
+            provider(anchor)
+            if (!anchor.isAttachedToWindow) {
+                // 宿主没把锚点加进窗口树：挂上去也不出帧，如实拒绝。
+                Log.w(TAG, "attachOffscreenViaProvider: anchor not attached to window")
+                false
+            } else {
+                attachOffscreen(anchor)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "attachOffscreenViaProvider failed", e)
+            false
+        }
     }
 
     /**
@@ -519,6 +665,10 @@ class WebViewHost private constructor(private val appContext: Context) {
         // 离屏容器里的残留子视图也要清掉，避免持有已销毁的 WebView。
         offscreenHost?.removeAllViews()
         offscreenHost = null
+        offscreenAnchor?.removeAllViews()
+        offscreenAnchor = null
+        lastLayoutWidth = 0
+        lastLayoutHeight = 0
         webView?.destroy()
         webView = null
         visibleParent = null
@@ -554,6 +704,12 @@ class WebViewHost private constructor(private val appContext: Context) {
         if (off != null && view != null && view.parent === off) {
             off.removeView(view)
         }
+        val anchor = offscreenAnchor
+        if (anchor != null && view != null && view.parent === anchor) {
+            anchor.removeView(view)
+        }
+        offscreenAnchor = null
+        if (windowStatus == WindowStatus.Offscreen) windowStatus = WindowStatus.NotAttached
         if (dropWebView) offscreenHost = null
     }
 
