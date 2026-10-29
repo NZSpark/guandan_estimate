@@ -9,6 +9,10 @@ import nz.org.aotearoa.guandanscore.recognition.site.SubmitOutcome
  * 不引入 WebView / Android 依赖（AI-126）。
  *
  * 站点无关：实现方 [PageDriver] 与假实现 [FakePageOps] 都不得含站点字样。
+ *
+ * 线程契约（AI-022）：本接口所有方法可在后台线程调用，但实现方必须保证
+ * 任何 WebView API（`evaluateJavascript` / `loadUrl` / 视图增删 / 触摸派发）
+ * 都切换到主线程执行；调用方不得自行在主线程上阻塞等待。
  */
 interface PageOps {
 

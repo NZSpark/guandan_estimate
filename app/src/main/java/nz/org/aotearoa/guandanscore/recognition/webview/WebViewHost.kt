@@ -105,7 +105,17 @@ class WebViewHost private constructor(private val appContext: Context) {
         pendingUploadUri = null
     }
 
-    fun currentWebView(): WebView? = webView
+    /**
+     * 当前 WebView 引用。**只能主线程调用**（AI-022）。
+     *
+     * 读取本身不碰 WebView 内部状态，但所有调用方都会立刻在返回值上执行
+     * `evaluateJavascript` / `loadUrl` / `dispatchTouchEvent` / `addView`，
+     * 因此在出口处断言，比等 WebView 抛 `CalledFromWrongThread` 更容易定位。
+     */
+    fun currentWebView(): WebView? {
+        requireMainThread()
+        return webView
+    }
 
     /**
      * 在 WebView 上按视口坐标派发一次原生触摸（DOWN + UP）。
@@ -402,9 +412,16 @@ class WebViewHost private constructor(private val appContext: Context) {
         if (view.parent === host) host.removeView(view)
     }
 
+    /**
+     * WebView API 的线程断言（AI-022 / M1）。
+     *
+     * 用 `check` 而不是静默 post：静默 post 会把“错误线程调用”变成时序 bug，
+     * 表现为偶发空 WebView 或 UI 不刷新。宁可崩在调用点。
+     */
     private fun requireMainThread() {
         check(Looper.myLooper() == Looper.getMainLooper()) {
-            "WebViewHost must be used on the main thread (M1)"
+            "WebViewHost must be used on the main thread (M1/AI-022), " +
+                "current=${Thread.currentThread().name}"
         }
     }
 

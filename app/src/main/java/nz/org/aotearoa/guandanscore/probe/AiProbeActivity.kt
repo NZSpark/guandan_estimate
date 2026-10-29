@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.webkit.ConsoleMessage
@@ -257,6 +258,7 @@ open class AiProbeActivity : Activity() {
      * @param explicitUrl 非空时优先使用，支持自定义源。
      */
     private fun switchTo(siteKey: String, explicitUrl: String?) {
+        requireUiThread("switchTo")
         val id = AiSourceId.entries.firstOrNull { it.key == siteKey }
         adapter = when (id) {
             AiSourceId.DEEPSEEK_WEBVIEW -> DeepSeekAdapter()
@@ -484,6 +486,20 @@ open class AiProbeActivity : Activity() {
         runScript(s) { log(tag, it) }
     }
 
+    /**
+     * WebView API 的线程断言（AI-022）。
+     *
+     * 探针里所有 WebView 调用本应经 `runOnUiThread` / `webView.postDelayed`，
+     * 但 adb `--es auto` 入口与按钮回调混在一起时容易漏。这里在入口显式断言，
+     * 让「漏加 runOnUiThread」立刻暴露，而不是变成偶发的不刷新。
+     */
+    private fun requireUiThread(where: String) {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "AiProbeActivity.$where must run on the main thread (AI-022), " +
+                "current=${Thread.currentThread().name}"
+        }
+    }
+
     private fun log(tag: String, msg: String) {
         Log.i(TAG, "$tag: $msg")
         runOnUiThread {
@@ -535,6 +551,7 @@ open class AiProbeActivity : Activity() {
      * 若真机拒绝，后续应换成 `FileProvider` + `content://`（AI-037）。
      */
     private fun prepareChooserImage() {
+        requireUiThread("prepareChooserImage")
         try {
             val png =
                 android.util.Base64.decode(
@@ -628,6 +645,7 @@ open class AiProbeActivity : Activity() {
      * JS `.click()` 实测失败（`js-click-needs-user-activation`），只能走这条路径。
      */
     private fun tapUploadIcon() {
+        requireUiThread("tapUploadIcon")
         val script = adapter.uploadIconScript()
         if (script.isBlank()) {
             log("TAPICON", "<该适配器未实现 uploadIconScript>")

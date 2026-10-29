@@ -75,6 +75,8 @@
 
 ## 上次完成
 
+2026-10-29 · AI-022 主线程契约显式化（离线完成）：审计确认执行路径本已正确（`WebViewHost` 全方法 `requireMainThread()`、`WebViewBridge` 全部 `main.post`、探针 `runScript` 走 `runOnUiThread`），缺的是**契约与断言**。改动：① `WebViewHost.currentWebView()` 加 `requireMainThread()`，消息带线程名；② `PageOps` 补线程契约 KDoc（可后台调用，实现方负责切主线程，调用方不得主线程阻塞）；③ `AiProbeActivity` 新增 `requireUiThread(where)` 并在 `switchTo`/`prepareChooserImage`/`tapUploadIcon` 三处断言。`testDebugUnitTest --rerun-tasks` + `assembleDebug` BUILD SUCCESSFUL。
+
 2026-10-29 · AI-021 宿主生命周期语义显式化（离线完成，待真机复测）：`WebViewHost.detachFromVisible()` = 仅移除，WebView / Cookie / DOM Storage / 页面全保留，状态 NotAttached，可 `attach()` 挂回；`destroy()` = 终态，释放挂起 filePathCallback → 清离屏残留 → `WebView.destroy()` → 置空引用 + `currentUrl` / `navigatedTarget` / `pendingUploadUri`，状态 NotCreated，下次重建。顺手修：① `removeHostFromParent()` 在 Attached 时回落 NotAttached（attach 失败重挂不再留假 Attached）；② 新增 `navigatedTarget`，destroy 清零，避免重建后 `ensureLoaded()` 跳过导航；③ `MainActivity.onDestroy()` 补 `webHost.destroy()`（此前 Activity 销毁不清理宿主），onPause 仍为 detach。`testDebugUnitTest --rerun-tasks` BUILD SUCCESSFUL。
 
 2026-10-29 · AI-009D 文件选择器探测真机通过 + accept 日志缺陷修复（LIO-N29 / Android 10 / webview 114.0.5.302）：fileInputCount=1，accept 整串 5868 字符 / 981 条目（imageCount=18）、multiple=true、capture 空、hidden=true、disabled=false；原生触摸回形针真实触发 onShowFileChooser（mode=1 MODE_OPEN）并回填 cache/probe/probe_upload.png；JS click 仍不触发。复测暴露并修复：accept 前 N 项全是 .wxml/.wxss 等非图片类型，按项截断的日志看不到图片真相 —— 抽出 recognition/webview/AcceptTypes（大小写不敏感、imageTypes/imageSummary 优先列图片、超长 (...+N)，禁止打印整串），探针 FILECHOOSER 与 WebViewHost.onShowFileChooser 统一改用；补 8 个 AcceptTypesTest。复测日志 acceptCount=981 imageTypes=.png|.jpg|...(+10) (imageCount=18)，delivering 日志不再被挤掉。testDebugUnitTest BUILD SUCCESSFUL。
@@ -90,8 +92,9 @@
 无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-022（WebView API / JS 执行 / 视图层级变更均在主线程）。
-   另：AI-021 需真机复测一次「后台→前台挂回不丢登录态」与「Activity 销毁后重建可用」。
+1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-023（JS 回调 ↔ 协程/异步等待，避免 UI 线程轮询 sleep 或阻塞等待）。
+   注意：AI-023 与现有实现直接冲突——`PageDriver.runBlockingEvaluate()` 用 `runBlocking` 包裹 `bridge.evaluateRaw`，而 `evaluateRaw` 把回调 post 到主线程；若调用方本就在主线程将直接死锁，需先确认真实调用线程。
+   另：AI-021 / AI-022 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread」。
 2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
 3. 阶段 7 UI 按 P0→P1→P2 实施。
 4. 把探针 e2e 能力沉淀为正式入口（EXTRA_TEST_IMAGE 已具备，考虑接入真实拍照流程）。
