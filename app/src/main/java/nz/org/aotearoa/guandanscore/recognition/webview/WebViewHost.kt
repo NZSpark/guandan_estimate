@@ -304,6 +304,17 @@ class WebViewHost private constructor(private val appContext: Context) {
             View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
         )
         view.layout(0, 0, w, h)
+        // AI-171：布局必须等于屏幕像素尺寸；否则 innerHeight 会退化，
+        // 「已挂接」就是谎报。拒绝时摘掉视图并回落 NotAttached。
+        val layoutReject = OffscreenLayout.rejectReason(w, h, view.width, view.height)
+        if (layoutReject != null) {
+            Log.e(TAG, "attachOffscreen rejected: $layoutReject")
+            if (view.parent === anchor) anchor.removeView(view)
+            offscreenAnchor = null
+            visibleParent = null
+            windowStatus = WindowStatus.NotAttached
+            return false
+        }
         offscreenAnchor = anchor
         visibleParent = null
         lastLayoutWidth = view.width
