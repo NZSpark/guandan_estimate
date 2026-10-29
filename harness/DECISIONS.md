@@ -128,3 +128,15 @@
 **约束**：新增任何从脚本取结构化数据的路径，必须经 `JsonParse.parse`；不得在调用点重复实现反转义。脚本侧仍以 `JSON.stringify` 返回对象（而非裸值），解析层只做「一层」消解，不做多轮循环解码。`JsonParseTest` 覆盖对象文本、二次编码字面量、空/null、垃圾输入四种形态，改动解析逻辑必须同步扩充。
 
 **状态**：Active
+
+---
+
+## ADR-0013 · 2026-10-30 · 主界面不插可见 WebView，识牌走离屏宿主
+
+**决策**：正式识牌不再把 WebView 放进可见布局（AI-165）。`WebViewHost` 新增 `WindowStatus.Offscreen` 与 `attachOffscreenViaProvider()`：宿主在已 attached 的视图树里放一个 1×1 锚点 `FrameLayout`，WebView 作为其子视图显式 measure/layout 到 `displayMetrics` 全屏像素。`PageDriver.ensureLoaded()` 可见挂接失败即回退离屏挂接，并把 `Offscreen` 与 `Attached` 视为对驱动层等价可用；登录与诊断仍由独立探针页承担可见 WebView。
+
+**理由**：主工作台需要「输入图 + 结果卡」的完整版面，嵌入可见 WebView 会挤压布局并把页面 DOM 尺寸压到检测阈值之下。离屏锚点让 `innerHeight` 等于屏高（真机 1176×2328 / DPR 3 → 392×776 CSS px），页面正常出帧，`onShowFileChooser` 也照常触发。真机 LIO-N29 / Android 10 验证：`attachOffscreen: window=1x1 webviewLayout=1176x2328`、`OFFSCREEN_OK innerHeight=776`。
+
+**约束**：`WindowStatus` 必须如实区分 Attached / Offscreen / NotAttached / NotCreated，不允许把「已创建」当「已挂接」；离屏挂接成功前不得缓存 `navigatedTarget`；`WindowStatusTest` 钉住「Offscreen 与 Attached 等价可用」。文件选择回填涉及的目录必须同时声明在 `res/xml/file_paths.xml`（`ai-upload/`、`probe/`），否则 `FileProvider.getUriForFile` 抛 `Failed to find configured root`。
+
+**状态**：Active

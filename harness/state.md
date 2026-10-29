@@ -1,7 +1,7 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-10-29
+> 最后更新：2026-10-30
 
 ## 当前分支
 
@@ -56,6 +56,8 @@
 
 - ~~AI-009 / AI-128 FILE_CHOOSER 原生触摸路径的真机验收~~ ✅ 已完成（DeepSeek 真机 10 张牌零告警）。
 - AI-012 压缩后识牌精度的真机复跑记录（DeepSeek 端到端已在 AI-128 用同源真实手牌图通过）。
+- ~~AI-166/AI-167 离屏挂接的真机验证~~ ✅ 已通过（2026-10-30，LIO-N29 / Android 10）。探针 `--es auto offscreen` 走真实 `WebViewHost.attachOffscreenViaProvider()`：`attachOffscreen: window=1x1 webviewLayout=1176x2328 display=1176×2328 anchorAttached=true`、`OFFSCREEN_ATTACH: attached=true status=Offscreen`、Gemini 首页 `readyState=complete`、`innerWidth×Height=392×776`、`OFFSCREEN_OK innerHeight=776`（远超 `AttachGate.MIN_VIEWPORT_HEIGHT=100`）。`WindowStatusTest` 5 例钉住「Offscreen 与 Attached 等价可用」。
+- ~~离屏 + 文件选择器闭环~~ ✅ 已通过（同日）：探针 `--es auto offscreen_e2e` 走 `PageDriver.prepareFileChooserUpload`（写 cache → FileProvider → `prepareUpload` → 原生触摸 → `onShowFileChooser` 回填），DeepSeek 实测 `hasImage=true` / `attachmentCount=1` / `OFFSCREEN_E2E_OK`。**本轮暴露并修掉的真 bug**：`res/xml/file_paths.xml` 只声明了 `cache-path photos/`，而驱动层写 `cacheDir/ai-upload/`，`FileProvider.getUriForFile` 抛 `IllegalArgumentException: Failed to find configured root`（此前只跑过探针自己的 `Uri.fromFile` 路径，故未暴露）；已补 `ai-upload/` 与 `probe/` 两条 path。另：探针内不得在主线程调用 `PageDriver.prepareFileChooserUpload`（内部 `runOnMainSync`，触发 AI-023 断言），已改为 worker 线程 + `runOnUiThread` 回主线程验证。
 - AI-015 Gemini 端 `--es site gemini_web` 的原生触摸 → `onShowFileChooser` 回填真机实测（代码路径已就绪，DeepSeek 同路径已由 AI-128 验收）。
 
 - 旧 Gemini Key 清理（AI-093~101）。
@@ -201,6 +203,12 @@ AI-073 FileChooserSlot：连续多次重跑探针，每次 onShowFileChooser 都
 - 动机：`diagnose()` 只报并集命中数，并集为 1 也可能是第 4 条 `textarea` 兜底命中，无法回答“哪条候选真的生效”。
 - 测试：`GeminiScriptsTest` 新增 4 例（候选顺序、`counts.join`/`firstHit`/`result[k + 'First']` 与各组 key 存在、只读性、`input` 候选数组可被 `JSONArray` 解析且逐项相等）；`SiteAdapterScriptsTest` 把 `onlyDeepSeekSupportsOptionalProbeScripts` 拆为 `onlyDeepSeekSupportsFileInputProbe` + `geminiDeepProbeIsSelectorProbeAndReadOnly`（Gemini 已真正具备该能力，旧断言过时）。
 - `./gradlew testDebugUnitTest` 全绿。
+
+### 已完成（README 全量重写，2026-10-30）
+
+- 依据当前代码而非旧 README 重写 `README.md`：五类 AI 源与网页驱动机制、网页源 / HTTP API 双轨、`T_max(N)` 与评级表、300 项单测、探针 `--es auto` 模式、离屏挂接、已知限制。
+- 核对：两份 V4.0 评分文档与 `HandScorer` 的 191 / 192 / 1000、`T_max`、评级阈值一致；README 内 17 个相对链接全部存在；`./gradlew testDebugUnitTest` BUILD SUCCESSFUL（32 个测试类 / 300 项）。
+- 发现但未改：`AiProbeActivity.switchTo` 对未知 `--es site` 回落为「DeepSeek 适配器 + Gemini 地址」；探针站点栏不含 ChatGPT（该源只在正式设置页可用）。
 
 ## 上次完成
 
