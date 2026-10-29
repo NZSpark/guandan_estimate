@@ -224,7 +224,67 @@ class WebViewAiSourceTest {
         assertTrue(source(pages).healthCheck() is SourceHealth.NotLoggedIn)
     }
 
-    /** 健康检查在页面不可用时返回 Unavailable。 */
+    // ---- AI-033：健康检查必须区分账号问题与页面问题 ----
+
+    /** 未登录（含 URL 落在登录页）→ NotLoggedIn，而不是「页面未就绪」。 */
+    @Test
+    fun healthCheckMapsLoginRequiredToNotLoggedIn() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.LOGIN_REQUIRED
+        }
+        val h = source(pages).healthCheck()
+        assertTrue(h is SourceHealth.NotLoggedIn)
+        assertTrue((h as SourceHealth.NotLoggedIn).hint.contains("登录"))
+    }
+
+    /** 选择器缺失是页面问题，绝不能报成未登录（AI-033 明确要求）。 */
+    @Test
+    fun healthCheckDoesNotReportSelectorMissingAsNotLoggedIn() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.COMPOSER_MISSING
+            override fun diagnose() = null
+        }
+        val h = source(pages).healthCheck()
+        assertTrue(h is SourceHealth.Unavailable)
+    }
+
+    @Test
+    fun healthCheckDoesNotReportViewportProblemAsNotLoggedIn() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.VIEWPORT_UNHEALTHY
+            override fun diagnose() = null
+        }
+        assertTrue(source(pages).healthCheck() is SourceHealth.Unavailable)
+    }
+
+    /** 加载中属于暂时状态，也不该被报成未登录。 */
+    @Test
+    fun healthCheckMapsLoadingToUnavailable() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.LOADING
+            override fun diagnose() = null
+        }
+        assertTrue(source(pages).healthCheck() is SourceHealth.Unavailable)
+    }
+
+    @Test
+    fun healthCheckMapsReadyToReady() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.READY
+        }
+        assertEquals(SourceHealth.Ready, source(pages).healthCheck())
+    }
+
+    /** 不支持只读诊断的实现继续走旧路径，行为不变。 */
+    @Test
+    fun healthCheckFallsBackWhenPageStateUnsupported() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState(): PageState? = null
+            override fun ensureLoaded(force: Boolean) = false
+        }
+        assertTrue(source(pages).healthCheck() is SourceHealth.Unavailable)
+    }
+
     @Test
     fun healthCheckReportsUnavailable() {
         val pages = FakePageOps().apply { loaded = false }

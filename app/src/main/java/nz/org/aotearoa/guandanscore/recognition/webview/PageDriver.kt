@@ -68,6 +68,12 @@ class PageDriver(
         """.trimIndent()
         const val READY_TIMEOUT_MILLIS = 15_000L
         const val READY_POLL_MILLIS = 300L
+
+        /** AI-034：轮询退避上限。页面刚 commit 时密集轮询有效，之后放慢以省电与减少脚本调用。 */
+        const val READY_POLL_MAX_MILLIS = 1_200L
+
+        /** AI-034：就绪等待期间允许的最大重载次数。防止「选择器缺失 → 重载 → 仍缺失」无限循环。 */
+        const val READY_MAX_RELOADS = 1
         const val UPLOAD_TIMEOUT_MILLIS = 20_000L
         const val SUBMIT_CONFIRM_TIMEOUT_MILLIS = 15_000L
     }
@@ -75,6 +81,24 @@ class PageDriver(
     /** 记录是否已经为当前会话导航过，避免每次识牌都 reload。 */
     @Volatile
     private var navigatedTo: String? = null
+
+    /** AI-035：刚完成导航，SPA 初始化中。此期间的 reload 一律跳过。 */
+    @Volatile
+    private var navigatedJustNow = false
+
+    /**
+     * AI-035：业务生成期间禁止自动 reload。
+     *
+     * 生成中 reload 会直接丢弃当前请求与已产生的回答，比「再等一会儿」糟糕得多。
+     * 由 [WebViewAiSource.recognize] 在进入/退出时置位。
+     */
+    @Volatile
+    private var reloadSuspended = false
+
+    override fun setReloadSuspended(suspended: Boolean) {
+        reloadSuspended = suspended
+        if (suspended) Log.i(TAG, "auto-reload suspended (business task running)")
+    }
 
     /** 导航到首页（或保持当前会话）。 */
     override fun ensureLoaded(force: Boolean): Boolean {
@@ -97,7 +121,14 @@ class PageDriver(
         host.navigatedTarget = target
         bridge.evaluateOnMain("location.href = ${jsonQuote(target)};") {}
         Log.i(TAG, "navigating to configured home")
-        return awaitReady()
+        // AI-035：刚发起导航时不允许 awaitReady 再补一次 reload ——
+        // SPA 初始化阶段的 reload 会打断首屏加载，表现为「越等越不出现」。
+        navigatedJustNow = true
+        return try {
+            awaitReady()
+        } finally {
+            navigatedJustNow = false
+        }
     }
 
     /**
@@ -109,19 +140,68 @@ class PageDriver(
      */
     fun awaitReady(): Boolean {
         val deadline = nowMillis() + READY_TIMEOUT_MILLIS
+        var polls = 0
+        var reloads = 0
+        var delay = READY_POLL_MILLIS
+        var lastLoggedState: PageState? = null
         while (nowMillis() < deadline) {
-            if (probeLiveness() == PageLiveness.ALIVE) return true
-            // AI-031: NEEDS_USER states never improve by retrying; fail fast with a reason.
-            val state = lastProbeState
-            if (state != null && PageStateClassifier.actionFor(state) == PageAction.NEEDS_USER) {
-                lastReadyFailure = PageStateClassifier.reason(state, lastProbeDiagnose)
-                Log.w(TAG, "awaitReady aborted: " + lastReadyFailure)
-                return false
+            polls++
+            if (probeLiveness() == PageLiveness.ALIVE) {
+                Log.i(TAG, "awaitReady ok after ${polls} polls")
+                return true
             }
-            sleepMillis(READY_POLL_MILLIS)
+            val state = lastProbeState
+            // AI-034：只在状态变化时打日志，避免每 300ms 刷一行。
+            if (state != null && state != lastLoggedState) {
+                Log.i(TAG, "awaitReady poll#$polls state=$state")
+                lastLoggedState = state
+            }
+            if (state != null) {
+                when (PageStateClassifier.actionFor(state)) {
+                    // AI-031: NEEDS_USER states never improve by retrying; fail fast with a reason.
+                    PageAction.NEEDS_USER -> {
+                        lastReadyFailure = PageStateClassifier.reason(state, lastProbeDiagnose)
+                        Log.w(TAG, "awaitReady aborted: $lastReadyFailure")
+                        return false
+                    }
+                    // AI-034：结构失效允许有限次重载，超过上限即放弃并说明原因。
+                    PageAction.RELOAD -> {
+                        if (reloadSuspended) {
+                            // AI-035：生成中绝不 reload，保持等待由超时兜底。
+                            lastLoggedState = null
+                            sleepMillis(delay)
+                            delay = (delay * 3 / 2).coerceAtMost(READY_POLL_MAX_MILLIS)
+                            continue
+                        }
+                        if (navigatedJustNow) {
+                            // AI-035：导航刚发出，页面还在初始化；此刻 reload 只会打断它。
+                            Log.i(TAG, "awaitReady skip reload: just navigated, still initializing")
+                            lastLoggedState = null
+                            sleepMillis(delay)
+                            delay = (delay * 3 / 2).coerceAtMost(READY_POLL_MAX_MILLIS)
+                            continue
+                        }
+                        if (reloads >= READY_MAX_RELOADS) {
+                            lastReadyFailure = PageStateClassifier.reason(state, lastProbeDiagnose)
+                            Log.w(TAG, "awaitReady giving up after $reloads reload(s): $lastReadyFailure")
+                            return false
+                        }
+                        reloads++
+                        val why = AttachGate.viewportRejectReason(lastProbeDiagnose?.innerHeight ?: 0)
+                        Log.w(TAG, "awaitReady reload #$reloads (state=$state viewport=$why)")
+                        bridge.evaluateOnMain("location.reload();") { }
+                        lastLoggedState = null
+                    }
+                    PageAction.PROCEED, PageAction.RETRY -> Unit
+                }
+            }
+            sleepMillis(delay)
+            // 指数退避但不超过上限：早期密集、后期稀疏。
+            delay = (delay * 3 / 2).coerceAtMost(READY_POLL_MAX_MILLIS)
         }
         lastReadyFailure = lastProbeState?.let { PageStateClassifier.reason(it, lastProbeDiagnose) }
             ?: "page not ready within timeout"
+        Log.w(TAG, "awaitReady timeout after $polls polls reloads=$reloads: $lastReadyFailure")
         return false
     }
 
@@ -131,6 +211,22 @@ class PageDriver(
         private set
 
     override fun lastFailureReason(): String? = lastReadyFailure
+
+    /**
+     * AI-033：只读诊断，不导航、不 reload。
+     *
+     * 与 [probeLiveness] 的区别：后者只在已挂接且可求值时有意义，且在未就绪时
+     * 会继续探活；这里只取一次静态诊断并分类，供健康检查与 UI 使用。
+     * 求值失败（WebView 已销毁 / 未挂接）返回 null，由调用方当作不可用，
+     * 而不是当作未登录。
+     */
+    override fun pageState(): PageState? {
+        val diag = diagnose() ?: return null
+        lastProbeDiagnose = diag
+        val state = PageStateClassifier.classify(diag, adapter.isLoginUrl(diag.href))
+        lastProbeState = state
+        return state
+    }
 
     @Volatile
     private var lastProbeState: PageState? = null

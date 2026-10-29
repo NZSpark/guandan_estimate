@@ -38,6 +38,16 @@
 
 - 探针新增「基线」按钮 + `--es auto baseline`（`logBaseline()` + `PAGE_BASELINE`）。真机 DeepSeek 实测：视图 `1176x1801` / density 3.0 / dpi 480 / 屏幕 `1176x2328` / `attachedToWindow=true` / `isShown=true` / parent=LinearLayout；页面 `visible` / `innerWidth×Height=392×601` / DPR=3 / `docClient=392×601` / `scroll=0,0` / `docScrollH=601` / `readyState=complete`。切后台对照须比对这些字段。
 
+### 已完成（AI-075 / AI-076 / AI-080 健康检查只读化 + 退避上限，离线）
+
+- `PageOps.pageState()`：只读一次诊断并分类，**不导航、不 reload**（默认返回 null）。`healthCheck()` 改走它，不再用 `ensureLoaded()` 做健康探测——原来的实现会让「点一下设置页的健康检查」变成一次真实导航。
+- 分类映射显式化：`LOGIN_REQUIRED → NotLoggedIn`；`LOADING / COMPOSER_MISSING / VIEWPORT_UNHEALTHY → Unavailable`（附 `PageStateClassifier.reason`）。**选择器缺失与视口异常绝不能被报成未登录**，已有单测钉住。不支持只读诊断的实现回落 `legacyHealthProbe()`，行为不变。
+- `PageOps.setReloadSuspended()` + `WebViewAiSource.recognize` 全程置位：生成中 reload 会直接丢弃正在进行的请求，比多等一会儿糟糕得多。失败路径同样恢复（否则一次失败会永久关掉后续 reload），忙拒发生在置位之前、不留悬挂标志——三条都有单测。
+- 新增 `ReadyRetryPolicy`（纯函数）：300ms 起 ×1.5 退避封顶 1200ms、reload ≤1 次、生成中/刚导航不得 reload，并给出跳过原因供日志；`awaitReady` 超时把分类原因写进 `lastReadyFailure` → `AiSourceError.NotReady`。
+- `AiSettingsDialog.healthProvider` 契约改为异步 `(AiSettings, (String) -> Unit) -> Unit`，先显示「检测中…」；`MainActivity` 用 worker 线程跑健康检查再回主线程，避开 AI-023 的主线程 `runBlocking` 死锁防线。
+- 新增 `ReadyRetryPolicyTest`（5）+ `ReloadSuspensionTest`（3）+ `WebViewAiSourceTest` 6 例；`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。
+- 待真机：三态（READY / LOGIN_REQUIRED / COMPOSER_MISSING）在设置页的展示，以及「生成中不被打断」的实测。`VIEWPORT_UNHEALTHY` 仍缺真机构造手段。
+
 ### 未完成
 
 - ~~AI-009 / AI-128 FILE_CHOOSER 原生触摸路径的真机验收~~ ✅ 已完成（DeepSeek 真机 10 张牌零告警）。
@@ -137,7 +147,7 @@
 无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-1. 按 doc/ai_tasks.md 顺序推进：AI-031 已完成并真机验证（登录失效分类 / READY 分类）；`VIEWPORT_UNHEALTHY` 仍缺真机构造手段。下一个未完成项按文档顺序取。
+1. 按 doc/ai_tasks.md 顺序推进：AI-031 / AI-075 / AI-076 / AI-080 已完成（AI-075/076/080 待真机复测）；`VIEWPORT_UNHEALTHY` 仍缺真机构造手段。下一个未完成项按文档顺序取（AI-077~079、AI-082~083、AI-089~090、AI-093~101、阶段 7 UI）。
    另：AI-021 / AI-022 / AI-023 / AI-024 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread、无主线程阻塞」「容器不可用时不挂假 Attached」。
 2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
 3. 阶段 7 UI 按 P0→P1→P2 实施。

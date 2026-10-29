@@ -34,7 +34,14 @@ import java.util.UUID
 class AiSettingsDialog(
     private val activity: Activity,
     private val store: AiSettingsStore,
-    private val healthProvider: (AiSettings) -> String = { "" },
+    /**
+     * AI-033：健康检查必须是异步的。
+     *
+     * WebView 源的健康检查要读页面诊断，会走 `evaluateJavascript`；若在弹窗回调里
+     * 同步阻塞主线程等待结果，就是 AI-023 明令禁止的死锁路径。因此契约改为
+     * 「先显示检测中，结果通过回调送回」。
+     */
+    private val healthProvider: (AiSettings, (String) -> Unit) -> Unit = { _, done -> done("") },
     private val onSaved: (AiSettings) -> Unit = {}
 ) {
 
@@ -100,7 +107,18 @@ class AiSettingsDialog(
             model.visibility = if (web) View.GONE else View.VISIBLE
             apiKey.visibility = if (web) View.GONE else View.VISIBLE
             health.visibility = if (web) View.VISIBLE else View.GONE
-            health.text = if (web) "登录状态：${healthProvider(editing)}" else ""
+            if (web) {
+                health.text = "登录状态：检测中…"
+                val snapshot = editing
+                healthProvider(snapshot) { text ->
+                    // 结果回来时用户可能已切到别的 profile，只更新仍然匹配的那次。
+                    if (editing === snapshot || editing == snapshot) {
+                        health.text = "登录状态：$text"
+                    }
+                }
+            } else {
+                health.text = ""
+            }
         }
 
         fun showProfile(p: AiSettings) {

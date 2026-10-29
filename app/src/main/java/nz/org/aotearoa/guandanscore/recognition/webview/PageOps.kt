@@ -27,6 +27,21 @@ interface PageOps {
      */
     fun lastFailureReason(): String? = null
 
+    /**
+     * AI-033：只读当前页面状态，不导航、不重载、不点击。
+     *
+     * [lastFailureReason] 只在 [ensureLoaded] 失败后才有值；健康检查需要在不触发
+     * 导航的前提下拿到「登录失效 / 选择器缺失 / 视口异常」的区分，所以单独开这个读数口。
+     * 返回 null 表示实现方不支持只读诊断。
+     */
+    fun pageState(): PageState? = null
+
+    /**
+     * AI-035：暂停/恢复自动 reload。业务任务运行期间必须暂停，
+     * 否则恢复逻辑会把正在生成的请求直接 reload 掉。默认无操作。
+     */
+    fun setReloadSuspended(suspended: Boolean) = Unit
+
     fun applyPageFix()
 
     fun isLoggedIn(): Boolean

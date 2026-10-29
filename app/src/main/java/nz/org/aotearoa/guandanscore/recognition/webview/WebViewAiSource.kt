@@ -85,10 +85,23 @@ class WebViewAiSource(
     override fun healthCheck(): SourceHealth {
         if (generating) return cachedHealth
         val health = try {
+            // AI-033：先做只读分类，避免「把选择器失败报成未登录、把未登录报成未就绪」。
+            // pageState() 不导航；不支持只读诊断的实现返回 null，落到旧的探测路径。
+            val state = pages.pageState()
             when {
-                !pages.ensureLoaded() -> SourceHealth.Unavailable("页面未就绪")
-                !pages.isLoggedIn() -> SourceHealth.NotLoggedIn("请在页面中手动登录")
-                else -> SourceHealth.Ready
+                state == null -> legacyHealthProbe()
+                state == PageState.READY -> SourceHealth.Ready
+                // 账号问题：需要用户去网页里登录，重试无用。
+                state == PageState.LOGIN_REQUIRED ->
+                    SourceHealth.NotLoggedIn("登录已失效，请在页面中重新登录")
+                // 以下是页面/宿主问题，绝不能报成未登录。
+                state == PageState.LOADING ->
+                    SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
+                state == PageState.COMPOSER_MISSING ->
+                    SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
+                state == PageState.VIEWPORT_UNHEALTHY ->
+                    SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
+                else -> SourceHealth.Unavailable("未知页面状态")
             }
         } catch (e: AiSourceError) {
             SourceHealth.Unavailable(e.message ?: "未知错误")
@@ -99,13 +112,27 @@ class WebViewAiSource(
         return health
     }
 
+    /**
+     * 不支持只读诊断时的旧探测路径，保留以保证实现方零改动可用。
+     *
+     * 注意其中的顺序：先确认页面能加载，再判断登录，最后才 Ready。
+     */
+    private fun legacyHealthProbe(): SourceHealth = when {
+        !pages.ensureLoaded() -> SourceHealth.Unavailable("页面未就绪")
+        !pages.isLoggedIn() -> SourceHealth.NotLoggedIn("请在页面中手动登录")
+        else -> SourceHealth.Ready
+    }
+
     override fun recognize(request: RecognizeRequest): List<Card> {
         if (!running.compareAndSet(false, true)) throw AiSourceError.Busy()
         cancelled = false
         generating = true
+        // AI-035：业务任务期间禁止自动 reload，否则会把正在生成的请求直接丢掉。
+        pages.setReloadSuspended(true)
         try {
             return runPipeline(request)
         } finally {
+            pages.setReloadSuspended(false)
             generating = false
             running.set(false)
         }

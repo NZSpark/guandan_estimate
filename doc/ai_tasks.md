@@ -283,12 +283,12 @@
 
 ### A4.2 页面健康与宿主恢复
 
-- [ ] **AI-075** 区分页面尚在初始化、元素暂未命中、登录失效、导航失败、窗口失效和真正页面异常。
-- [ ] **AI-076** 健康检查使用低干扰的只读操作；生成过程中不得通过 reload、导航或频繁脚本探针打断正在进行的识牌任务。
+- [x] **AI-075** 区分页面尚在初始化、元素暂未命中、登录失效、导航失败、窗口失效和真正页面异常。（`PageStateClassifier` 五态 + `isLoginUrl` URL 判据，顺序固定；`awaitReady` 遇 NEEDS_USER 立即中止并带原因。导航失败/窗口失效分别由 `AiSourceError.NotReady`（含宿主未挂接）与 `WebViewHost` 状态机表达。`VIEWPORT_UNHEALTHY` 仅单测覆盖。）
+- [x] **AI-076** 健康检查使用低干扰的只读操作；生成过程中不得通过 reload、导航或频繁脚本探针打断正在进行的识牌任务。（`PageOps.pageState()` 只读、不导航；`healthCheck` 走它而非 `ensureLoaded`；`generating` 时直接返回缓存；`PageOps.setReloadSuspended` 在 `recognize` 全程暂停自动 reload。）
 - [ ] **AI-077** 验证屏幕旋转、Activity 重建、离开和返回 Gemini 页面以及应用进程重启后的 WebView 行为。
 - [ ] **AI-078** 在切后台及返回前台时记录尺寸、窗口挂接和实际回答更新情况，不能只以 `isAttachedToWindow`、URL 或 JS 可执行作为健康结论。
 - [ ] **AI-079** 初版以可见 WebView 路径为验收基线；只有后台识牌成为明确需求时，才独立评估 overlay、额外窗口宿主、前台服务和保活方案。
-- [ ] **AI-080** 对页面恢复和重试设置次数上限及退避策略；恢复失败时呈现诊断结果，不无限 reload 或无限等待。
+- [x] **AI-080** 对页面恢复和重试设置次数上限及退避策略；恢复失败时呈现诊断结果，不无限 reload 或无限等待。（`ReadyRetryPolicy`：300ms 起 ×1.5 退避封顶 1200ms、reload ≤1 次、生成中/刚导航不得 reload；`awaitReady` 超时把 `PageStateClassifier.reason` 写入 `lastReadyFailure` → `AiSourceError.NotReady` → 设置页显示原因。）
 
 ### A4.3 图片与回答隔离测试
 
@@ -439,7 +439,8 @@
 | 2026-10-28 | AI-140~144, AI-058~061, AI-064, AI-069~070, AI-098~099 | 完成 | 新增 ui/AiSettingsDialog：先选源再显隐字段；MainActivity.recognizeOnline 改走 AiSourceRegistry + AiSource.recognize，API Key 门槛仅对 requiresNetworkConfig 生效（修掉网页源仍要 Key 的 bug）；新增可见挂接容器 + onResume attach / onPause detach + fileChooserHandler 占位；GeminiProbeActivity 支持 EXTRA_START_URL；testDebugUnitTest 151 测试 + assembleDebug 均通过 | 真机阶段 0/2 未开始 |
 | 2026-10-28 | AI-102~126, AI-136~139, AI-145~147 | 完成 | 新增 recognition/source（AiSource/AiSourceError/SourceHealth/AiSourceId/AiSourcePresets/AiSourceRegistry/HttpApiSource）、recognition/site（SiteAdapter+结构化返回/JsonQuote/JsonParse/GeminiAdapter/DeepSeekAdapter/CustomAdapter/DeepSeekSelectors/DeepSeekScripts）、recognition/webview（PageOps/PageDriver/WebViewBridge/WebViewHost/WebViewAiSource）；AiSettings 加 sourceKey+homeUrl、AiTransport 收敛为 WEBVIEW/API、迁移规则抽成 decodeProfile 伴生函数；DeepSeek 为默认首源；驱动层 grep 证明零站点耦合；testOptions.unitTests.isReturnDefaultValues 打开 | 余下 AI-140~144（配置页 UI 与 MainActivity 接线）待做；真机验证未开始 |
 | 2026-10-28 | 文档 | 完成 | 多源改造任务分解写入本清单：新增阶段 1.5（多源抽象层 AI-102~126）、A0.4（DeepSeek 探测 AI-006D~011D）、A2.5（DeepSeek 真机闭环 AI-127~135）、A3.4（源选择配置页 AI-136~147）、阶段 6（多源横向验收 AI-148~155）、G-11~G-16；依据 `doc/multi_ai_update.md`，DeepSeek 定为首发源 | 从 AI-136~147（配置层）与 AI-102~126（抽象层）开始实施 |
-| 2026-10-28 | AI-004, AI-006~025, AI-036~046, AI-058~070, AI-075~083, AI-089~090, AI-093~101 | 未开始 | 依赖目标 Android 设备上的真实 Gemini WebView 会话、登录与图片上传验证；离线环境无法产生有效证据 | 需真机执行阶段 0 准入验证 |
+| 2026-10-29 | AI-075, AI-076, AI-080 | 完成（离线） | 健康检查改为只读 `pageState()` 分类（不再 `ensureLoaded` 触发导航），生成中返回缓存；`setReloadSuspended` 全程暂停自动 reload；`ReadyRetryPolicy` 收敛退避/上限（5 测试）；`ReloadSuspensionTest` 3 测试（成功/失败/忙拒都不留悬挂标志）；`HealthProvider` 改异步回调，`MainActivity` 用 worker 线程避开主线程 `runBlocking`；testDebugUnitTest + assembleDebug BUILD SUCCESSFUL | 真机复测三态与设置页「检测中…」；`VIEWPORT_UNHEALTHY` 仍缺真机构造手段 |
+| 2026-10-28 | AI-004, AI-006~025, AI-036~046, AI-058~070, AI-077~079, AI-081~083, AI-089~090, AI-093~101 | 未开始 | 依赖目标 Android 设备上的真实 Gemini WebView 会话、登录与图片上传验证；离线环境无法产生有效证据 | 需真机执行阶段 0 准入验证 |
 | 2026-10-28 | AI-006D, AI-007D, AI-010D, AI-127, AI-129 | 通过 | 设备 HUAWEI LIO-N29 / Android 10 / com.huawei.webview 114.0.5.302。`AiProbeActivity` 可切换 DeepSeek/Gemini/自定义；进程重启后 DeepSeek 仍登录（inputCount=1 login=0 password=0）；诊断 input=1(textarea) send=1 file=1 gen=0；合成 paste 后 `attachmentCount=1 attached=true`，但 `dispatchEvent` 返回 accepted=false —— 判据只能看附件节点 | AI-128 FILE_CHOOSER 路径待测；AI-130 记录两条路径结论 |
 | 2026-10-29 | Gemini 真机闭环 + 3 缺陷修复 | 通过 | 设备 HUAWEI LIO-N29 / Android 10 / webview 114.0.5.302。Gemini 已登录（passwordCount=0 正确判已登录）。端到端：填文本 → 合成 paste 注入图片 → 点 `Send message` → 页面出现 `You said 这是什么颜色？只回答颜色。`、`Show the uploaded image in a Lightbox`、回答 `粉红色`。修复：①diagnose 缺 `passwordCount` 致登录误判；②`parseSubmitResult` 只认 `ok:true` 致未提交报成功；③发送按钮 Angular 异步渲染，同步查询扑空，改 `setTimeout` 重试。实测禁止同步忙等（阻塞事件循环，按钮永不渲染）。testDebugUnitTest 159 全绿 | 用实测值复核 response/generating 选择器；AI-128 原生触摸路径待测 |
 | 2026-10-28 | WebViewHost / PageDriver 华为适配 | 完成 | 参照 SMSProxy：`layoutDirection=LTR`（EMUI 下 DeepSeek 输入字符倒序）、`onPageStarted` 提前记录 URL、`setWebContentsDebuggingEnabled(true)`；`PageDriver` 增同步同源 XHR 活性探针（区分“URL 正确但卡死”与真正就绪）。testDebugUnitTest 全绿 | — |

@@ -183,13 +183,22 @@ class MainActivity : AppCompatActivity() {
         AiSettingsDialog(
             activity = this,
             store = aiSettingsStore,
-            healthProvider = { settings ->
-                val source = AiSourceRegistry.create(settings, host = webHost, context = this)
-                when (val h = source.healthCheck()) {
-                    SourceHealth.Ready -> "已就绪"
-                    is SourceHealth.NotLoggedIn -> "未登录：${h.hint}"
-                    is SourceHealth.Unavailable -> "不可用：${h.reason}"
-                }
+            healthProvider = { settings, done ->
+                // AI-033：健康检查要读页面诊断（evaluateJavascript 回调），必须离开主线程，
+                // 否则会撞上 AI-023 的主线程 runBlocking 死锁防线。结果回主线程再更新 UI。
+                Thread({
+                    val text = try {
+                        val source = AiSourceRegistry.create(settings, host = webHost, context = this)
+                        when (val h = source.healthCheck()) {
+                            SourceHealth.Ready -> "已就绪"
+                            is SourceHealth.NotLoggedIn -> "未登录：${h.hint}"
+                            is SourceHealth.Unavailable -> "不可用：${h.reason}"
+                        }
+                    } catch (e: Exception) {
+                        "检测失败：${e.message ?: "未知错误"}"
+                    }
+                    runOnUiThread { done(text) }
+                }, "ai-health-check").start()
             },
             onSaved = { settings ->
                 toast("当前 AI 源：${settings.provider}")
