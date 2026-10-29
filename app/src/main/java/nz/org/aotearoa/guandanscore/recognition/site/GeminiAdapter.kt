@@ -53,6 +53,9 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
 
     override fun diagnoseScript(): String = GeminiScripts.diagnose()
 
+ /** AI-030：逐候选命中数探针，用于区分“哪条候选真的生效”。只读。 */
+ override fun deepProbeScript(): String = GeminiScripts.selectorProbe()
+
     override fun loginCheckScript(): String = GeminiScripts.diagnose()
 
     override fun verifyAttachmentScript(): String = GeminiScripts.verifyAttachment()

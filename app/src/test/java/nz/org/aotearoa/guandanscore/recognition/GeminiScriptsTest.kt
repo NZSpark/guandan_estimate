@@ -143,4 +143,76 @@ class GeminiScriptsTest {
         assertFalse(s.contains("while"))
         assertFalse(s.contains("Date.now"))
     }
+
+    @Test
+    fun selectorProbeEmbedsEveryCandidateInOrder() {
+        val s = GeminiScripts.selectorProbe()
+        val groups = listOf(
+            GeminiSelectors.INPUT_CANDIDATES,
+            GeminiSelectors.SEND_CANDIDATES,
+            GeminiSelectors.RESPONSE_CANDIDATES,
+            GeminiSelectors.UPLOAD_TOOLS_CANDIDATES,
+            GeminiSelectors.FILE_INPUT_CANDIDATES,
+            GeminiSelectors.LOGIN_CANDIDATES,
+            GeminiSelectors.GENERATING_CANDIDATES
+        )
+        for (candidates in groups) {
+            var cursor = -1
+            for (c in candidates) {
+                val at = s.indexOf(GeminiScripts.quote(c), cursor + 1)
+                assertTrue("candidate out of order or missing: " + c, at > cursor)
+                cursor = at
+            }
+        }
+    }
+
+    @Test
+    fun selectorProbeEmitsPerGroupCountsAndFirstHit() {
+        val s = GeminiScripts.selectorProbe()
+        assertTrue(s.contains("counts.join("))
+        assertTrue(s.contains("firstHit"))
+        assertTrue(s.contains("return -1"))
+        assertTrue(s.contains("result[k + 'First']"))
+        for (key in listOf("input", "send", "response", "uploadTools", "fileInput", "login", "generating")) {
+            assertTrue("missing group key: " + key, s.contains(key + ": ["))
+        }
+        assertTrue(s.contains(GeminiScripts.quote(GeminiSelectors.password())))
+    }
+
+    @Test
+    fun selectorProbeIsReadOnly() {
+        val s = GeminiScripts.selectorProbe()
+        assertFalse(s.contains(".click("))
+        assertFalse(s.contains("dispatchEvent"))
+        assertFalse(s.contains("innerHTML"))
+        assertFalse(s.contains("localStorage"))
+        assertFalse(s.contains("document.cookie"))
+        assertFalse(s.contains("while"))
+        assertFalse(s.contains("Date.now"))
+    }
+
+    @Test
+    fun selectorProbeEmbedsInputCandidatesAsJsonArray() {
+        val s = GeminiScripts.selectorProbe()
+        val start = s.indexOf("input: [")
+        assertTrue(start >= 0)
+        val open = s.indexOf('[', start)
+        var depth = 0
+        var close = open
+        while (close < s.length) {
+            val ch = s[close]
+            if (ch == '[') depth++
+            if (ch == ']') {
+                depth--
+                if (depth == 0) break
+            }
+            close++
+        }
+        assertTrue(close < s.length)
+        val arr = org.json.JSONArray(s.substring(open, close + 1))
+        assertEquals(GeminiSelectors.INPUT_CANDIDATES.size, arr.length())
+        for (i in 0 until arr.length()) {
+            assertEquals(GeminiSelectors.INPUT_CANDIDATES[i], arr.getString(i))
+        }
+    }
 }

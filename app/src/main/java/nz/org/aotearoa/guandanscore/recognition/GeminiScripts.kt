@@ -89,6 +89,49 @@ object GeminiScripts {
         })()
     """.trimIndent()
 
+    /**
+     * AI-030：逐候选选择器探针。
+     *
+     * diagnose() 只报并集命中数，无法回答“这条候选到底对不对”——并集为 1 也可能是
+     * 第 4 条 textarea 兜底命中，而真正的输入框换了结构。这里对每组候选逐条数命中，
+     * 输出形如 `0|0|1|1`，从 0 到非 0 的第一个下标即实际生效的候选。
+     *
+     * 只读：不点击、不写入、不读取 Cookie / Storage。
+     */
+    fun selectorProbe(): String = """
+        (function() {
+          function count(sel) {
+            try { return document.querySelectorAll(sel).length; } catch (e) { return -1; }
+          }
+          function firstHit(counts) {
+            for (var i = 0; i < counts.length; i++) if (counts[i] > 0) return i;
+            return -1;
+          }
+          var groups = {
+            input: ${jsonArray(GeminiSelectors.INPUT_CANDIDATES)},
+            send: ${jsonArray(GeminiSelectors.SEND_CANDIDATES)},
+            response: ${jsonArray(GeminiSelectors.RESPONSE_CANDIDATES)},
+            uploadTools: ${jsonArray(GeminiSelectors.UPLOAD_TOOLS_CANDIDATES)},
+            fileInput: ${jsonArray(GeminiSelectors.FILE_INPUT_CANDIDATES)},
+            login: ${jsonArray(GeminiSelectors.LOGIN_CANDIDATES)},
+            generating: ${jsonArray(GeminiSelectors.GENERATING_CANDIDATES)}
+          };
+          var result = { ok: true, href: location.href, readyState: document.readyState };
+          for (var k in groups) {
+            var counts = [];
+            for (var i = 0; i < groups[k].length; i++) counts.push(count(groups[k][i]));
+            result[k] = counts.join('|');
+            result[k + 'First'] = firstHit(counts);
+          }
+          result.passwordCount = count(${quote(GeminiSelectors.password())});
+          return JSON.stringify(result);
+        })()
+    """.trimIndent()
+
+    /** 把候选列表编码成 JSON 数组字面量，避免手工拼接时漏引号或转义错。 */
+    private fun jsonArray(items: List<String>): String =
+        items.joinToString(",", prefix = "[", postfix = "]") { quote(it) }
+
     /** 读取当前回答快照：节点数量 + 最后一个非空回答的文本。 */
     fun snapshot(): String = """
         (function() {

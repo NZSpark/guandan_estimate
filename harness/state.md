@@ -73,6 +73,15 @@
 - `imaging/UploadImageEncoder`：长边上限 1800、JPEG q=85、超 1.5 MB 逐级降到 60、只缩不放、等比；纯算术 `targetSize` / `shouldDownscale` / `nextQuality`，单测 11 例。
 - 探针 `prepareChooserImage`：真实图 → 解码 → EXIF 旋正 → 压缩 → `probe/probe_upload.jpg`，日志含原尺寸→目标尺寸/q/scaled/字节数；占位图仍为 1×1 PNG。
 
+### 已完成（AI-030 逐候选选择器探针）
+
+- `GeminiScripts.selectorProbe()`：按 `INPUT/SEND/RESPONSE/UPLOAD_TOOLS/FILE_INPUT/LOGIN/GENERATING` 七组候选**逐条**数命中，返回 `input:"0|0|1|1"` 形式的计数串 + 每组 `<key>First`（从 0 起第一个非 0 下标），另带 `passwordCount` / `href` / `readyState`。只读：不点击、不派发事件、不读 Cookie / Storage、无同步忙等。
+- 私有 `jsonArray()` 统一把候选列表编码成 JSON 数组字面量，避免手工拼引号。
+- `GeminiAdapter.deepProbeScript()` 承载该探针（复用既有可选探测挂点，不新增接口）。
+- 动机：`diagnose()` 只报并集命中数，并集为 1 也可能是第 4 条 `textarea` 兜底命中，无法回答“哪条候选真的生效”。
+- 测试：`GeminiScriptsTest` 新增 4 例（候选顺序、`counts.join`/`firstHit`/`result[k + 'First']` 与各组 key 存在、只读性、`input` 候选数组可被 `JSONArray` 解析且逐项相等）；`SiteAdapterScriptsTest` 把 `onlyDeepSeekSupportsOptionalProbeScripts` 拆为 `onlyDeepSeekSupportsFileInputProbe` + `geminiDeepProbeIsSelectorProbeAndReadOnly`（Gemini 已真正具备该能力，旧断言过时）。
+- `./gradlew testDebugUnitTest` 全绿。
+
 ## 上次完成
 
 2026-10-29 · AI-025 WebView 安全配置契约 + URL 日志脱敏（离线完成，待真机复测）：新增 `webview/WebViewSecurityConfig` —— JS / DOM Storage / database 开，`allowFileAccess` / `allowContentAccess` / `saveFormData` / `geolocationEnabled` 关，混合内容 `NEVER_ALLOW`，接受 Cookie（含第三方，OAuth 跳转依赖）；`violations()` 自检，默认值即契约。`WebViewHost.applySecurityConfig()` 把契约落到 `WebSettings` + `CookieManager.setAcceptCookie`；第三方 Cookie 需具体实例，改在 `webView = view` 之后由 `applyThirdPartyCookies()` 设置（创建期传 null 会 NPE）。新增 `webview/UrlRedactor`：保留 scheme/host/path 便于判断是否被重定向到登录页，query 与 fragment 的**值**替换为 `<redacted>`、键名保留，无 `=` 的裸片段整体抹掉；`onPageStarted` / `onPageFinished` / 新增 `onReceivedError` 全部经它输出，避免 `?token=` / `#access_token=` 进 logcat。全仓 grep 确认无 cookie/token/password/secret/authorization/localStorage 直出日志。新增 `WebViewSecurityConfigTest` 8 例、`UrlRedactorTest` 7 例；`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。

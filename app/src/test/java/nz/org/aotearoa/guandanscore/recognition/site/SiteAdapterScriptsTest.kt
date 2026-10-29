@@ -95,12 +95,24 @@ class SiteAdapterScriptsTest {
     }
 
     @Test
-    fun onlyDeepSeekSupportsOptionalProbeScripts() {
-        // 默认实现为空串：其他源不得假装具备探测能力
-        assertTrue(GeminiAdapter().deepProbeScript().isEmpty())
+    fun onlyDeepSeekSupportsFileInputProbe() {
+        // 默认实现为空串：没有该能力的源不得假装具备
         assertTrue(GeminiAdapter().fileInputProbeScript().isEmpty())
-        assertTrue(DeepSeekAdapter().deepProbeScript().isNotEmpty())
         assertTrue(DeepSeekAdapter().fileInputProbeScript().isNotEmpty())
+    }
+
+    @Test
+    fun geminiDeepProbeIsSelectorProbeAndReadOnly() {
+        // AI-030：Gemini 用 deepProbe 挂点承载「逐候选命中数」探针，必须是只读的。
+        val s = GeminiAdapter().deepProbeScript()
+        assertTrue(s.isNotEmpty())
+        assertTrue(s.contains("firstHit"))
+        assertFalse(s.contains(".click("))
+        assertFalse(s.contains("dispatchEvent"))
+        assertFalse(s.contains("document.cookie"))
+        assertFalse(s.contains("localStorage"))
+        assertFalse(s.contains("while"))
+        assertTrue(DeepSeekAdapter().deepProbeScript().isNotEmpty())
     }
 
     @Test
