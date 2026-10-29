@@ -115,7 +115,12 @@ class WebViewAiSource(
         if (cancelled) throw AiSourceError.Cancelled()
 
         if (!pages.ensureLoaded()) {
-            throw AiSourceError.NotReady("页面在超时内未就绪（输入框或视口不可用）")
+            // AI-031: 带上分类给出的具体原因（登录失效 / 选择器缺失 / 视口异常），
+            // 上层据此提示用户，而不是统一报「未就绪」让人无从下手。
+            val why = pages.lastFailureReason()
+            throw AiSourceError.NotReady(
+                if (why.isNullOrBlank()) "页面在超时内未就绪（输入框或视口不可用）" else why
+            )
         }
         pages.applyPageFix()
 

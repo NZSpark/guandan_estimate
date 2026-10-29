@@ -113,6 +113,25 @@ class WebViewAiSourceTest {
         assertThrows(AiSourceError.NotReady::class.java) { source(pages).recognize(request()) }
     }
 
+    /** AI-031：未就绪时原因来自 PageOps 的分类结果，不再统一报「未就绪」。 */
+    @Test
+    fun notReadyCarriesClassifierReason() {
+        val fake = FakePageOps().apply { loaded = false }
+        val pages = object : PageOps by fake {
+            override fun lastFailureReason() = "需要重新登录"
+        }
+        val e = assertThrows(AiSourceError.NotReady::class.java) { source(pages).recognize(request()) }
+        assertTrue(e.message!!.contains("需要重新登录"))
+    }
+
+    /** 原因缺失时仍给通用措辞，不能抛 NPE 也不能空消息。 */
+    @Test
+    fun notReadyFallsBackWhenReasonMissing() {
+        val pages = FakePageOps().apply { loaded = false }
+        val e = assertThrows(AiSourceError.NotReady::class.java) { source(pages).recognize(request()) }
+        assertTrue(e.message!!.contains("未就绪"))
+    }
+
     /** 提交脚本失败 → SubmitFailed。 */
     @Test
     fun submitFailureThrows() {

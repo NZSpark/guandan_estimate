@@ -73,6 +73,28 @@
 - `imaging/UploadImageEncoder`：长边上限 1800、JPEG q=85、超 1.5 MB 逐级降到 60、只缩不放、等比；纯算术 `targetSize` / `shouldDownscale` / `nextQuality`，单测 11 例。
 - 探针 `prepareChooserImage`：真实图 → 解码 → EXIF 旋正 → 压缩 → `probe/probe_upload.jpg`，日志含原尺寸→目标尺寸/q/scaled/字节数；占位图仍为 1×1 PNG。
 
+### 已完成（AI-031 页面状态分类，离线完成）
+
+- 新增 `recognition/webview/PageState.kt`：`PageState`（READY / LOADING / COMPOSER_MISSING / VIEWPORT_UNHEALTHY / LOGIN_REQUIRED）、`PageAction`（PROCEED / RETRY / RELOAD / NEEDS_USER）、纯函数 `PageStateClassifier`（`classify` / `actionFor` / `reason`）。**判定顺序固定**：文档未 commit → 登录 → 视口 → 选择器；顺序颠倒会把登录页误报成选择器缺失。
+- 视口阈值不重复定义，复用 `AttachGate.viewportRejectReason`（MIN_VIEWPORT_HEIGHT=100）。
+- `PageDriver.probeLiveness()` 每轮把 `DiagnoseResult` 分类存入 `lastProbeState` / `lastProbeDiagnose`；`awaitReady()` 遇到 `NEEDS_USER` 立刻中止（登录失效 / 视口塌陷重试无用，不再空等 15s 超时），并把原因写入 `lastReadyFailure`。
+- `PageOps` 新增 `lastFailureReason(): String? = null`（默认实现，既有 Fake 零改动）；`PageDriver` 实现之，`ensureLoaded()` 开头清空上一次原因。
+- `WebViewAiSource` 未就绪时用该原因构造 `AiSourceError.NotReady`，不再统一报「页面在超时内未就绪」。
+- 新增 `PageStateClassifierTest` + `WebViewAiSourceTest` + `SiteAdapterScriptsTest` 共 9 例；`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。驱动层零站点耦合复检 CLEAN。
+
+**真机验证（LIO-N29 / Android 10，17:03~17:11）**
+
+| 场景 | 分类 | 动作 |
+| --- | --- | --- |
+| DeepSeek 已登录首页 | READY | PROCEED |
+| Gemini 已登录首页 | READY | PROCEED |
+| DeepSeek 未登录（重定向 `/sign_in`） | LOGIN_REQUIRED | NEEDS_USER |
+
+- **真机暴露并修复的缺陷**：未登录时 DeepSeek 重定向到 `/sign_in`，页面上 `inputCount=0 passwordCount=0 loginIndicatorCount=0`，DOM 判据完全失效，原逻辑归为 `COMPOSER_MISSING → RELOAD`，而重载只会再次落回 `/sign_in`，形成空转。修复：`SiteAdapter.isLoginUrl(url)` 按**路径段精确匹配** `sign_in/signin/login/auth`（首版 `startsWith("auth")` 会误判 `/authority`，已改并补回归测试），`PageStateClassifier.classify(diag, urlIsLoginPage)` 中 URL 登录页优先于 DOM 判据。
+- 探针新增 `--es auto pagestate`（只读）：打印 classify / action / reason + 诊断摘要，用于真机复现三态。
+- 注意：`--es site` 合法值是 `AiSourceId.key`，即 `deepseek_web` / `gemini_web`，不是 `deepseek_webview`；传错会静默回落 Gemini URL。
+- 未覆盖：`VIEWPORT_UNHEALTHY` 尚无真机构造手段（需临时压扁 WebView 高度），仅单测覆盖。
+
 ### 已完成（AI-030 真机验证七组选择器）
 
 - 真机（LIO-N29 / Android 10 / webview 114）三态实测：首页静止 / 已填文本未提交 / 有回答。
@@ -115,7 +137,7 @@
 无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-031（处理 SPA 初始化 / 导航 / 登录失效 / 选择器缺失 / 页面未就绪等状态，不得只凭 readyState == complete 判定可操作）。
+1. 按 doc/ai_tasks.md 顺序推进：AI-031 已完成并真机验证（登录失效分类 / READY 分类）；`VIEWPORT_UNHEALTHY` 仍缺真机构造手段。下一个未完成项按文档顺序取。
    另：AI-021 / AI-022 / AI-023 / AI-024 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread、无主线程阻塞」「容器不可用时不挂假 Attached」。
 2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
 3. 阶段 7 UI 按 P0→P1→P2 实施。

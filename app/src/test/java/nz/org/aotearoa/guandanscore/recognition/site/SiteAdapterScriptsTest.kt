@@ -314,6 +314,38 @@ class SiteAdapterScriptsTest {
 
     // ---- 通用解析工具 ----
 
+    // ---- AI-031: URL 登录页判据 ----
+
+    @Test
+    fun loginUrlRecognizedForCommonPaths() {
+        // 真机实测：DeepSeek 未登录被重定向到这里，DOM 里没有任何密码框。
+        val a = DeepSeekAdapter()
+        assertTrue(a.isLoginUrl("https://chat.deepseek.com/sign_in"))
+        assertTrue(a.isLoginUrl("https://chat.deepseek.com/sign_in?redirect=/"))
+        assertTrue(a.isLoginUrl("https://example.com/login"))
+        assertTrue(a.isLoginUrl("https://example.com/signin"))
+        assertTrue(a.isLoginUrl("https://example.com/auth/callback"))
+    }
+
+    @Test
+    fun normalPagesAreNotLoginUrls() {
+        val a = DeepSeekAdapter()
+        assertFalse(a.isLoginUrl("https://chat.deepseek.com/"))
+        assertFalse(a.isLoginUrl("https://chat.deepseek.com/a/chat/s/123"))
+        assertFalse(a.isLoginUrl(""))
+        assertFalse(a.isLoginUrl("https://gemini.google.com/app"))
+        // 已登录首页不能因为路径里带 auth 之外的词被误判。
+        assertFalse(a.isLoginUrl("https://example.com/author"))
+    }
+
+    @Test
+    fun loginUrlDoesNotMatchUnrelatedPathSegment() {
+        // startsWith("auth") 会命中 /author、/authority —— 这类误判会导致
+        // 正常页面被当成登录页而停止自动化。文档路径必须排除。
+        val a = DeepSeekAdapter()
+        assertFalse(a.isLoginUrl("https://example.com/authority/list"))
+    }
+
     @Test
     fun jsonParseHandlesNullAndGarbage() {
         assertNull(JsonParse.parse(""))

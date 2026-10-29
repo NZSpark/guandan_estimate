@@ -318,6 +318,10 @@ open class AiProbeActivity : Activity() {
             }
             // AI-011D：停止生成控件探测（只读，不点击）。
             "stop_probe" -> runAdapterScript("STOPCTL") { adapter.stopControlProbeScript() }
+            // AI-031：把真实诊断喂给 PageStateClassifier，打印分类 / 动作 / 原因。
+            // 只读，不点击不导航；用来在真机上确认登录页、塌陷视口、选择器缺失
+            // 分别被归到哪个状态，而不是笼统的「没就绪」。
+            "pagestate" -> probePageState()
             "fschooser" -> {
                 prepareChooserImage()
                 tapUploadIcon()
@@ -489,6 +493,32 @@ open class AiProbeActivity : Activity() {
                 "parent=${wv.parent?.javaClass?.simpleName}"
         )
         runScript(PAGE_BASELINE) { log("BASELINE_PAGE", it) }
+    }
+
+    /**
+     * AI-031：真机确认页面状态分类。
+     *
+     * 只读：跑一次 diagnose 脚本，把结果交给 PageStateClassifier，打印
+     * 分类 / 建议动作 / 原因。用来回答「这个页面到底被当成哪种没就绪」。
+     * 不导航、不点击、不 reload —— 状态判定与处置动作由调用方决定。
+     */
+    private fun probePageState() {
+        runScript(adapter.diagnoseScript()) { raw ->
+            val json = nz.org.aotearoa.guandanscore.recognition.site.JsonParse.parse(raw)
+            if (json == null) {
+                log("PAGESTATE", "diagnose-unparsable raw=${raw.take(200)}")
+                return@runScript
+            }
+            val diag = adapter.parseDiagnose(json)
+            val state = nz.org.aotearoa.guandanscore.recognition.webview.PageStateClassifier
+                .classify(diag, adapter.isLoginUrl(diag.href))
+            val action = nz.org.aotearoa.guandanscore.recognition.webview.PageStateClassifier
+                .actionFor(state)
+            val reason = nz.org.aotearoa.guandanscore.recognition.webview.PageStateClassifier
+                .reason(state, diag)
+            log("PAGESTATE", "state=$state action=$action reason=$reason")
+            log("PAGESTATE", "diag=${diag.summary()} password=${diag.passwordCount}")
+        }
     }
 
     private fun runAdapterScript(tag: String, script: () -> String) {

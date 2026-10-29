@@ -108,6 +108,32 @@ interface SiteAdapter {
     /** 判定是否未登录。 */
     fun loginCheckScript(): String
 
+    /**
+     * AI-031：URL 是否直接就是登录页。
+     *
+     * DOM 判据会漏：实测 DeepSeek 未登录时被重定向到 `/sign_in`，页面上既没有
+     * `input[type=password]` 也没有命中的登录锚点，`passwordCount` / `loginIndicatorCount`
+     * 都是 0，于是被归成「输入框缺失 → 重载」，而重载会再次落回 `/sign_in`，
+     * 形成无意义的重载循环。URL 是此时唯一可靠的信号。
+     *
+     * 默认按路径关键字判断，覆盖主流站点的 `/sign_in` `/login` `/auth`；
+     * 站点有特殊路径时覆盖本方法。
+     */
+    fun isLoginUrl(url: String): Boolean {
+        if (url.isBlank()) return false
+        // 逐段精确匹配，不做 startsWith：`/authority`、`/author` 会误命中
+        // 前缀判断，把正常页当成登录页从而停掉自动化。
+        val path = url.substringAfter("://", url).substringAfter('/', "")
+            .substringBefore('?').substringBefore('#')
+        val segments = path.split('/').filter { it.isNotBlank() }.map { it.lowercase() }
+        return segments.any { it in LOGIN_PATH_SEGMENTS }
+    }
+
+    private companion object {
+        /** 登录页路径段白名单。只匹配整段，避免 /authority 这类误判。 */
+        val LOGIN_PATH_SEGMENTS = setOf("sign_in", "signin", "login", "auth")
+    }
+
     /** 校验图片附件是否真的出现。 */
     fun verifyAttachmentScript(): String
 

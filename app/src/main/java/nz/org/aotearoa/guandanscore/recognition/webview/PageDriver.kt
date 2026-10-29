@@ -78,6 +78,7 @@ class PageDriver(
 
     /** 导航到首页（或保持当前会话）。 */
     override fun ensureLoaded(force: Boolean): Boolean {
+        lastReadyFailure = null
         val target = adapter.homeUrl
         if (target.isBlank()) throw AiSourceError.NotReady("未配置首页地址")
         val current = host.currentUrl
@@ -110,10 +111,32 @@ class PageDriver(
         val deadline = nowMillis() + READY_TIMEOUT_MILLIS
         while (nowMillis() < deadline) {
             if (probeLiveness() == PageLiveness.ALIVE) return true
+            // AI-031: NEEDS_USER states never improve by retrying; fail fast with a reason.
+            val state = lastProbeState
+            if (state != null && PageStateClassifier.actionFor(state) == PageAction.NEEDS_USER) {
+                lastReadyFailure = PageStateClassifier.reason(state, lastProbeDiagnose)
+                Log.w(TAG, "awaitReady aborted: " + lastReadyFailure)
+                return false
+            }
             sleepMillis(READY_POLL_MILLIS)
         }
+        lastReadyFailure = lastProbeState?.let { PageStateClassifier.reason(it, lastProbeDiagnose) }
+            ?: "page not ready within timeout"
         return false
     }
+
+    /** AI-031: concrete reason for the last readiness failure, for AiSourceError.NotReady. */
+    @Volatile
+    var lastReadyFailure: String? = null
+        private set
+
+    override fun lastFailureReason(): String? = lastReadyFailure
+
+    @Volatile
+    private var lastProbeState: PageState? = null
+
+    @Volatile
+    private var lastProbeDiagnose: DiagnoseResult? = null
 
     /**
      * 三态活性判断。
@@ -126,6 +149,10 @@ class PageDriver(
         val json = JsonParse.parse(runBlockingEvaluate(adapter.diagnoseScript()))
             ?: return PageLiveness.NOT_READY
         val diag = adapter.parseDiagnose(json)
+        // AI-031: 把静态诊断分类成五种状态并存下来，供 awaitReady 失败时给具体原因、
+        // 也供 NEEDS_USER 类状态立刻中止重试（登录失效 / 视口塌陷重试无用）。
+        lastProbeDiagnose = diag
+        lastProbeState = PageStateClassifier.classify(diag, adapter.isLoginUrl(diag.href))
         val ready = diag.readyState == "interactive" || diag.readyState == "complete"
         val hasOrigin = diag.href.isNotBlank() && !diag.href.startsWith("about:")
         if (!ready || !hasOrigin) return PageLiveness.NOT_READY

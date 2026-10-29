@@ -19,6 +19,14 @@ interface PageOps {
     @Throws(nz.org.aotearoa.guandanscore.recognition.source.AiSourceError::class)
     fun ensureLoaded(force: Boolean = false): Boolean
 
+    /**
+     * 上一次就绪失败的具体原因（AI-031）。
+     *
+     * [ensureLoaded] 返回 false 只是布尔值，上层没法区分「还在加载」「选择器失效」
+     * 「被踢回登录页」「视口塌陷」——处置手段互斥。默认 null 保持既有实现零改动。
+     */
+    fun lastFailureReason(): String? = null
+
     fun applyPageFix()
 
     fun isLoggedIn(): Boolean
