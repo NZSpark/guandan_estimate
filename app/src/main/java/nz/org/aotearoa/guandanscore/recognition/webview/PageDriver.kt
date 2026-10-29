@@ -1,6 +1,9 @@
 package nz.org.aotearoa.guandanscore.recognition.webview
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import nz.org.aotearoa.guandanscore.recognition.site.AnswerSnapshot
 import nz.org.aotearoa.guandanscore.recognition.site.DiagnoseResult
 import nz.org.aotearoa.guandanscore.recognition.site.JsonParse
@@ -33,7 +36,12 @@ class PageDriver(
     private val host: WebViewHost,
     private val bridge: WebViewBridge,
     private val sleepMillis: (Long) -> Unit = { Thread.sleep(it) },
-    private val nowMillis: () -> Long = { System.currentTimeMillis() }
+    private val nowMillis: () -> Long = { System.currentTimeMillis() },
+    /**
+     * 执行宿主同步 API 的调度器（AI-022）。默认主线程；单测可注入 test dispatcher。
+     * 注意：真实运行时它必须是主线程，否则 [WebViewHost.requireMainThread] 会断言失败。
+     */
+    private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : PageOps {
 
     private companion object {
@@ -112,13 +120,17 @@ class PageDriver(
 
         // AI-021：这里要的是“换页重建”，必须走终态销毁；若只想临时隐藏，
         // 调用方应改用 detachFromVisible()/attach() 以保留会话。
-        host.destroy()
-        host.attach()
-        if (host.status() != WindowStatus.Attached) {
+        // AI-022：destroy/attach/status 都要求主线程，本方法在 worker 线程被调用，必须投递。
+        val attachStatus = runOnMainSync("PageDriver.attach") {
+            host.destroy()
+            host.attach()
+            host.status()
+        }
+        if (attachStatus != WindowStatus.Attached) {
             throw AiSourceError.NotReady("WebView 未挂接窗口；请在应用界面内打开或授予悬浮窗权限")
         }
         navigatedTo = target
-        host.navigatedTarget = target
+        runOnMainSync("PageDriver.navigatedTarget") { host.navigatedTarget = target }
         bridge.evaluateOnMain("location.href = ${jsonQuote(target)};") {}
         Log.i(TAG, "navigating to configured home")
         // AI-035：刚发起导航时不允许 awaitReady 再补一次 reload ——
@@ -338,14 +350,14 @@ class PageDriver(
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 ctx, "${ctx.packageName}.files", file
             )
-            host.prepareUpload(uri)
+            runOnMainSync("PageDriver.prepareUpload") { host.prepareUpload(uri) }
             // 触发页面自己的上传入口；它最终会调用 onShowFileChooser。
             val ok = triggerUploadButton()
-            if (!ok) host.clearPendingUpload()
+            if (!ok) runOnMainSync("PageDriver.clearPendingUpload") { host.clearPendingUpload() }
             ok
         } catch (e: Exception) {
             Log.w(TAG, "prepareFileChooserUpload failed", e)
-            host.clearPendingUpload()
+            runOnMainSync("PageDriver.clearPendingUpload") { host.clearPendingUpload() }
             false
         }
     }
@@ -367,7 +379,10 @@ class PageDriver(
                 // 视口宽度可能缺省（旧脚本），0 表示由宿主按高度比例兜底。
                 val viewportW = json.optInt("innerWidth", 0)
                 if (x >= 0 && y >= 0 && viewportH > 0) {
-                    if (host.tapViewportPoint(x, y, viewportH, viewportW)) return true
+                    if (runOnMainSync("PageDriver.tapViewportPoint") {
+                            host.tapViewportPoint(x, y, viewportH, viewportW)
+                        }
+                    ) return true
                 }
             }
         }
@@ -416,6 +431,19 @@ class PageDriver(
      */
     private fun runBlockingEvaluate(script: String): String =
         BlockingBridge.awaitBlocking("PageDriver.evaluate") { bridge.evaluateRaw(script) }
+
+    /**
+     * 同步壳：在**主线程**执行一段必须主线程的宿主调用，并把结果带回 worker 线程。
+     *
+     * 与 [runBlockingEvaluate] 的分工（AI-022）：
+     * - [runBlockingEvaluate] 走协程，把挂起回调 resume 到主线程；
+     * - 本方法用于 [WebViewHost] 的**同步** API（destroy/attach/status/prepareUpload/
+     *   tapViewportPoint …），它们内部会 [WebViewHost.requireMainThread] 断言。
+     *
+     * 主线程上调用会立即失败（同 AI-023 的理由：主线程阻塞等自己 = 死锁）。
+     */
+    private fun <T> runOnMainSync(where: String, block: () -> T): T =
+        BlockingBridge.awaitBlocking(where) { withContext(mainDispatcher) { block() } }
 
     private fun jsonQuote(raw: String): String = JsonQuote.of(raw)
 }
