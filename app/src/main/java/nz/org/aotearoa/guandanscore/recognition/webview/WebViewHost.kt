@@ -67,6 +67,9 @@ class WebViewHost private constructor(private val appContext: Context) {
     @Volatile
     var fileChooserHandler: FileChooserHandler? = null
 
+    /** 页面最近一次挂起的文件选择回调；[destroy] 时用它释放页面等待。 */
+    private var filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
+
     /** 由宿主注入：页面加载完成回调（用于就绪等待）。 */
     @Volatile
     var onPageFinished: ((String) -> Unit)? = null
@@ -224,27 +227,48 @@ class WebViewHost private constructor(private val appContext: Context) {
                     filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>?,
                     fileChooserParams: FileChooserParams?
                 ): Boolean {
+                    // 记录挂起的回调，destroy() 时才能释放，否则页面侧永久等待（AI-020）。
+                    this@WebViewHost.filePathCallback = filePathCallback
                     // 已有待投递的图片就立即回填，不再弹系统选择器（AI-124 的 FILE_CHOOSER 路径）。
+                    // AI-009D：如实记录系统回调的入参，作为“真实触发”的证据。
+                    val acceptTypes = fileChooserParams?.acceptTypes ?: emptyArray()
+                    // 实测 acceptTypes 可达 2000+ 字符，全量打印会被 logcat 截断并挤掉后续字段。
+                    // 优先列图片类型：accept 开头通常是 .wxml/.wxss 之类，截断前 N 个看不到关键信息。
+                    val accept = AcceptTypes.imageSummary(acceptTypes, 6)
+                    val hasImage = AcceptTypes.imageTypes(acceptTypes).isNotEmpty()
+                    val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                    Log.i(
+                        TAG,
+                        "onShowFileChooser: imageAccept=[$accept] hasImage=$hasImage " +
+                            "acceptCount=${acceptTypes.size} imageCount=${AcceptTypes.imageTypes(acceptTypes).size} " +
+                            "multiple=$allowMultiple mode=${fileChooserParams?.mode}"
+                    )
                     val pending = pendingUploadUri
                     if (pending != null) {
                         pendingUploadUri = null
                         Log.i(TAG, "onShowFileChooser: delivering pending image")
                         filePathCallback?.onReceiveValue(arrayOf(pending))
+                        this@WebViewHost.filePathCallback = null
                         return true
                     }
                     val handler = fileChooserHandler
                     if (handler == null) {
                         Log.w(TAG, "onShowFileChooser but no handler registered")
+                        // 无人接管也必须释放，否则下一次选择永久卡死。
+                        filePathCallback?.onReceiveValue(null)
+                        this@WebViewHost.filePathCallback = null
                         return false
                     }
                     // 若宿主无法接管，必须回调 null 释放，否则下一次选择永久卡死。
                     return try {
                         val handled = handler.onFileChooser(fileChooserParams?.acceptTypes)
                         if (!handled) filePathCallback?.onReceiveValue(null)
+                        this@WebViewHost.filePathCallback = null
                         handled
                     } catch (e: Exception) {
                         Log.w(TAG, "file chooser handler threw", e)
                         filePathCallback?.onReceiveValue(null)
+                        this@WebViewHost.filePathCallback = null
                         false
                     }
                 }
@@ -296,14 +320,32 @@ class WebViewHost private constructor(private val appContext: Context) {
         windowStatus = if (webView == null) WindowStatus.NotCreated else WindowStatus.NotAttached
     }
 
-    /** 彻底拆除：移除视图并置空引用。用于进程结束或源切换。 */
+    /**
+     * 彻底拆除：移除视图、释放挂起回调并置空引用。用于进程结束或源切换。
+     *
+     * 与 [detachFromVisible] 的区别（AI-021）：detach 只把 WebView 从可见容器摘下并保留会话；
+     * destroy 是终态，WebView 不可再用，下一次 [ensureWebView] 会重建。
+     *
+     * 注意：不清除注入配置（fileChooserHandler / onPageFinished / attachTargetProvider）。
+     * 它们属于宿主而非 WebView；PageDriver.ensureLoaded() 会先 destroy() 再 attach() 重建视图，
+     * 若在此清空，重建后的 WebView 将无人接管文件选择器（实测会导致上传静默失败）。
+     */
     fun destroy() {
         requireMainThread()
+        // 必须先释放挂起的文件选择回调，否则页面侧会永久等待，下一次选择直接卡死。
+        filePathCallback?.onReceiveValue(null)
+        filePathCallback = null
         removeHostFromParent(dropWebView = true)
+        // 离屏容器里的残留子视图也要清掉，避免持有已销毁的 WebView。
+        offscreenHost?.removeAllViews()
+        offscreenHost = null
         webView?.destroy()
         webView = null
+        visibleParent = null
         currentUrl = ""
+        pendingUploadUri = null
         windowStatus = WindowStatus.NotCreated
+        Log.i(TAG, "destroy: webview released")
     }
 
     /**

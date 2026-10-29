@@ -41,6 +41,15 @@ package nz.org.aotearoa.guandanscore.recognition.site
  *   `.ds-assistant-message-main-content`。
  * - **无 Shadow DOM**：`shadowHostCount=0 hasShadowDom=false` → `querySelectorAll` 可覆盖全文档。
  *
+ * ## AI-009D 文件选择器探测 2026-10-29（`DeepSeekScripts.fileInputProbe()` + `WebViewHost` 日志，真机）
+ * - **`onShowFileChooser()` 真实触发**：原生触摸回形针（css (286,319) → px (857,955)）后立即回调，
+ *   且回填 `cache/probe/probe_upload.png` 成功。JS `.click()` 路径不触发，与既有结论一致。
+ * - **`input[type=file]` 只有 1 个**，`accept` 长达 **5868 字符**（约 900 个扩展名，含 png/jpg/webp 等），
+ *   `multiple=true`，`capture=""`，`hidden=true`（尺寸为 0，只能靠原生触摸回形针，不能靠点它），
+ *   `disabled=false`。
+ * - **`FileChooserParams.mode = 1`（MODE_OPEN）**，即单选；站点虽给了 `multiple`，但宿主回调按单选处理。
+ * - 注意：`accept` 超长会撑爆 logcat 单行并挤掉后续字段，探测脚本与宿主日志都只输出摘要。
+ *
  * ## 关键行为（实测）
  * 1. **发送按钮不是 `<button>`**，是 `div[role=button].ds-button`；启用/禁用靠
  *    `ds-button--disabled` 类，不看 `aria-disabled`/`disabled`。
@@ -86,6 +95,11 @@ object DeepSeekSelectors {
     /**
      * 生成中/停止控件。实测 0 命中。
      * **不得**把“看到 stop 消失”作为结束判定前提（M4）。
+     *
+     * AI-011D 2026-10-29 真机复核（`DeepSeekScripts.stopControlProbe()`）：静止页
+     * `presetCount=0`、`labelHits=[]`、`visibleButtonCount=8` → `note=no-stop-control`。
+     * 已按行为特征（aria-label/title/文本含 stop/停止/中止/取消生成）扫描全部可见按钮，仍无候选。
+     * 结论：DeepSeek 的 `generating` 恒为 false，结束判定只能靠回答文本增长 + 连续稳定。
      */
     const val GENERATING =
         "div[class*='stop'], button[aria-label*='Stop'], button[aria-label*='停止']"

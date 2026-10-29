@@ -75,18 +75,23 @@
 
 ## 上次完成
 
-2026-10-29 · AI-008D DeepSeek 页面结构深度探测真机验收通过（LIO-N29 / Android 10 / webview 114.0.5.302）：inputCount=1 inputUnique=true inputIsInnermost=true；sendCount=1 sendBox=34x34 sendClickable=true（disabled/aria-disabled 不生效）；shadowHostCount=0；实测值已回填 DeepSeekSelectors 注释
+2026-10-29 · AI-009D 文件选择器探测真机通过 + accept 日志缺陷修复（LIO-N29 / Android 10 / webview 114.0.5.302）：fileInputCount=1，accept 整串 5868 字符 / 981 条目（imageCount=18）、multiple=true、capture 空、hidden=true、disabled=false；原生触摸回形针真实触发 onShowFileChooser（mode=1 MODE_OPEN）并回填 cache/probe/probe_upload.png；JS click 仍不触发。复测暴露并修复：accept 前 N 项全是 .wxml/.wxss 等非图片类型，按项截断的日志看不到图片真相 —— 抽出 recognition/webview/AcceptTypes（大小写不敏感、imageTypes/imageSummary 优先列图片、超长 (...+N)，禁止打印整串），探针 FILECHOOSER 与 WebViewHost.onShowFileChooser 统一改用；补 8 个 AcceptTypesTest。复测日志 acceptCount=981 imageTypes=.png|.jpg|...(+10) (imageCount=18)，delivering 日志不再被挤掉。testDebugUnitTest BUILD SUCCESSFUL。
+
+2026-10-29 · AI-011D 停止生成控件探测真机通过（LIO-N29 / Android 10 / webview 114.0.5.302，DeepSeek 已登录静止页）：新增 DeepSeekScripts.stopControlProbe()（只读不点击）、SiteAdapter.stopControlProbeScript() 契约、DeepSeekAdapter 实现、探针「停止控件」按钮与 --es auto stop_probe。实测 presetCount=0、labelHits=[]（扫描 8 个可见 button/div[role=button]）、note=no-stop-control: must-not-be-used-as-completion-signal。结论：DeepSeek 无停止控件，generating 恒 false，结束判定只能靠文本增长 + 连续稳定。新增 2 个单测。
+
+2026-10-29 · AI-020 通用 WebViewHost 生命周期补齐（LIO-N29 / Android 10 / webview 114.0.5.302）：核对创建 / 持有 / 挂接 / 移除 / 销毁五段，缺口在 destroy()。补齐：释放挂起的 filePathCallback（否则页面永久等待）、清 offscreenHost 残留子视图、复位 visibleParent 与 pendingUploadUri、加日志。**回归修复**：首版 destroy() 误清注入配置（fileChooserHandler / onPageFinished / attachTargetProvider），而 PageDriver.ensureLoaded() 先 destroy() 再 attach() 重建视图，导致重建后无人接管文件选择器 —— 真机实测 attachmentCount=0 attached=false；改为只清 WebView 自身状态、保留注入配置后复测 attachmentCount=1 attached=true。testDebugUnitTest + assembleDebug BUILD SUCCESSFUL。
+
+2026-10-29 · G-13 驱动层零站点耦合复检：PageDriver.kt / WebViewAiSource.kt 两处注释里的站点名已改为中性表述，grep -niE "gemini|deepseek|chatgpt" 结果为空（CLEAN）。testDebugUnitTest + assembleDebug BUILD SUCCESSFUL。
 
 ## 阻塞
 
-无。真机可复测（`adb -s J7R0220110001216`）。
+无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-
-1. 按 `doc/ai_tasks.md` 顺序推进：下一个未完成项 AI-008D（DeepSeek 页面 DOM 深度探测）。
-2. 用真机实测值复核 `GeminiSelectors` 其余候选（response/generating）。
-2. 阶段 7 UI 按 P0→P1→P2 实施。
-3. 把探针 e2e 能力沉淀为正式入口（`EXTRA_TEST_IMAGE` 已具备，考虑接入真实拍照流程）。
+1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-021（区分移除保留与真正销毁）。
+2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
+3. 阶段 7 UI 按 P0→P1→P2 实施。
+4. 把探针 e2e 能力沉淀为正式入口（EXTRA_TEST_IMAGE 已具备，考虑接入真实拍照流程）。
 
 ## 已知问题
 

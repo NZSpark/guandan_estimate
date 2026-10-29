@@ -220,7 +220,7 @@ class PageDriver(
     /**
      * 触发页面上传入口。
      *
-     * 优先用原生触摸点击图标（DeepSeek 实测：JS click 不满足 user activation，
+     * 优先用原生触摸点击图标（真机实测：JS click 不满足 user activation，
      * 不会触发 onShowFileChooser）；适配器未提供图标脚本时退回 JS click。
      */
     private fun triggerUploadButton(): Boolean {

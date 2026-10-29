@@ -52,6 +52,11 @@ open class DeepSeekAdapter : SiteAdapter, PasteCapableAdapter {
     /** AI-008D：输入框唯一性/最内层、发送按钮可点击判据、回答容器层级、Shadow DOM 探测。 */
     override fun deepProbeScript(): String = DeepSeekScripts.deepProbe()
 
+    override fun fileInputProbeScript(): String = DeepSeekScripts.fileInputProbe()
+
+    /** AI-011D：停止生成控件探测（只读）。 */
+    override fun stopControlProbeScript(): String = DeepSeekScripts.stopControlProbe()
+
     override fun loginCheckScript(): String = DeepSeekScripts.loginCheck()
 
     override fun verifyAttachmentScript(): String = DeepSeekScripts.verifyAttachment()

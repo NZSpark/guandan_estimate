@@ -92,3 +92,15 @@
 **约束**：不得为此引入站点私有 API、隐藏网络接口或内部 RPC；附件是否被接受唯一判据是 `verifyAttachment()` 的预览计数，`dispatchEvent` 返回值不可作判据。
 
 **状态**：Active
+
+---
+
+## ADR-0010 · 2026-10-29 · `WebViewHost.destroy()` 只销毁 WebView，不清注入配置
+
+**决策**：`WebViewHost.destroy()` 负责释放 WebView 自身状态 —— 移除视图、`webView.destroy()`、置空 `webView`/`visibleParent`/`offscreenHost`、清 `currentUrl`/`pendingUploadUri`、释放挂起的 `filePathCallback`。它**不清除**由宿主注入的配置：`fileChooserHandler`、`onPageFinished`、`attachTargetProvider`。
+
+**理由**：`PageDriver.ensureLoaded()` 在导航前会 `host.destroy()` 再 `host.attach()` 重建视图（华为 WebView 卡死恢复路径）。若 `destroy()` 清空注入配置，重建后的 WebView 将无人接管 `onShowFileChooser`，上传静默失败。真机实测（LIO-N29 / Android 10 / webview 114，DeepSeek）：首版清空后 `attachmentCount=0 attached=false`；保留后 `attachmentCount=1 attached=true`。
+
+**约束**：注入配置的生命周期由宿主（`MainActivity` / `AiProbeActivity` / 调用方）负责；只有宿主主动 `setAttachTarget(null)` 或替换 handler 时才变更。新增「每视图」状态与「每宿主」配置时必须分清归属，写进对应一侧的清理路径。
+
+**状态**：Active

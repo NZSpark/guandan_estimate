@@ -21,7 +21,9 @@ class SiteAdapterScriptsTest {
             DeepSeekScripts.verifyAttachment(),
             DeepSeekScripts.pageFix(),
             DeepSeekScripts.fillAndSubmit("hi"),
-            DeepSeekScripts.pasteImage("a.jpg", "image/jpeg", "QUJD")
+            DeepSeekScripts.pasteImage("a.jpg", "image/jpeg", "QUJD"),
+            DeepSeekScripts.deepProbe(),
+            DeepSeekScripts.fileInputProbe()
         )
         scripts.forEach {
             assertTrue("script should return JSON.stringify", it.contains("JSON.stringify"))
@@ -54,6 +56,51 @@ class SiteAdapterScriptsTest {
         assertTrue(s.contains("passwordCount"))
         assertTrue(s.contains("loginIndicatorCount"))
         assertTrue(s.contains("lastAnswerText"))
+    }
+
+    @Test
+    fun deepSeekFileInputProbeIsReadOnlyAndReportsAttributes() {
+        val s = DeepSeekScripts.fileInputProbe()
+        // 只读探测：不得触发文件选择器（JS click 无 user activation，永远不会成功）
+        assertFalse("probe must not click", s.contains(".click("))
+        listOf("fileInputCount", "acceptLength", "acceptHasImage", "multiple", "capture", "hidden", "disabled")
+            .forEach { assertTrue("missing $it", s.contains(it)) }
+        // accept 实测可达 5868 字符，禁止全量回传撑爆 logcat
+        assertTrue(s.contains("acceptHead"))
+    }
+
+    @Test
+    fun deepSeekStopControlProbeIsReadOnlyAndDeclaresAbsence() {
+        val s = DeepSeekScripts.stopControlProbe()
+        assertTrue(s.contains("JSON.stringify"))
+        assertFalse("probe must not click", s.contains(".click("))
+        listOf("presetCount", "labelHits", "visibleButtonCount", "note")
+            .forEach { assertTrue("missing $it", s.contains(it)) }
+        // 0 命中时必须给出「不得作为结束判定前提」的机器可读结论
+        assertTrue(s.contains("must-not-be-used-as-completion-signal"))
+        assertTrue(s.contains("停止"))
+    }
+
+    @Test
+    fun onlyDeepSeekImplementsStopControlProbe() {
+        assertTrue(GeminiAdapter().stopControlProbeScript().isEmpty())
+        assertTrue(DeepSeekAdapter().stopControlProbeScript().isNotEmpty())
+    }
+
+    @Test
+    fun deepSeekDeepProbeReportsStructureFields() {
+        val s = DeepSeekScripts.deepProbe()
+        listOf("inputUnique", "inputIsInnermost", "sendClickable", "hasShadowDom", "readyState")
+            .forEach { assertTrue("missing $it", s.contains(it)) }
+    }
+
+    @Test
+    fun onlyDeepSeekSupportsOptionalProbeScripts() {
+        // 默认实现为空串：其他源不得假装具备探测能力
+        assertTrue(GeminiAdapter().deepProbeScript().isEmpty())
+        assertTrue(GeminiAdapter().fileInputProbeScript().isEmpty())
+        assertTrue(DeepSeekAdapter().deepProbeScript().isNotEmpty())
+        assertTrue(DeepSeekAdapter().fileInputProbeScript().isNotEmpty())
     }
 
     @Test

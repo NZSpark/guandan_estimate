@@ -140,7 +140,7 @@ class WebViewAiSource(
         val outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
         if (!outcome.ok) throw AiSourceError.SubmitFailed(outcome.why ?: "未知原因")
 
-        // 附件在提交脚本内注入的站点（Gemini）：提交后仍要确认预览真的出现。
+        // 上传由提交脚本内联完成（`uploadsInsideSubmit`）：提交后仍要确认预览真的出现。
         if (adapter.uploadsInsideSubmit && !pages.verifyAttachment()) {
             throw AiSourceError.UploadFailed("提交后未确认附件预览")
         }

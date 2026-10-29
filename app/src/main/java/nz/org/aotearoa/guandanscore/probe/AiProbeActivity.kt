@@ -24,6 +24,7 @@ import nz.org.aotearoa.guandanscore.recognition.site.JsonQuote
 import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
+import nz.org.aotearoa.guandanscore.recognition.webview.AcceptTypes
 import org.json.JSONObject
 
 /**
@@ -110,6 +111,8 @@ open class AiProbeActivity : Activity() {
         button("基线") { logBaseline() }
         button("诊断") { runAdapterScript("DIAG") { adapter.diagnoseScript() } }
         button("深度探测") { runAdapterScript("DEEP") { adapter.deepProbeScript() } }
+        button("文件框属性") { runAdapterScript("FILEATTR") { adapter.fileInputProbeScript() } }
+        button("停止控件") { runAdapterScript("STOPCTL") { adapter.stopControlProbeScript() } }
         button("快照") { runAdapterScript("SNAP") { adapter.snapshotScript() } }
         button("登录检查") { runAdapterScript("LOGIN") { adapter.loginCheckScript() } }
         button("附件检查") { runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() } }
@@ -191,9 +194,14 @@ open class AiProbeActivity : Activity() {
                     callback: ValueCallback<Array<Uri>>?,
                     params: FileChooserParams?
                 ): Boolean {
+                    // 实测 acceptTypes 可达 5868 字符（约 900 个扩展名），全量打印会撑爆 logcat
+                    // 单行并挤掉后续 delivering 日志；只输出条数 + 图片类型摘要。
+                    val types = params?.acceptTypes ?: emptyArray()
                     log(
                         "FILECHOOSER",
-                        "triggered; mode=${params?.mode} accept=${params?.acceptTypes?.joinToString()}"
+                        "triggered; mode=${params?.mode} acceptCount=${types.size} " +
+                            "imageTypes=${AcceptTypes.imageSummary(types, 8)} " +
+                            "(imageCount=${AcceptTypes.imageTypes(types).size})"
                     )
                     // AI-128：点“上传入口”前先准备好 cache 里的测试图，这里回填给页面。
                     val pending = pendingChooserUri
@@ -284,6 +292,16 @@ open class AiProbeActivity : Activity() {
             "gemini_diag" -> runAdapterScript("DIAG") { adapter.diagnoseScript() }
             // AI-008D：页面结构深度探测（只读）。
             "deep_probe" -> runAdapterScript("DEEP") { adapter.deepProbeScript() }
+            // AI-009D：先读 file input 属性，再走一次真实原生触摸，验证 onShowFileChooser 是否触发。
+            "file_probe" -> {
+                runAdapterScript("FILEATTR") { adapter.fileInputProbeScript() }
+                webView.postDelayed({
+                    prepareChooserImage()
+                    webView.postDelayed({ tapUploadIcon() }, 800)
+                }, 800)
+            }
+            // AI-011D：停止生成控件探测（只读，不点击）。
+            "stop_probe" -> runAdapterScript("STOPCTL") { adapter.stopControlProbeScript() }
             "fschooser" -> {
                 prepareChooserImage()
                 tapUploadIcon()

@@ -167,6 +167,102 @@ object DeepSeekScripts {
         })()
     """.trimIndent()
 
+    /**
+     * AI-009D：探测 `input[type=file]` 与上传按钮（只读，不触发选择器）。
+     *
+     * 只读 `accept` / `multiple` / 数量等属性；**不**在这里点 `.click()`，
+     * 因为实测 JS click 不满足 user activation，永远不会有 `onShowFileChooser`。
+     * 真实触发证据必须来自宿主侧 `onShowFileChooser` 日志。
+     */
+    fun fileInputProbe(): String = """
+        (function() {
+          var files = [];
+          try { files = Array.prototype.slice.call(document.querySelectorAll('input[type="file"]')); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          var items = files.map(function (f, i) {
+            var r = null;
+            try { r = f.getBoundingClientRect(); } catch (e) {}
+            return {
+              index: i,
+              // accept 实测有 2000+ 字符，logcat 单行会截断；只输出长度与是否含图片类型。
+              acceptLength: (f.getAttribute('accept') || '').length,
+              acceptHasImage: /image\//.test(f.getAttribute('accept') || '') || /\.(png|jpe?g|webp|gif|bmp)/i.test(f.getAttribute('accept') || ''),
+              acceptHead: (f.getAttribute('accept') || '').slice(0, 40),
+              multiple: f.multiple === true,
+              capture: f.getAttribute('capture') || '',
+              hidden: f.hidden === true || (r !== null && (r.width === 0 || r.height === 0)),
+              disabled: f.disabled === true
+            };
+          });
+          // 上传按钮候选：与输入区同一水平带内的小按钮（仅计数与标签，不点击）。
+          var labels = [];
+          try {
+            var input = document.querySelector(${q(DeepSeekSelectors.input())});
+            if (input) {
+              var ir = input.getBoundingClientRect();
+              var box = input;
+              for (var i = 0; i < 8 && box.parentElement; i++) box = box.parentElement;
+              var cands = box.querySelectorAll('div[role="button"], button');
+              for (var j = 0; j < cands.length; j++) {
+                var c = cands[j];
+                var cr = c.getBoundingClientRect();
+                if (cr.width <= 0 || cr.height <= 0) continue;
+                if (cr.top < ir.top - 60 || cr.top > ir.bottom + 60) continue;
+                var lab = (c.getAttribute('aria-label') || c.getAttribute('title') || '').toLowerCase();
+                labels.push(lab || (c.className || '').toString().slice(0, 40));
+              }
+            }
+          } catch (e) {}
+          return JSON.stringify({
+            ok: true,
+            fileInputCount: files.length,
+            fileInputs: items,
+            composerButtons: labels
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * AI-011D：探测是否存在可用的「停止生成」控件。
+     *
+     * 不只查 [DeepSeekSelectors.GENERATING]，还按**行为特征**扫描：
+     * 1. 预设选择器命中数；
+     * 2. 可见的 `button` / `div[role=button]` 中 aria-label/title/文本含 stop/停止/中止/cancel 的；
+     * 3. 发送按钮位置上是否在生成期被替换为方形「停止」图标（通过容器内 svg 数量粗判）。
+     *
+     * 只读，不点击任何按钮。0 命中时必须写明「不得作为结束判定前提」。
+     */
+    fun stopControlProbe(): String = """
+        (function() {
+          var out = { ok: true, presetCount: 0, labelHits: [], visibleButtonCount: 0, note: '' };
+          try { out.presetCount = document.querySelectorAll(${q(DeepSeekSelectors.generating())}).length; } catch (e) {}
+          var re = /(^|[\\s_-])(stop|abort|cancel|interrupt)([\\s_-]|$)|停止|中止|取消生成/i;
+          try {
+            var btns = document.querySelectorAll('button, div[role="button"]');
+            for (var i = 0; i < btns.length; i++) {
+              var b = btns[i];
+              var r = b.getBoundingClientRect();
+              if (r.width <= 0 || r.height <= 0) continue;
+              out.visibleButtonCount++;
+              var label = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim();
+              if (label && re.test(label)) {
+                out.labelHits.push({
+                  label: label.slice(0, 40),
+                  w: Math.round(r.width),
+                  h: Math.round(r.height),
+                  tag: b.tagName.toLowerCase(),
+                  cls: (b.className || '').toString().slice(0, 60)
+                });
+              }
+            }
+          } catch (e) {}
+          out.note = (out.presetCount === 0 && out.labelHits.length === 0)
+            ? 'no-stop-control: must-not-be-used-as-completion-signal'
+            : 'stop-control-candidate-found: verify-before-use';
+          return JSON.stringify(out);
+        })()
+    """.trimIndent()
+
     /** 登录检测：必须同时有密码框与登录 UI。 */
     fun loginCheck(): String = """
         (function() {

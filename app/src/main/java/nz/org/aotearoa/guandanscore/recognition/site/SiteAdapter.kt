@@ -99,6 +99,12 @@ interface SiteAdapter {
      */
     fun deepProbeScript(): String = ""
 
+    /** AI-009D：`input[type=file]` 属性探测（只读，不触发选择器）。默认无此能力。 */
+    fun fileInputProbeScript(): String = ""
+
+    /** AI-011D：停止生成控件探测（只读，不点击）。默认无此能力。 */
+    fun stopControlProbeScript(): String = ""
+
     /** 判定是否未登录。 */
     fun loginCheckScript(): String
 
