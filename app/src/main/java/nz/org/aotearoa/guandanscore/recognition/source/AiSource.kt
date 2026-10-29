@@ -57,7 +57,7 @@ sealed interface SourceHealth {
  * 业务层唯一依赖的 AI 源抽象。
  *
  * 实现者负责：线程模型、站点 DOM、上传策略、结束判定。
- * 调用方（MainActivity / AiRecognitionService）不感知站点。
+ * 调用方（MainActivity / UI 层）不感知站点。
  *
  * 契约：
  * - [recognize] 是同步阻塞调用，内部自行切主线程执行 WebView 操作；调用方在 worker 线程。

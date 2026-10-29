@@ -541,3 +541,15 @@ Gemini WebView 配置 UI 建议展示：
 最高优先级不是先重写 `MainActivity`，而是进行阶段 0 的最小实证：在实际 Android WebView 中登录 Gemini，验证视口尺寸、窗口附着和页面实际更新；先检查真实输入框及上传控件，再尝试页面内合成粘贴（`File` + `DataTransfer` + `ClipboardEvent`），或在确认页面采用文件选择流程后测试 cache URI 与 `WebChromeClient.onShowFileChooser()`。必须确认附件上传完成，并通过带图/不带图对照证明模型确实读取了图像像素，再提交 prompt 并通过发送前基线可靠地读取本轮新回答。先跑通可见 WebView 闭环，再测试 Activity 重建、切后台与返回前台后的恢复；不要在图片上传尚未验证时同时引入 overlay 和保活机制。闭环成功后，再逐层接入 `AiCardResponseParser`、原有 UI 和配置迁移。
 
 最终目标是移除 Gemini 在线识牌对 API Key 的依赖，同时保留本地识别与评分能力。除非另有产品决定，不应顺带删除仍然需要的 OpenAI/custom API Provider。
+
+## 15. 实施状态回填（2026-10-30）
+
+本设计中的“待确认”问题已由 `doc/multi_ai_update.md` §5.6 与 `doc/ai_tasks.md` 的实测记录回答，摘要如下：
+
+- **架构已泛化**：业务层只依赖 `AiSource`；站点知识集中在 `SiteAdapter`；页面编排在站点无关的 `PageDriver` / `WebViewAiSource`；HTTP API 由独立的 `HttpApiSource` 保留。Gemini 专用的旧 `AiRecognitionService` / `GeminiUpstream` 已删除。
+- **Gemini**：登录判据、输入区、发送按钮与合成 paste 闭环有真机记录；`Upload and tools` 只弹网页面板，`FILE_CHOOSER` 的二级入口尚未自动化。
+- **DeepSeek（首发）**：真实手牌图上传 → 提交 → 新回答 → 解析已通过；2026-10-30 复测：生产驱动离屏识牌 27 张，同一实例连续两图/追问 27 → 22 张且互不串线；无 stop 控件，结束判定只靠文本增长 + 连续稳定；`FILE_CHOOSER` 必须原生触摸，JS click 不满足 user activation。
+- **ChatGPT**：适配器、脚本、五源注册与单测已落地，但**未真机登录验证**，不得标为可用。
+- **上传成功判据**：只有附件预览节点；`supportedUploads` 限制回退范围；提交前记录 `inputText` / `attached` / `sessionId`，脏输入区先建立经 DOM 确认的新会话。
+- **共享宿主**：登录/诊断页与主界面共用同一 WebView；冷启动未挂接会提示先打开 AI 页面，可见 ↔ 离屏切换无崩溃，登录态保留。
+- **遗留的真机项**：旋转/重建、切后台返回、Gemini 文件选择器与设备端连续图、ChatGPT 登录与闭环、三源横向切换、HTTP API Key 回归、无障碍与横屏验收。

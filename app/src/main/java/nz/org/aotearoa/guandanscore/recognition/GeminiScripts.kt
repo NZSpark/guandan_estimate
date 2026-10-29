@@ -147,9 +147,24 @@ object GeminiScripts {
           var generating = 0;
           try { generating = document.querySelectorAll(${quote(GeminiSelectors.generating())}).length; }
           catch (e) { generating = 0; }
-          var password = 0, loginUi = 0;
+          var password = 0, loginUi = 0, attach = 0;
           try { password = document.querySelectorAll(${quote(GeminiSelectors.password())}).length; } catch (e) {}
           try { loginUi = document.querySelectorAll(${quote(GeminiSelectors.login())}).length; } catch (e) {}
+          // AI-042：发送前的输入区现状与可读会话标识（只读，不修改页面）。
+          var inputEl = null;
+          try { inputEl = document.querySelector(${quote(GeminiSelectors.input())}); } catch (e) {}
+          // 附件只数 composer 附近的预览：全局会把历史消息里的 blob 图片算进来。
+          if (inputEl) {
+            var box = inputEl;
+            for (var bi = 0; bi < 6 && box.parentElement; bi++) box = box.parentElement;
+            try { attach = box.querySelectorAll(${quote(GeminiSelectors.attachment())}).length; } catch (e) {}
+          }
+          var inputText = inputEl ? (inputEl.value === undefined ? (inputEl.textContent || '') : inputEl.value) : '';
+          var sessionId = '';
+          try {
+            var sm = (location.pathname || '').match(/\/app\/([^\/?#]+)/);
+            sessionId = sm ? sm[1] : '';
+          } catch (e) {}
           return JSON.stringify({
             ok: true,
             responseCount: nodes.length,
@@ -157,6 +172,10 @@ object GeminiScripts {
             generating: generating > 0,
             passwordCount: password,
             loginIndicatorCount: loginUi,
+            inputText: inputText,
+            attachmentCount: attach,
+            attached: attach > 0,
+            sessionId: sessionId,
             href: location.href
           });
         })()

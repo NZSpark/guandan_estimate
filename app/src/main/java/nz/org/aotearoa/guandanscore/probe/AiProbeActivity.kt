@@ -8,16 +8,13 @@ import android.os.Bundle
 import android.os.Looper
 import android.util.Log
 import android.view.Gravity
-import android.webkit.ConsoleMessage
-import android.webkit.CookieManager
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import nz.org.aotearoa.guandanscore.recognition.AiRecognitionClient
 import nz.org.aotearoa.guandanscore.recognition.site.GeminiAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.DeepSeekAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.JsonParse
@@ -26,7 +23,12 @@ import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import nz.org.aotearoa.guandanscore.recognition.webview.AcceptTypes
+import nz.org.aotearoa.guandanscore.recognition.source.RecognizeRequest
+import nz.org.aotearoa.guandanscore.recognition.webview.UrlRedactor
 import nz.org.aotearoa.guandanscore.recognition.webview.ViewportTapMapper
+import nz.org.aotearoa.guandanscore.recognition.webview.WebViewAiSource
+import nz.org.aotearoa.guandanscore.recognition.webview.WebViewBridge
+import nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost
 import org.json.JSONObject
 
 /**
@@ -71,10 +73,16 @@ open class AiProbeActivity : Activity() {
          */
         const val EXTRA_TEST_IMAGE = "test_image"
 
+        /** AI-133/134：同一会话第二轮用的第二张真实图片。 */
+        const val EXTRA_TEST_IMAGE2 = "test_image2"
+
         const val DEFAULT_SITE = "gemini_web"
     }
 
     private lateinit var webView: WebView
+    private lateinit var host: WebViewHost
+    /** AI-169：共享宿主挂接用的全屏可见容器。 */
+    private lateinit var webContainer: FrameLayout
     private lateinit var output: TextView
     private lateinit var logView: TextView
     private lateinit var siteBar: LinearLayout
@@ -82,10 +90,6 @@ open class AiProbeActivity : Activity() {
     /** 当前适配器；切换站点时替换。 */
     private var adapter: SiteAdapter = GeminiAdapter()
     private var currentUrl: String = ""
-
-    /** AI-128：`onShowFileChooser` 要回填的图片 URI。准备后一次消费即清空。 */
-    @Volatile
-    private var pendingChooserUri: Uri? = null
 
     /** [EXTRA_AUTO] 只跑一次，避免重定向再次触发。 */
     private var autoRan = false
@@ -159,78 +163,71 @@ open class AiProbeActivity : Activity() {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.20f)
         )
 
-        webView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.databaseEnabled = true
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            settings.userAgentString = settings.userAgentString + " GuandanProbe/1.0"
-            CookieManager.getInstance().setAcceptCookie(true)
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    log("PAGE", "onPageFinished $url")
-                    val auto = intent?.getStringExtra(EXTRA_AUTO)
-                    if (!auto.isNullOrBlank() && !autoRan) {
-                        autoRan = true
-                        // 等页面渲染完成再跑。
-                        view?.postDelayed({ runAuto(auto) }, 4000)
-                    }
-                }
-
-                override fun onReceivedError(
-                    view: WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?
-                ) {
-                    log("ERR", "${request?.url} -> ${error?.description}")
-                }
-            }
-            webChromeClient = object : WebChromeClient() {
-                override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                    log("JS", "${m.messageLevel()} ${m.message()}")
-                    return true
-                }
-
-                override fun onShowFileChooser(
-                    view: WebView?,
-                    callback: ValueCallback<Array<Uri>>?,
-                    params: FileChooserParams?
-                ): Boolean {
-                    // 实测 acceptTypes 可达 5868 字符（约 900 个扩展名），全量打印会撑爆 logcat
-                    // 单行并挤掉后续 delivering 日志；只输出条数 + 图片类型摘要。
-                    val types = params?.acceptTypes ?: emptyArray()
-                    log(
-                        "FILECHOOSER",
-                        "triggered; mode=${params?.mode} acceptCount=${types.size} " +
-                            "imageTypes=${AcceptTypes.imageSummary(types, 8)} " +
-                            "(imageCount=${AcceptTypes.imageTypes(types).size})"
-                    )
-                    // AI-128：点“上传入口”前先准备好 cache 里的测试图，这里回填给页面。
-                    val pending = pendingChooserUri
-                    if (pending != null) {
-                        pendingChooserUri = null
-                        log("FILECHOOSER", "delivering $pending")
-                        callback?.onReceiveValue(arrayOf(pending))
-                        return true
-                    }
-                    // 未准备时释放回调，否则下一次选择永久卡死。
-                    callback?.onReceiveValue(null)
-                    return false
-                }
-            }
-        }
+        // AI-169：探针页不再自建 WebView，而是挂接进程级共享宿主。
+        // 这样「打开网页登录」与正式识牌共用同一个 WebView / Cookie / 页面：
+        // 登录返回后宿主仍是 Attached，不会再报「AI 页面未挂接」。
+        webContainer = FrameLayout(this)
         root.addView(
-            webView,
+            webContainer,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 2.4f)
         )
 
         setContentView(root)
+
+        host = WebViewHost.get(applicationContext)
+        host.onPageFinished = onPageFinished@{ url ->
+            log("PAGE", "onPageFinished ${UrlRedactor.redact(url)}")
+            val auto = intent?.getStringExtra(EXTRA_AUTO)
+            if (!auto.isNullOrBlank() && !autoRan) {
+                autoRan = true
+                // 等页面渲染完成再跑。
+                webContainer.postDelayed({ runAuto(auto) }, 4000)
+            }
+        }
+        host.setAttachTarget { webContainer }
+        webView = host.ensureWebView()
 
         // 初始站点：EXTRA_URL > EXTRA_START_URL > EXTRA_SITE > 默认
         val explicitUrl = intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }
             ?: intent?.getStringExtra(EXTRA_START_URL)?.takeIf { it.isNotBlank() }
         val siteKey = intent?.getStringExtra(EXTRA_SITE)?.takeIf { it.isNotBlank() } ?: DEFAULT_SITE
         switchTo(siteKey, explicitUrl)
+    }
+
+    /**
+     * AI-169：把共享宿主挂到本页的全屏容器。
+     *
+     * 容器必须先在窗口里完成布局，`AttachGate` 的体检（已 attached / isShown / 尺寸非零）
+     * 才会通过；因此用 post 等一帧，而不是在 onCreate 里硬挂。
+     */
+    override fun onResume() {
+        super.onResume()
+        if (!::host.isInitialized) return
+        requireUiThread("onResume.attach")
+        host.setAttachTarget { webContainer }
+        webContainer.post {
+            host.attach()
+            log("WINDOW", "attach status=${host.status()} container=${webContainer.width}x${webContainer.height}")
+        }
+    }
+
+    /** 只移除不销毁：WebView / Cookie / 登录态保留，返回主界面后识牌可直接复用。 */
+    override fun onPause() {
+        super.onPause()
+        if (::host.isInitialized) {
+            host.detachFromVisible()
+            log("WINDOW", "detached (webview + session kept)")
+        }
+    }
+
+    override fun onDestroy() {
+        if (::host.isInitialized) {
+            // 不调用 destroy()：页面与登录态属于整个进程；本页只解除挂接与回调注入。
+            host.onPageFinished = null
+            host.setAttachTarget(null)
+            host.detachFromVisible()
+        }
+        super.onDestroy()
     }
 
     /** 站点切换栏：DeepSeek / Gemini / 自定义。 */
@@ -350,6 +347,10 @@ open class AiProbeActivity : Activity() {
             // AI-166/AI-167：离屏挂接自检。
             "offscreen" -> runOffscreenSelfCheck()
             "offscreen_e2e" -> runOffscreenE2E()
+            // AI-178：走生产驱动（WebViewAiSource + PageDriver）的离屏端到端。
+            "source_e2e" -> runSourceEndToEnd()
+            // AI-133/134：同一会话连续两张图 + 追问，验证附件/回答不串线。
+            "source_e2e_twice" -> runSourceEndToEndTwice()
             "e2e" -> runEndToEnd()
             "textonly" -> runTextOnlyControl()
             else -> log("AUTO", "unknown mode")
@@ -634,6 +635,131 @@ open class AiProbeActivity : Activity() {
     }
 
     /**
+     * AI-178：用生产驱动跑离屏端到端。
+     *
+     * 与 `e2e` 的区别：这里不手工拼“粘贴 → 点发送 → 轮询”，而是构造
+     * `WebViewAiSource(adapter, host, bridge)`，走与主界面完全相同的 `recognize()`
+     * 状态机（发送前快照、脏输入区处理、上传策略、提交三态、回答解析）。
+     * 必须用 `--es test_image` 提供真实手牌照片；占位图无法证明模型读了像素。
+     */
+    private fun runSourceEndToEnd() {
+        if (!::host.isInitialized) {
+            log("SOURCE_E2E_FAIL", "host not initialized")
+            return
+        }
+        val src = intent?.getStringExtra(EXTRA_TEST_IMAGE)?.takeIf { it.isNotBlank() }
+        if (src == null) {
+            log("SOURCE_E2E_FAIL", "missing --es test_image (real hand photo required)")
+            return
+        }
+        // 模拟主界面：没有可见容器，识牌必须走离屏宿主。
+        host.setAttachTarget { null }
+        host.setOffscreenAnchorProvider { anchor ->
+            (window.decorView as android.view.ViewGroup).addView(
+                anchor,
+                android.view.ViewGroup.LayoutParams(1, 1)
+            )
+        }
+        log("SOURCE_E2E", "start adapter=${adapter.siteKey} src=$src")
+        Thread({
+            try {
+                val dir = java.io.File(cacheDir, "probe").apply { mkdirs() }
+                val jpeg = java.io.File(dir, "source_e2e.jpg")
+                if (!encodeExternalImage(src, jpeg)) {
+                    log("SOURCE_E2E_FAIL", "encode image failed")
+                    return@Thread
+                }
+                val bytes = jpeg.readBytes()
+                log("SOURCE_E2E", "image=${bytes.size} bytes; running production pipeline")
+                val source = WebViewAiSource(
+                    adapter = adapter,
+                    host = host,
+                    bridge = WebViewBridge(host)
+                )
+                val cards = source.recognize(
+                    RecognizeRequest(jpegBytes = bytes, prompt = AiRecognitionClient.PROMPT)
+                )
+                log("SOURCE_E2E_OK", "cards=${cards.size} status=${host.status()}")
+                log(
+                    "SOURCE_E2E_CARDS",
+                    cards.joinToString(" ") { "${it.rank.label}${it.suit.name}" }
+                )
+            } catch (e: Exception) {
+                log("SOURCE_E2E_FAIL", "${e.javaClass.simpleName}: ${e.message}")
+            }
+        }, "source-e2e").start()
+    }
+
+    /**
+     * AI-133 / AI-134：同一会话连续两张图（第二张同时是一次追问）。
+     *
+     * 复用**同一个** `WebViewAiSource` 实例：第一轮结束后 `PageDriver.navigatedTo`
+     * 已经指向首页，第二轮不会重新导航，而是在同一会话里继续提交。这正是
+     * “连续两图 / 追问”要验证的路径：不能残留第一张附件，也不能把第一轮回答
+     * 当成第二轮结果。
+     */
+    private fun runSourceEndToEndTwice() {
+        if (!::host.isInitialized) {
+            log("SOURCE_E2E_TWICE_FAIL", "host not initialized")
+            return
+        }
+        val src1 = intent?.getStringExtra(EXTRA_TEST_IMAGE)?.takeIf { it.isNotBlank() }
+        val src2 = intent?.getStringExtra(EXTRA_TEST_IMAGE2)?.takeIf { it.isNotBlank() }
+        if (src1 == null || src2 == null) {
+            log("SOURCE_E2E_TWICE_FAIL", "need --es test_image and --es test_image2")
+            return
+        }
+        host.setAttachTarget { null }
+        host.setOffscreenAnchorProvider { anchor ->
+            (window.decorView as android.view.ViewGroup).addView(
+                anchor,
+                android.view.ViewGroup.LayoutParams(1, 1)
+            )
+        }
+        log("SOURCE_E2E_TWICE", "start src1=$src1 src2=$src2")
+        Thread({
+            try {
+                val bytes1 = prepareSourceImage(src1, "source_e2e_1.jpg")
+                val bytes2 = prepareSourceImage(src2, "source_e2e_2.jpg")
+                if (bytes1 == null || bytes2 == null) {
+                    log("SOURCE_E2E_TWICE_FAIL", "encode image failed")
+                    return@Thread
+                }
+                val source = WebViewAiSource(
+                    adapter = adapter,
+                    host = host,
+                    bridge = WebViewBridge(host)
+                )
+                val first = source.recognize(
+                    RecognizeRequest(jpegBytes = bytes1, prompt = AiRecognitionClient.PROMPT)
+                )
+                log("SOURCE_E2E_FIRST", "cards=${first.size} ${cardSummary(first)}")
+                val second = source.recognize(
+                    RecognizeRequest(jpegBytes = bytes2, prompt = AiRecognitionClient.PROMPT)
+                )
+                log("SOURCE_E2E_SECOND", "cards=${second.size} ${cardSummary(second)}")
+                log(
+                    "SOURCE_E2E_TWICE_OK",
+                    "first=${first.size} second=${second.size} status=${host.status()}"
+                )
+            } catch (e: Exception) {
+                log("SOURCE_E2E_TWICE_FAIL", "${e.javaClass.simpleName}: ${e.message}")
+            }
+        }, "source-e2e-twice").start()
+    }
+
+    /** 把外部图片压成 JPEG 并读回字节；失败返回 null。 */
+    private fun prepareSourceImage(src: String, name: String): ByteArray? {
+        val dir = java.io.File(cacheDir, "probe").apply { mkdirs() }
+        val out = java.io.File(dir, name)
+        if (!encodeExternalImage(src, out)) return null
+        return out.readBytes()
+    }
+
+    private fun cardSummary(cards: List<nz.org.aotearoa.guandanscore.model.Card>): String =
+        cards.joinToString(" ") { "${it.rank.label}${it.suit.name}" }
+
+    /**
      * AI-011：记录可见 WebView 的窗口基线，供后续切后台 / 重建对照。
      *
      * 视图侧：像素尺寸、density、是否 attachedToWindow、可见性、页面缩放。
@@ -771,7 +897,7 @@ open class AiProbeActivity : Activity() {
             val src = intent?.getStringExtra(EXTRA_TEST_IMAGE)?.takeIf { it.isNotBlank() }
             if (src != null) {
                 if (encodeExternalImage(src, f)) {
-                    pendingChooserUri = Uri.fromFile(f)
+                    queueChooserImage(f)
                     return
                 }
                 log("PREP", "real image $src 不可读，回退占位图")
@@ -780,11 +906,24 @@ open class AiProbeActivity : Activity() {
             // 占位图仍是 1×1 PNG，保持原文件名以免影响既有验收命令。
             val placeholder = java.io.File(dir, "probe_upload.png")
             placeholder.writeBytes(png)
-            pendingChooserUri = Uri.fromFile(placeholder)
-            log("PREP", "wrote placeholder ${placeholder.absolutePath} (${placeholder.length()} bytes); chooser will deliver it")
+            queueChooserImage(placeholder)
         } catch (e: Exception) {
             log("PREP", "failed: ${e.message}")
         }
+    }
+
+    /**
+     * AI-169：把图片 URI 交给共享宿主的文件选择回填。
+     *
+     * 必须用 FileProvider `content://`：宿主安全配置关闭了 `allowFileAccess`，
+     * 且正式驱动层同样走 `content://`，探针要与生产路径一致才能复现真实行为。
+     */
+    private fun queueChooserImage(file: java.io.File) {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            this, "$packageName.files", file
+        )
+        host.prepareUpload(uri)
+        log("PREP", "queued ${file.absolutePath} (${file.length()} bytes) for chooser")
     }
 
     /**

@@ -65,6 +65,13 @@ object GeminiSelectors {
         "[role=\"button\"][aria-label*=\"Upload\" i]"
     )
 
+    /**
+     * 输入区附件预览。与 `GeminiScripts.verifyAttachment()` 的 previews 判据保持一致；
+     * 快照脚本用它回答“发送前是否已有待发送图片”（AI-042）。
+     */
+    const val ATTACHMENT =
+        "[data-test-id*='attachment'], [data-test-id*='upload'], .attachment-preview, .file-preview"
+
     /** 生成中/停止控件，仅作辅助信号。 */
     val GENERATING_CANDIDATES = listOf(
         "button[aria-label*=\"Stop\" i]",
@@ -80,4 +87,5 @@ object GeminiSelectors {
     fun fileInput(): String = FILE_INPUT_CANDIDATES.joinToString(",")
     fun uploadTools(): String = UPLOAD_TOOLS_CANDIDATES.joinToString(",")
     fun generating(): String = GENERATING_CANDIDATES.joinToString(",")
+    fun attachment(): String = ATTACHMENT
 }

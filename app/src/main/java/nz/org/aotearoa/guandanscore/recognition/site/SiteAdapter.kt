@@ -44,14 +44,32 @@ data class SendState(
     }
 }
 
-/** 回答快照，`GenerationWatcher.Sample` 的数据来源。 */
+/**
+ * 回答快照，`GenerationWatcher.Sample` 的数据来源。
+ *
+ * AI-042：除回答本身，还必须记录发送前的**输入框内容**、**待发送附件状态**和
+ * **会话标识**，否则无法回答两个安全问题：
+ * - 本轮提交的是不是空白输入区（上一轮残留文本会被一起发出去）；
+ * - 本轮附件是不是只有本次图片（上一轮图片残留会让模型看错图）。
+ *
+ * 这三项都只是“页面现状”的读数，不参与成功判定；默认空值保持既有实现零改动。
+ */
 data class AnswerSnapshot(
     val responseCount: Int,
     val lastAnswerText: String,
     val generating: Boolean,
     val loginFormPresent: Boolean,
-    val pageUrl: String
+    val pageUrl: String,
+    /** 发送前输入框里的文本（空串表示干净）。 */
+    val inputText: String = "",
+    /** 发送前是否已有待发送附件预览。 */
+    val attached: Boolean = false,
+    /** 可读取的会话标识（站点会话 URL 中的 id）；取不到时为空串。 */
+    val sessionId: String = ""
 ) {
+    /** 输入区是否有本轮不能继承的残留（文本或附件）。 */
+    val composerDirty: Boolean get() = inputText.isNotBlank() || attached
+
     companion object {
         val EMPTY = AnswerSnapshot(0, "", false, false, "")
     }

@@ -5,6 +5,7 @@ import android.util.Log
 import nz.org.aotearoa.guandanscore.model.Card
 import nz.org.aotearoa.guandanscore.recognition.AiCardResponseParser
 import nz.org.aotearoa.guandanscore.recognition.GenerationWatcher
+import nz.org.aotearoa.guandanscore.recognition.site.AnswerSnapshot
 import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.SubmitOutcome
 import nz.org.aotearoa.guandanscore.recognition.site.UploadStrategy
@@ -64,6 +65,9 @@ class WebViewAiSource(
 
     private companion object {
         const val TAG = "WebViewAiSource"
+
+        /** AI-042：等上一轮生成的宽限；超时后改用确认过的新会话。 */
+        const val GENERATION_DRAIN_TIMEOUT_MILLIS = 15_000L
     }
 
     override val id: String = adapter.siteKey
@@ -168,7 +172,8 @@ class WebViewAiSource(
         while (true) {
             if (cancelled) throw AiSourceError.Cancelled()
 
-            val baseline = pages.captureBaseline()
+            // AI-042 / AI-082：先确认输入区干净、上一轮已结束，再为新回答建基线。
+            val baseline = prepareBaseline(pages.captureBaseline())
             val watcher = watcherFactory()
             watcher.reset(
                 GenerationWatcher.Baseline(baseline.responseCount, baseline.lastAnswerText),
@@ -226,6 +231,50 @@ class WebViewAiSource(
                 }
             }
         }
+    }
+
+    /**
+     * AI-042 / AI-082：把“页面现状”变成可以安全提交的基线。
+     *
+     * 三种必须拦在前面的脏状态：
+     * 1. 上一轮还在生成：继续提交会把两轮回答混在一起，先等结束；
+     * 2. 输入框有残留文本：本轮 prompt 会接在残留后面一起发出去；
+     * 3. 输入区已有附件预览：图片 A 会跟着图片 B 一起提交，模型看到的不是本轮图。
+     *
+     * 2/3 的处置是切换到**经 DOM 确认**的新会话（[PageOps.startNewConversation]），
+     * 而不是手动清空页面：新会话的输入区天然干净，也不会残留上一轮的发送状态。
+     */
+    private fun prepareBaseline(initial: AnswerSnapshot): AnswerSnapshot {
+        var base = initial
+        if (base.generating) {
+            Log.i(TAG, "page still generating; waiting before a new request")
+            val deadline = nowMillis() + GENERATION_DRAIN_TIMEOUT_MILLIS
+            while (base.generating && nowMillis() < deadline) {
+                if (cancelled) throw AiSourceError.Cancelled()
+                sleepMillis(pollIntervalMillis)
+                base = pages.pollSnapshot()
+            }
+            if (base.generating) {
+                Log.w(TAG, "generation did not settle; starting a confirmed new conversation")
+                if (!pages.startNewConversation()) throw AiSourceError.Busy()
+                base = pages.captureBaseline()
+            }
+        }
+        if (base.composerDirty) {
+            Log.w(
+                TAG,
+                "composer dirty (inputChars=${base.inputText.length} attached=${base.attached}); " +
+                    "starting a confirmed new conversation"
+            )
+            if (!pages.startNewConversation()) {
+                throw AiSourceError.SubmitFailed("输入框有残留内容或附件，且无法确认新会话已建立")
+            }
+            base = pages.captureBaseline()
+        }
+        if (base.composerDirty) {
+            throw AiSourceError.SubmitFailed("新会话仍不干净（输入框残留或附件未清除）")
+        }
+        return base
     }
 
     /**

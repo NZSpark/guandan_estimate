@@ -366,6 +366,56 @@ ChatGPTBridge 的图片流程为“解析图片 → 获取图片字节 → 创�
 - 为输入字节数和 JavaScript 序列化开销设置合理边界。ChatGPTBridge 的 `IMAGE_PASTE_ENABLED`、`IMAGE_PASTE_MAX` 与 `IMAGE_DOWNLOAD_TIMEOUT_MS` 是其服务端配置，不应未经设计就原样复制为 Android 配置；本应用首先处理单张本地手牌照片，不需要为其引入远程图片下载逻辑。
 - 当前仍需验证 ChatGPT 页面改版、登录状态、合成 paste 事件和附件预览选择器的实际行为。正式验收以前，`ChatGPTAdapter` 不得标记为已验证。
 
+### 5.6 实测结论与已知限制（2026-10-30 回填）
+
+> 设备：HUAWEI LIO-N29 / Android 10 / com.huawei.webview 114.0.5.302。
+> 本节只记录**已经跑出来的事实**；未跑过的项继续标注“未验证”，不得据此把源标成可用。
+
+#### 5.6.1 DeepSeek（首发源，端到端已通过）
+
+| 项目 | 实测结果 |
+|---|---|
+| 选择器 | 输入框 `textarea[placeholder*='Message DeepSeek']` 唯一且最内层；发送按钮是 `div.ds-button--circle.ds-button--primary`；回答容器 `.ds-assistant-message-main-content`；无 Shadow DOM |
+| 发送按钮可用性 | `disabled` / `aria-disabled` 均不生效，必须看尺寸 > 0 且无 `ds-button--disabled` 类；点击前由驱动层 `awaitSendEnabled` 轮询 |
+| 提交路径 | 同一次 JS turn 内填文本 + Enter/点击发送；`parseSubmitResult` 只在 `inputFilled && (sentEnter || sendClicked)` 时返回成功 |
+| 附件（PASTE） | 合成 `ClipboardEvent` 被接受并出现预览；`dispatchEvent` 返回 **false**，不得作为判据 |
+| 附件（FILE_CHOOSER） | JS `.click()` 因缺 user activation 不触发；原生触摸回形针可真实触发 `onShowFileChooser`，回填后 `attachmentCount=1` |
+| 结束判定 | **无 stop 控件**（`presetCount=0`、可见按钮扫描无 stop/停止），`generating` 恒 false，只能靠文本增长 + 连续稳定 |
+| 带图 / 不带图对照 | 带图解析出 20~27 张具体牌面；不带图时模型明确回答“没有看到手牌照片”，`cards=0` |
+| 会话 URL | `/a/chat/s/<id>`；快照额外返回 `sessionId`（只读，不拼接） |
+| 风控 / 网络 | 页面自身次要请求可能 `ERR_NAME_NOT_RESOLVED`，不影响主流程；不要误判为断网 |
+| 附件计数作用域 | 只统计 composer 上方第 3 层（真机 DOM levels `0\|0\|1`）；历史消息里的图片在第 6 层。全局计数会把**已发送**的图片当成本轮待发送附件，进而误判“附件已就绪”或误开新会话 |
+| 发送按钮未渲染 | 冷启动首轮可能只有输入框、发送按钮尚未出现。旧脚本仍会派发 Enter 并返回 `sentEnter=true`，属于**假提交**。现在没有可用发送按钮就不发送，由 `awaitSendEnabled()` 等按钮就绪后重填一次 |
+| 连续两图 / 追问 | `--es auto source_e2e_twice`（case3.png → case14.jpg，同一 `WebViewAiSource`）：第一轮 27 张、第二轮 22 张，两轮牌面列表不同，未串上一轮回答，第二轮也未带上一轮附件 |
+| 首轮耗时 | 离屏冷启动到解析完成约 10 秒（11:43:00 提交 → 11:43:11 `cards=27`）；两轮合计约 19 秒，均在默认超时内 |
+
+#### 5.6.2 Gemini（回归基线）
+
+- 真机可登录；`rich-textarea [contenteditable]` + `Send message` + 合成 paste 闭环历史通过。
+- `Upload and tools` 点击只弹网页自渲染面板（Photos / Files / Drive），**不是**系统文件选择器；`FILE_CHOOSER` 需再点面板二级入口，尚未实现自动化。
+- Gemini 的 `supportedUploads` 仍只有 `PASTE`（AI-124）。
+
+#### 5.6.3 ChatGPT（未真机验证）
+
+- `ChatGPTAdapter` / `ChatGPTScripts` / `ChatGPTSelectors` 与五源注册已落地，单测覆盖脚本编码、提交证据判据、附件判据与发送状态解析。
+- **尚未**在目标设备登录并核对选择器命中数，也未验证 PASTE 附件预览；因此 README 与配置页均不得写成“已验证可用”。
+- `supportedUploads = {PASTE}`，不启用 `FILE_CHOOSER` 回退，避免把别的站点路径当既成事实。
+
+#### 5.6.5 共享宿主、三态切换与离屏提交（2026-10-30 真机）
+
+| 项目 | 实测结果 |
+|---|---|
+| 宿主共用 | `MainActivity` 与 `AiProbeActivity` 共用进程级 `WebViewHost`。探针不再自建 WebView，主界面的「打开网页登录」进入的就是识牌用的同一个实例 |
+| 单父容器切换 | 可见容器 `1176x1801` → 离屏：日志 `attach: webview still parented by FrameLayout, removing`，随后 `OFFSCREEN_ATTACH attached=true status=Offscreen layout=1176x2328`；返回可见重新 `attach status=Attached`，全程无 `IllegalStateException` |
+| 冷启动 | 进程被回收后主界面显示「状态：页面暂不可用（AI 页面未挂接（请先打开一次 AI 页面））」，不误报未登录；打开 AI 页面后回到主界面即变为「状态：网页可用」，登录态保持不变（同 pid 15623） |
+| 探针销毁 | 主界面 `onDestroy` 不再 `destroy()` 共享 WebView：真机日志证实旧实现会把登录页正在用的实例销毁，导致返回后永远「未挂接」 |
+| 离屏提交 | 生产驱动 `source_e2e`：可见 → 离屏 → PASTE → 附件确认 → 提交 → `SOURCE_E2E_OK cards=27 status=Offscreen` |
+| 视口指标 | 可见 `1176x1801`（页面 `innerHeight=601`）；离屏 `1176x2328`（`innerHeight=776`，DPR 3 → 392×776 CSS px），高于 `AttachGate` 阈值 |
+
+#### 5.6.4 与 §5.3 的差异
+
+§5.3 的“首选失败就回退另一条”已按 AI-124 收紧：驱动层现在只尝试适配器 `supportedUploads` 明确声明且真机验证过的策略；不再因为“另一条理论上存在”而自动回退。
+
 ## 6. 必须遵守的硬规则（来自 SMSProxy 的回归教训）
 
 | 编号 | 规则 | 原因 |

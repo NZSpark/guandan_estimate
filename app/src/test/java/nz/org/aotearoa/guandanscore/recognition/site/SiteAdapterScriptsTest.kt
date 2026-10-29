@@ -217,12 +217,53 @@ class SiteAdapterScriptsTest {
     @Test
     fun deepSeekSnapshotMapsFields() {
         val snap = DeepSeekAdapter().parseSnapshot(
-            JSONObject("""{"responseCount":3,"lastAnswerText":"abc","generating":false,"passwordCount":0,"loginIndicatorCount":0,"href":"https://x"}""")
+            JSONObject(
+                """{"responseCount":3,"lastAnswerText":"abc","generating":false,"passwordCount":0,"loginIndicatorCount":0,"href":"https://x","inputText":" 残留 ","attachmentCount":1,"attached":true,"sessionId":"s1"}"""
+            )
         )
         assertEquals(3, snap.responseCount)
         assertEquals("abc", snap.lastAnswerText)
         assertFalse(snap.loginFormPresent)
         assertEquals("https://x", snap.pageUrl)
+        // AI-042：发送前输入区现状与会话标识必须可读，供脏输入区判断。
+        assertEquals("残留", snap.inputText)
+        assertTrue(snap.attached)
+        assertTrue(snap.composerDirty)
+        assertEquals("s1", snap.sessionId)
+    }
+
+    /** AI-042：所有适配器都必须能读出输入区/附件/会话标识，不能只对 DeepSeek 生效。 */
+    @Test
+    fun everyAdapterParsesComposerAndSessionFields() {
+        val json = JSONObject(
+            """{"responseCount":0,"lastAnswerText":"","generating":false,"passwordCount":0,"loginIndicatorCount":0,"href":"https://x","inputText":"abc","attached":true,"sessionId":"sid"}"""
+        )
+        listOf(DeepSeekAdapter(), GeminiAdapter(), ChatGPTAdapter()).forEach { adapter ->
+            val snap = adapter.parseSnapshot(json)
+            assertEquals(adapter.siteKey, "abc", snap.inputText)
+            assertTrue(adapter.siteKey, snap.attached)
+            assertEquals(adapter.siteKey, "sid", snap.sessionId)
+        }
+    }
+
+    /**
+     * AI-042/AI-082：附件判据必须限定在 composer 内。
+     * 全局计数会把历史消息里的 blob 图片当成“待发送附件”（真机已复现：第二轮误判）。
+     */
+    @Test
+    fun attachmentVerificationIsScopedToComposer() {
+        listOf(DeepSeekAdapter(), GeminiAdapter(), ChatGPTAdapter()).forEach { adapter ->
+            val script = adapter.verifyAttachmentScript()
+            assertTrue(adapter.siteKey, script.contains("composer-not-found"))
+            assertTrue(adapter.siteKey, script.contains("box.querySelectorAll"))
+        }
+    }
+
+    /** 输入区干净时 snapshot 不得被误判为脏（否则每轮都白建新会话）。 */
+    @Test
+    fun cleanSnapshotIsNotDirty() {
+        val snap = AnswerSnapshot(0, "", false, false, "", inputText = "  ", attached = false)
+        assertFalse(snap.composerDirty)
     }
 
     /**

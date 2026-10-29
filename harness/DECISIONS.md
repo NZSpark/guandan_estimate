@@ -140,3 +140,35 @@
 **约束**：`WindowStatus` 必须如实区分 Attached / Offscreen / NotAttached / NotCreated，不允许把「已创建」当「已挂接」；离屏挂接成功前不得缓存 `navigatedTarget`；`WindowStatusTest` 钉住「Offscreen 与 Attached 等价可用」。文件选择回填涉及的目录必须同时声明在 `res/xml/file_paths.xml`（`ai-upload/`、`probe/`），否则 `FileProvider.getUriForFile` 抛 `Failed to find configured root`。
 
 **状态**：Active
+
+---
+
+## ADR-0014 · 2026-10-30 · 业务层只依赖 `AiSource`，提交前快照必须包含输入区状态
+
+**决策**：
+
+1. 删除 Gemini 专用的 `AiRecognitionService` / `GeminiUpstream` 及其测试。网页识牌的唯一生产编排是 `WebViewAiSource` + `PageOps`，HTTP 识牌是 `HttpApiSource`；`MainActivity` 只依赖 `recognition/source` 的接口与注册表。
+2. `AnswerSnapshot` 除回答外同时记录 `inputText` / `attached` / `sessionId`。当 `inputText` 非空或已有附件预览时，驱动层不手动清空、也不直接提交，而是调用 `PageOps.startNewConversation()`：真实回到站点首页，再用 DOM 快照确认 `responseCount == 0 && !generating && 输入区干净`。确认不了就返回 `SubmitFailed`。
+
+**理由**：`AiRecognitionService` 与 `GeminiUpstream` 是单源时代的骨架，生产路径早已改用 `AiSourceRegistry` + `WebViewAiSource`，保留它们只会让“业务层不感知站点”的约束看起来没被满足，并额外维护 15 个只测旧骨架的用例。另一个真机风险是输入区残留：上一轮的文本会拼进本轮 prompt，上一轮的图片附件会让模型看错图；仅靠“写新图前删缓存”只能清磁盘，清不掉页面里已经挂上的预览。把输入区状态纳入基线，才能在提交前做出可验证的判断。
+
+**约束**：新增网页源只实现 `SiteAdapter` 并注册预设，不得再引入站点专用的业务服务或状态机。任何新的“提交前检查”都必须来自快照读数，不得靠假设或 URL 拼接；新会话确认失败必须显式失败，不得降级为“应该没问题”继续提交。
+
+**状态**：Active
+
+---
+
+## ADR-0015 · 2026-10-30 · 登录页与识牌共用同一 WebView，提交证据必须限定在 composer
+
+**决策**：
+
+1. `AiProbeActivity` 不再自建 WebView，改为挂接进程级 `WebViewHost` 的同一实例；主界面与登录/诊断页共享登录态与页面状态。
+2. 可见容器 ↔ 离屏锚点切换统一在 `WebViewHost.attach*` 内先解除旧父容器（`removeHostFromParent(dropWebView = false)`）再加新父容器；`MainActivity.onDestroy()` 不得 `destroy()` 共享实例，实例销毁只由 `WebViewHost` 自身负责。
+3. 附件就绪判据只统计 composer 之上第 3 层内的预览节点；历史消息区域（第 6 层）的图片一律不算本轮附件。
+4. 提交前必须存在可用发送按钮；按钮尚未渲染时先等 `awaitSendEnabled()`，再重填一次，禁止仅凭“Enter 已派发”返回 `submitted=true`。
+
+**理由**：真机复现了三类“看起来正确、实际错误”的状态。其一，登录页与识牌页各建 WebView，导致主界面 `onDestroy` 销毁登录页正在使用的实例，返回后永远「未挂接」（UI-019 卡住的根因）。其二，全局统计附件会把上一轮已发送的图片当成本轮附件，连续两图时可能不再上传新图。其三，冷启动首轮发送按钮尚未渲染，旧脚本先派发 Enter 再找按钮，`parseSubmitResult` 却返回成功，形成假提交——后续等待只会超时。
+
+**约束**：任何新页面/诊断入口都必须经 `WebViewHost.get(context)`，不得 `WebView(context)` 自建；父容器变更必须集中实现，页面代码不得直接 `addView` / `removeView`。附件与提交的判据只能来自 DOM 读数；新增站点适配器若 DOM 层级不同，须在 `verifyAttachmentScript()` 中显式限定作用域，不能退回全局计数。
+
+**状态**：Active

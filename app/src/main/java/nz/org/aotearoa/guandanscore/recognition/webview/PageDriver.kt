@@ -350,7 +350,40 @@ class PageDriver(
     override fun captureBaseline(): AnswerSnapshot {
         val json = JsonParse.parse(runBlockingEvaluate(adapter.snapshotScript()))
             ?: return AnswerSnapshot.EMPTY
-        return adapter.parseSnapshot(json)
+        val snapshot = adapter.parseSnapshot(json)
+        // 不打印 href（可能含会话标识），只打印判断提交安全性所需的读数。
+        Log.i(
+            TAG,
+            "baseline: responses=${snapshot.responseCount} inputChars=${snapshot.inputText.length} " +
+                "attached=${snapshot.attached} levels=${json.optString("attachmentLevels")}"
+        )
+        return snapshot
+    }
+
+    /**
+     * AI-046 / AI-082：建立并**确认**一个新会话。
+     *
+     * 动作是真实的页面操作：回到站点首页（站点自己的 new chat 入口），然后
+     * 用 DOM 快照确认「回答节点清零 + 输入区干净」。不拼接会话 URL，也不把
+     * “导航已发出”当作“新会话已建立”——SPA 完全可能把旧会话恢复出来。
+     */
+    override fun startNewConversation(): Boolean {
+        Log.i(TAG, "startNewConversation: navigating home for a fresh session")
+        if (!ensureLoaded(force = true)) {
+            Log.w(TAG, "startNewConversation failed: page not ready after reload")
+            return false
+        }
+        val base = captureBaseline()
+        val confirmed = base.responseCount == 0 && !base.generating && !base.composerDirty
+        if (!confirmed) {
+            Log.w(
+                TAG,
+                "startNewConversation not confirmed: responses=${base.responseCount} " +
+                    "generating=${base.generating} inputChars=${base.inputText.length} " +
+                    "attached=${base.attached}"
+            )
+        }
+        return confirmed
     }
 
     override fun pollSnapshot(): AnswerSnapshot {
@@ -456,8 +489,14 @@ class PageDriver(
     /** 校验附件预览。不通过即视为上传失败（M11）。 */
     override fun verifyAttachment(): Boolean {
         val deadline = nowMillis() + UPLOAD_TIMEOUT_MILLIS
+        var loggedSample = false
         while (nowMillis() < deadline) {
             val json = JsonParse.parse(runBlockingEvaluate(adapter.verifyAttachmentScript()))
+            // 只打首次读数：附件一直不出现时，靠它区分“没贴进去”与“选择器范围不对”。
+            if (!loggedSample && json != null) {
+                loggedSample = true
+                Log.i(TAG, "verifyAttachment sample: $json")
+            }
             if (json != null && adapter.parseAttachment(json)) return true
             sleepMillis(300)
         }

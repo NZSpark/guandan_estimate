@@ -30,6 +30,14 @@ class FakePageOps : PageOps {
     var answerSequence: List<AnswerSnapshot> = listOf(AnswerSnapshot(1, "", false, false, ""))
     var baselineSnapshot: AnswerSnapshot = AnswerSnapshot(0, "", false, false, "")
 
+    // 基线序列：每次 captureBaseline 依次返回（用于「脏输入区 → 新会话 → 干净」）。
+    var baselineSequence: List<AnswerSnapshot> = emptyList()
+    private var baselineIndex = 0
+
+    // AI-046：新会话是否经页面确认成功。
+    var startNewConversationResult = true
+    var startNewConversationCalls = 0
+
     // 提交结果
     var submitOutcome: SubmitOutcome = SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
 
@@ -64,7 +72,16 @@ class FakePageOps : PageOps {
 
     override fun captureBaseline(): AnswerSnapshot {
         calls += "captureBaseline"
-        return baselineSnapshot
+        if (baselineSequence.isEmpty()) return baselineSnapshot
+        val s = baselineSequence.getOrElse(baselineIndex) { baselineSequence.last() }
+        if (baselineIndex < baselineSequence.size - 1) baselineIndex++
+        return s
+    }
+
+    override fun startNewConversation(): Boolean {
+        calls += "startNewConversation"
+        startNewConversationCalls++
+        return startNewConversationResult
     }
 
     override fun pollSnapshot(): AnswerSnapshot {

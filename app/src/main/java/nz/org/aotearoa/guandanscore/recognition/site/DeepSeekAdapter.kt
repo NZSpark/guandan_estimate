@@ -127,7 +127,10 @@ open class DeepSeekAdapter : SiteAdapter, PasteCapableAdapter {
         generating = json.optBoolean("generating", false),
         loginFormPresent = json.optInt("passwordCount", 0) > 0 &&
             json.optInt("loginIndicatorCount", 0) > 0,
-        pageUrl = json.optString("href", "")
+        pageUrl = json.optString("href", ""),
+        inputText = json.optString("inputText", "").trim(),
+        attached = json.optBoolean("attached", false),
+        sessionId = json.optString("sessionId", "")
     )
 
     override fun parseDiagnose(json: JSONObject): DiagnoseResult = DiagnoseResult(

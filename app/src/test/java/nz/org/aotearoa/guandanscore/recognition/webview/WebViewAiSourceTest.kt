@@ -295,6 +295,80 @@ class WebViewAiSourceTest {
         assertEquals(2, result.size)
     }
 
+    /** AI-042/AI-082：输入框有残留文本时，先切到经确认的新会话再提交。 */
+    @Test
+    fun leftoverInputStartsConfirmedNewConversation() {
+        val pages = FakePageOps().apply {
+            baselineSequence = listOf(
+                AnswerSnapshot(0, "", false, false, "", inputText = "上一轮的指令"),
+                AnswerSnapshot(0, "", false, false, "")
+            )
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val result = source(pages).recognize(request())
+        assertEquals(2, result.size)
+        assertEquals(1, pages.startNewConversationCalls)
+        assertTrue(pages.calls.indexOf("startNewConversation") < pages.calls.indexOf("fillAndSubmit"))
+    }
+
+    /** AI-082：上一轮附件未清空时也必须先新建会话，不能把图片 A 带进图片 B。 */
+    @Test
+    fun leftoverAttachmentStartsConfirmedNewConversation() {
+        val pages = FakePageOps().apply {
+            baselineSequence = listOf(
+                AnswerSnapshot(0, "", false, false, "", attached = true),
+                AnswerSnapshot(0, "", false, false, "")
+            )
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        source(pages).recognize(request())
+        assertEquals(1, pages.startNewConversationCalls)
+        assertEquals(1, pages.verifyCalls)
+        assertTrue(pages.calls.indexOf("startNewConversation") < pages.calls.indexOf("verifyAttachment"))
+    }
+
+    /** 无法确认新会话时停止本轮，绝不带着残留输入区提交。 */
+    @Test
+    fun dirtyComposerWithoutNewConversationFailsBeforeSubmit() {
+        val pages = FakePageOps().apply {
+            baselineSnapshot = AnswerSnapshot(0, "", false, false, "", inputText = "残留")
+            startNewConversationResult = false
+        }
+        val e = assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+        assertTrue(e.message!!.contains("残留"))
+        assertFalse(pages.calls.contains("fillAndSubmit"))
+        assertFalse(pages.calls.contains("verifyAttachment"))
+    }
+
+    /** 新会话建立后输入区仍脏（页面未真正重置）→ 仍然失败，不赌运气。 */
+    @Test
+    fun newConversationStillDirtyFails() {
+        val pages = FakePageOps().apply {
+            baselineSequence = listOf(
+                AnswerSnapshot(0, "", false, false, "", attached = true),
+                AnswerSnapshot(0, "", false, false, "", attached = true)
+            )
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+        assertFalse(pages.calls.contains("fillAndSubmit"))
+    }
+
+    /** AI-042：上一轮仍在生成时先等它结束，不并发提交。 */
+    @Test
+    fun generatingBaselineWaitsInsteadOfSubmittingImmediately() {
+        val pages = FakePageOps().apply {
+            baselineSnapshot = AnswerSnapshot(1, "旧回答", true, false, "")
+            answerSequence = listOf(
+                AnswerSnapshot(1, "旧回答", false, false, ""),
+                AnswerSnapshot(2, cardsJson, false, false, "")
+            )
+        }
+        val result = source(pages).recognize(request())
+        assertEquals(2, result.size)
+        assertEquals(0, pages.startNewConversationCalls)
+    }
+
     /** 成功后 running 已释放，可以再次调用。 */
     @Test
     fun secondCallAfterSuccessIsNotBusy() {

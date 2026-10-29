@@ -600,7 +600,14 @@ class MainActivity : AppCompatActivity() {
         if (sourceId.isWebView) checkHealth(settings)
     }
 
+    /**
+     * AI-067：每次健康检查带序号；Activity 已销毁或已有更新的一次检查时丢弃迟到结果，
+     * 避免对失效界面更新状态。检查本身只读，不会销毁或重建业务 WebView。
+     */
+    private var healthCheckSeq = 0
+
     private fun checkHealth(settings: AiSettings) {
+        val seq = ++healthCheckSeq
         setState(state.copy(source = state.source.copy(health = HealthState.Checking)))
         Thread({
             val health = try {
@@ -613,7 +620,10 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 HealthState.Unavailable(e.localizedMessage ?: "检测失败")
             }
-            runOnUiThread { setState(state.copy(source = state.source.copy(health = health))) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || seq != healthCheckSeq) return@runOnUiThread
+                setState(state.copy(source = state.source.copy(health = health)))
+            }
         }, "ai-health-check").start()
     }
 
@@ -728,7 +738,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         worker.shutdownNow()
-        webHost.destroy()
+        // AI-169：宿主是**进程级**的，不能由主界面销毁。
+        // 真机实测：主界面 →「打开网页登录」→ 返回键回主界面再返回登录页时，
+        // 主界面的 onDestroy 会把登录页正在使用的 WebView 销毁（日志 `destroy: webview released`），
+        // 页面随即变成空白。登录态与页面属于整个进程，Activity 退出只停止本页任务。
         super.onDestroy()
     }
 }

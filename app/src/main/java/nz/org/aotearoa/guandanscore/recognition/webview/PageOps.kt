@@ -65,6 +65,18 @@ interface PageOps {
 
     fun captureBaseline(): AnswerSnapshot
 
+    /**
+     * AI-046：建立一个**经 DOM 确认**的新会话。
+     *
+     * 这是页面操作 + 状态确认的组合：真正导航到站点首页（站点自身的 new chat），
+     * 再用快照验证「回答节点为 0、输入区干净」。仅拼接会话 URL 或看到导航完成
+     * 都不算成功——SPA 可能把旧会话原样恢复。
+     *
+     * 返回 false 表示无法确认；调用方不得把它当成“新会话”继续提交。
+     * 默认不支持，保持既有实现零改动。
+     */
+    fun startNewConversation(): Boolean = false
+
     fun pollSnapshot(): AnswerSnapshot
 
     fun fillAndSubmit(prompt: String, fileName: String, mimeType: String, base64: String): SubmitOutcome
@@ -92,7 +104,7 @@ interface PageOps {
      * 返回 false 表示超时或实现方不支持；调用方据此重新填文本，
      * **不得**对 disabled 按钮点击并当作提交成功。
      */
-    fun awaitSendEnabled(timeoutMillis: Long = 3_000L): Boolean = false
+    fun awaitSendEnabled(timeoutMillis: Long = 5_000L): Boolean = false
 
     fun diagnose(): DiagnoseResult?
 }

@@ -74,6 +74,15 @@ class AiSettingsScreen(
         // UI-015：网页源必须整体隐藏 API 专属字段（含标签），因此提前收集。
         val apiSection = mutableListOf<View>()
 
+        // AI-065：网页源的实际模型由网页登录会话决定，不能像 API 源那样指定。
+        val webHint = TextView(activity).apply {
+            text = "实际模型由网页会话决定，此处不能指定"
+            textSize = 12f
+            setPadding(0, 6, 0, 2)
+            setTextColor(0xff59645E.toInt())
+            visibility = View.GONE
+        }
+
         val health = TextView(activity).apply {
             textSize = 13f
             setPadding(0, 12, 0, 4)
@@ -110,6 +119,7 @@ class AiSettingsScreen(
         fun applyVisibility(source: AiSourceId) {
             val web = source.isWebView
             homeUrl.visibility = if (web) View.VISIBLE else View.GONE
+            webHint.visibility = if (web) View.VISIBLE else View.GONE
             endpoint.visibility = if (web) View.GONE else View.VISIBLE
             model.visibility = if (web) View.GONE else View.VISIBLE
             apiKey.visibility = if (web) View.GONE else View.VISIBLE
@@ -242,6 +252,7 @@ class AiSettingsScreen(
             addView(label("首页 URL"))
             addView(homeUrl)
             addView(homeError)
+            addView(webHint)
             apiSection.addAll(listOf(
                 label("接口地址"), endpoint, endpointError,
                 label("模型"), model, modelError,
@@ -307,7 +318,12 @@ class AiSettingsScreen(
             } catch (e: Exception) {
                 "状态：检测失败（${e.localizedMessage ?: "未知错误"}）"
             }
-            activity.runOnUiThread { done(text) }
+            // AI-067：设置页关闭 / Activity 已销毁时不得再回写 UI；检查只读，
+            // 不会销毁共享 WebView，登录态与页面都保留。
+            activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                done(text)
+            }
         }, "ai-settings-health").start()
     }
 

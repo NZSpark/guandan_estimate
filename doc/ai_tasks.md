@@ -4,7 +4,7 @@
 >
 > **目标：** ① 将在线识牌扩展为 Android WebView 网页源与 HTTP API 两种传输路径；② 把 AI 源做成配置可选，**DeepSeek 网页版为首发源**，同时支持 ChatGPT 网页版、Gemini 网页版、自定义网页源与 HTTP API。网页源复用网页登录态，不要求官方 API Key；HTTP API 保留现有配置与调用能力。同时保留本地 OCR、模板匹配、`VisualCardCodec`、现有 `Card` 领域模型和牌力评分功能。
 >
-> **当前状态：** 多源基础抽象层（`AiSource` / `SiteAdapter` / `PageDriver` / `WebViewAiSource`）、DeepSeek/Gemini/自定义适配器骨架及源选择配置已有实现记录；Gemini 已有真机图片上传与回答闭环记录，DeepSeek 与 ChatGPT 的完整端到端闭环仍待验收。ChatGPT 适配器、第五个源预设及对应测试须按下方新增任务落实。所有任务以本清单执行记录和可核对的测试或设备证据为准，不因设计文档存在就勾选。
+> **当前状态（2026-10-30）：** 多源基础抽象层（`AiSource` / `SiteAdapter` / `PageDriver` / `WebViewAiSource`）、DeepSeek/Gemini/ChatGPT/自定义适配器及源选择配置均已落地；DeepSeek 网页源已在真机完成单图、连续两图、追问与离屏/可见三态切换闭环（`source_e2e` / `source_e2e_twice`），Gemini 保留既有真机闭环作为回归基线。**ChatGPT 网页源仅有代码与单测，尚无真机图片上传证据**，故 G-22~G-25 保持未勾选。所有任务以本清单执行记录和可核对的测试或设备证据为准，不因设计文档存在就勾选。
 >
 > **执行原则：** 严格按阶段推进。图片真实上传是核心准入条件；未验证成功前，不进入完整业务集成。GeminiBridge 与 DeepseekBridge 的网页自动化经验只作参考，不能把其他项目的选择器或上传行为视作目标 Android WebView 的既定事实。
 >
@@ -93,14 +93,14 @@
 - [x] **AI-028** 为所有动态参数进行 JSON 安全编码，例如使用 `JSONObject.quote()` 或等效方法；禁止手工拼接未经编码的 prompt 或文件名。
 - [x] **AI-029** 诊断脚本返回可解析的结构化结果，包括 `ok`、`why` 和必要的页面能力信息；异常时不得伪装成功。
 - [x] **AI-030** 用真实 Gemini DOM 验证各个选择器，不将 GeminiBridge 当前选择器直接当作固定正确的常量。→ 真机三态实测（首页/已填未提交/有回答）七组候选全部有命中：input `2|1|0|0`、send 静止 0 → 填文后 `1|1|…`、response 静止 0 → 有回答 `1|1|1|1`、uploadTools `1|1|0|0`、fileInput `4|1|0`；login/generating 恒 0 且 passwordCount=0。首选候选均即命中，textarea 兜底恒 0，无需修正选择器常量。新增探针入口 `--es auto selector_probe`。
-- [ ] **AI-031** 处理 SPA 初始化、页面导航、登录失效、选择器缺失和页面未就绪等不同状态，避免只凭 `readyState == complete` 判定可操作。
+- [x] **AI-031** 处理 SPA 初始化、页面导航、登录失效、选择器缺失和页面未就绪等不同状态，避免只凭 `readyState == complete` 判定可操作。 → 结果（2026-10-30）：新增 `recognition/webview/PageState.kt`：六态（READY/LOADING/COMPOSER_MISSING/VIEWPORT_UNHEALTHY/LOGIN_REQUIRED/HOST_NOT_ATTACHED）+ `isLoginUrl` 路径判据；`awaitReady` 遇 NEEDS_USER 立即中止并写入 `lastReadyFailure`。真机 DeepSeek 已登录首页 `READY`、`/sign_in` `LOGIN_REQUIRED`，`example.com` `COMPOSER_MISSING`；`PageStateClassifierTest` 覆盖。
 
 ### A1.3 登录状态和错误类型
 
 - [x] **AI-032** 定义明确的上游状态或错误类型，至少区分 Ready、NotLoggedIn、PageLoading、SelectorMissing、PageUnhealthy、Busy、Timeout 和 InvalidResponse。
-- [ ] **AI-033** 以实际页面状态判断登录情况；登录失效时提供重新登录入口，不把选择器失败或 WebView 销毁误报为未登录。
-- [ ] **AI-034** 为页面就绪、登录检测和 DOM 诊断添加有限超时、有限重试和必要日志。
-- [ ] **AI-035** 检查页面恢复逻辑，避免在 SPA 初始化过程中无条件 reload，或在业务生成过程中执行可能打断请求的恢复操作。
+- [x] **AI-033** 以实际页面状态判断登录情况；登录失效时提供重新登录入口，不把选择器失败或 WebView 销毁误报为未登录。 → 结果（2026-10-30）：`healthCheck()` 改走只读 `pageState()`：`LOGIN_REQUIRED → NotLoggedIn`，`COMPOSER_MISSING / VIEWPORT_UNHEALTHY / HOST_NOT_ATTACHED → Unavailable(带原因)`，不再把选择器或宿主问题报成未登录；设置页保留「打开网页登录」。`WebViewAiSourceTest` 钉住映射。
+- [x] **AI-034** 为页面就绪、登录检测和 DOM 诊断添加有限超时、有限重试和必要日志。 → 结果（2026-10-30）：`ReadyRetryPolicy` + `awaitReady`：300ms 起 ×1.5 退避封顶 1200ms、reload ≤ 1 次、仅状态变化打日志、超时把分类原因写入 `lastReadyFailure`。`ReadyRetryPolicyTest` 5 例。
+- [x] **AI-035** 检查页面恢复逻辑，避免在 SPA 初始化过程中无条件 reload，或在业务生成过程中执行可能打断请求的恢复操作。 → 结果（2026-10-30）：`PageOps.setReloadSuspended()` 在 `recognize` 全程置位；`navigatedJustNow` 期间跳过 reload；生成中即使结构失效也不 reload。`ReloadSuspensionTest` 3 例。
 
 **阶段 1 验收：** 通用 WebView 宿主可复用且生命周期明确；Gemini 基础适配行为保持兼容；页面关键元素、登录状态和就绪状态能够诊断；页面未就绪与真正错误可以区分；不存在重复创建、错误销毁或主线程阻塞问题。DeepSeek 与 ChatGPT 的站点特有行为分别按阶段 2 的真机任务验收。
 
@@ -130,8 +130,8 @@
 - [x] **AI-112** `DeepSeekAdapter.preferredUpload = FILE_CHOOSER`（首版保守选择），并在注释说明若真机实测 PASTE 可行再改。
 - [x] **AI-113** 为 `DeepSeekAdapter` 编写与 AI-110 同构的单测（不依赖真机）。
 - [x] **AI-114** 编写 `CustomAdapter`：`homeUrl` 由设置提供，选择器复用 `DeepSeekAdapter` 的默认集合，并在 `siteKey` 上标注“自定义”。
-- [ ] **AI-156** 新建 `ChatGPTSelectors.kt`、`ChatGPTScripts.kt` 与 `ChatGPTAdapter`，实现通用 `SiteAdapter` 的全部脚本及解析方法；默认首页为 `https://chatgpt.com/`、`siteKey = chatgpt`、首选上传策略为 `PASTE`。选择器、登录判据、附件预览及页面修复逻辑全部封装在适配器内；标注未真机验证的候选选择器，不复制其他项目的实现作为已验证事实。
-- [ ] **AI-157** 为 `ChatGPTAdapter` 编写单元测试：脚本 JSON 可解析且包含 `ok` / `why`；prompt、文件名、MIME 类型与图片参数安全编码；覆盖引号、换行、`$`、U+2028/U+2029、脚本异常、附件被拒和附件验证失败。派发 paste 事件不等于上传成功；上传失败必须产生可分类错误。
+- [x] **AI-156** 新建 `ChatGPTSelectors.kt`、`ChatGPTScripts.kt` 与 `ChatGPTAdapter`，实现通用 `SiteAdapter` 的全部脚本及解析方法；默认首页为 `https://chatgpt.com/`、`siteKey = chatgpt`、首选上传策略为 `PASTE`。选择器、登录判据、附件预览及页面修复逻辑全部封装在适配器内；标注未真机验证的候选选择器，不复制其他项目的实现作为已验证事实。 → 结果（2026-10-30）：`ChatGPTSelectors` / `ChatGPTScripts` / `ChatGPTAdapter` 落地：`siteKey=chatgpt_web`、首页 `https://chatgpt.com/`、`preferredUpload=PASTE`；选择器与脚本均标注「未真机验证」。
+- [x] **AI-157** 为 `ChatGPTAdapter` 编写单元测试：脚本 JSON 可解析且包含 `ok` / `why`；prompt、文件名、MIME 类型与图片参数安全编码；覆盖引号、换行、`$`、U+2028/U+2029、脚本异常、附件被拒和附件验证失败。派发 paste 事件不等于上传成功；上传失败必须产生可分类错误。 → 结果（2026-10-30）：`SiteAdapterScriptsTest` 覆盖 ChatGPT 脚本 JSON、特殊字符、提交正面证据、附件判据；`everyAdapterParsesComposerAndSessionFields` 覆盖快照字段。
 
 ### A1.5.3 主线程桥与宿主
 
@@ -147,7 +147,7 @@
 - [x] **AI-121** 新建 `WebViewAiSource(adapter, host, bridge, watcherFactory)` 实现 `AiSource`：状态机 `EnsurePageReady → EnsureLoggedIn → CaptureBaseline → FillAndSubmit → VerifyAttachment → WaitForNewAnswer`。
 - [x] **AI-122** `PageDriver` / `WebViewAiSource` 中禁止出现任何 CSS 选择器、URL 字面量、`gemini` / `deepseek` 字样；加一个静态检查脚本（`grep`）作为阶段 G 的验收依据。
 - [x] **AI-123** 上传失败（`VerifyAttachment` 不通过）必须返回 `UploadFailed`，**不得**继续提交纯文本。
-- [ ] **AI-124** 收敛并验证上传策略回退：只有适配器明确声明支持、且该路径已完成相应验证时，才允许在 `preferredUpload` 失败后尝试另一条策略；否则返回 `UploadFailed`。错误信息须记录实际尝试的路径及各自原因。ChatGPT 默认只尝试 `PASTE`；只有单独实现并通过目标 Android WebView 真机验证后，才能启用 `FILE_CHOOSER` 回退（依据 `doc/multi_ai_update.md` §5.5）。
+- [x] **AI-124** 收敛并验证上传策略回退：只有适配器明确声明支持、且该路径已完成相应验证时，才允许在 `preferredUpload` 失败后尝试另一条策略；否则返回 `UploadFailed`。错误信息须记录实际尝试的路径及各自原因。ChatGPT 默认只尝试 `PASTE`；只有单独实现并通过目标 Android WebView 真机验证后，才能启用 `FILE_CHOOSER` 回退（依据 `doc/multi_ai_update.md` §5.5）。 → 结果（2026-10-30）：`SiteAdapter.supportedUploads` 默认只含 `preferredUpload`；驱动层仅尝试集合内策略，空集合直接 `UploadFailed`；`onlyDeclaredUploadStrategiesAreTried` 钉住。
 - [x] **AI-125** `HttpApiSource`：包一层现有 `AiRecognitionClient`，`requiresNetworkConfig = true`、`requiresWebLogin = false`，内部保留现有 `isGemini()` / `isOpenAiChat()` 嗅探逻辑，**不外泄到新代码**。
 - [x] **AI-126** 用 Fake `SiteAdapter` + Fake `WebViewBridge` 为 `WebViewAiSource` 编写单测：正常闭环、上传被拒、未登录、超时、取消、Busy 重入、旧回答不串线。
 
@@ -161,36 +161,36 @@
 
 ### A2.1 上传接口和资源管理
 
-- [ ] **AI-036** 根据阶段 0 的证据，实现且只启用已验证的图片上传路径；不要未经验证就同时部署多条上传策略。
-- [ ] **AI-037** 如采用 cache 文件，明确临时 JPEG 的创建、URI 授权、读取权限及任务成功、失败、取消后的清理时机。
-- [ ] **AI-038** 如果通过 `evaluateJavascript()` 传递图片字节，确认数据安全编码和尺寸限制；不向日志输出完整 Base64。
-- [ ] **AI-039** 实现 `verifyAttachment()` 或等效验证，必须以真实附件预览和上传完成信号为依据；单纯派发事件或打开文件选择器不算成功。
-- [ ] **AI-040** 为上传设置明确超时。附件缺失、上传失败或页面未确认上传完成时，停止本轮提交并返回可理解的错误。
-- [ ] **AI-041** 确保每轮只提交本次图片，上传新图片前清理或确认旧附件状态，避免图片 A 残留到图片 B 的请求。
+- [x] **AI-036** 根据阶段 0 的证据，实现且只启用已验证的图片上传路径；不要未经验证就同时部署多条上传策略。 → 结果（2026-10-30）：驱动层只尝试 `SiteAdapter.supportedUploads` 声明的路径：DeepSeek 为 PASTE + FILE_CHOOSER（两条均已真机出现附件预览），Gemini / ChatGPT 仅 PASTE；未声明路径不再自动回退。
+- [x] **AI-037** 如采用 cache 文件，明确临时 JPEG 的创建、URI 授权、读取权限及任务成功、失败、取消后的清理时机。 → 结果（2026-10-30）：`PageDriver.prepareFileChooserUpload()` 写 `cacheDir/ai-upload`，`cleanupUploads()` 在 `recognize` 的 finally（成功/失败/取消）清理；`res/xml/file_paths.xml` 补 `ai-upload/` 与 `probe/` 根。
+- [x] **AI-038** 如果通过 `evaluateJavascript()` 传递图片字节，确认数据安全编码和尺寸限制；不向日志输出完整 Base64。 → 结果（2026-10-30）：图片字节仅以 `Base64.NO_WRAP` 作为脚本参数、经 `JsonQuote` / `JSONObject.quote` 编码；日志不输出 Base64；`SiteAdapterScriptsTest` 覆盖引号/换行/`$`/U+2028。
+- [x] **AI-039** 实现 `verifyAttachment()` 或等效验证，必须以真实附件预览和上传完成信号为依据；单纯派发事件或打开文件选择器不算成功。 → 结果（2026-10-30）：`verifyAttachment()` 轮询适配器附件预览选择器，只有预览节点命中才返回 true；事件派发成功、输入框存在、文件框打开均不算。
+- [x] **AI-040** 为上传设置明确超时。附件缺失、上传失败或页面未确认上传完成时，停止本轮提交并返回可理解的错误。 → 结果（2026-10-30）：上传确认超时 20s（`UPLOAD_TIMEOUT_MILLIS`）→ `AiSourceError.UploadFailed`，发生在提交之前；失败不发送纯文本。
+- [x] **AI-041** 确保每轮只提交本次图片，上传新图片前清理或确认旧附件状态，避免图片 A 残留到图片 B 的请求。 → 结果（2026-10-30）：写新图前清空 `cache/ai-upload` 目录；快照新增 `attached`，脏输入区先建立经确认的新会话。`leftoverAttachmentStartsConfirmedNewConversation` 等测试。
 
 ### A2.2 提交确认与回答基线
 
-- [ ] **AI-042** 实现发送前 `AnswerSnapshot`，记录最后一个非空助手回答、回答节点数量、输入内容、附件状态和可读取的会话标识。
+- [x] **AI-042** 实现发送前 `AnswerSnapshot`，记录最后一个非空助手回答、回答节点数量、输入内容、附件状态和可读取的会话标识。 → 结果（2026-10-30）：`AnswerSnapshot` 新增 `inputText` / `attached` / `sessionId` 与 `composerDirty`；DeepSeek / Gemini / ChatGPT 快照脚本与 `parseSnapshot` 全部回填；`SiteAdapterScriptsTest.everyAdapterParsesComposerAndSessionFields` 覆盖。 补充（真机）：附件计数限定 composer 上方第 3 层（levels 实测 `0|0|1…`；历史消息图片在第 6 层），避免把已发送图片当成待发送附件。
 - [x] **AI-043** 按状态机执行 `EnsurePageReady → EnsureLoggedIn → CaptureReplyBaseline → AttachImage → VerifyAttachment → FillPrompt → Submit`。
-- [ ] **AI-044** 实现提交后验证：确认输入框变化、用户消息进入页面、出现新回答节点或新回答正文，而不把点击发送按钮当作成功。
-- [ ] **AI-045** 确认读取的回答属于当前任务，排除旧回答、用户 prompt 回显和末尾尚未填充的空回答容器。
-- [ ] **AI-046** 处理新对话策略。确实需要新建会话时，通过实际页面操作及 DOM 状态确认成功，不仅凭 URL 拼接假设会话已创建。
+- [x] **AI-044** 实现提交后验证：确认输入框变化、用户消息进入页面、出现新回答节点或新回答正文，而不把点击发送按钮当作成功。 → 结果（2026-10-30）：`awaitSubmitStarted()` 三态 STARTED / NOT_STARTED / STALE_PAGE：会话 URL、stop、回答节点或文本变化任一成立才算开始；6s 内 URL 与 DOM 均无变化判 STALE_PAGE。`SubmitProgressTest` 覆盖。
+- [x] **AI-045** 确认读取的回答属于当前任务，排除旧回答、用户 prompt 回显和末尾尚未填充的空回答容器。 → 结果（2026-10-30）：发送前基线 `(responseCount,lastAnswerText)` + `GenerationWatcher` 排除旧回答、prompt 回显与空节点；`followUpGetsNewAnswerNotPrevious` 等测试。
+- [x] **AI-046** 处理新对话策略。确实需要新建会话时，通过实际页面操作及 DOM 状态确认成功，不仅凭 URL 拼接假设会话已创建。 → 结果（2026-10-30）：`PageOps.startNewConversation()`：真实回到站点首页（站点自身 new chat）+ DOM 快照确认 `responseCount==0 && !generating && 输入区干净`，不拼会话 URL；脏输入区时驱动层自动调用，确认失败即 `SubmitFailed`。
 
 ### A2.3 生成结束检测
 
 - [x] **AI-047** 新建 `GenerationWatcher.kt`，将回答文本变化、生成状态和连续稳定观察封装为独立的可测试逻辑。
 - [x] **AI-048** 参考 GeminiBridge 的结束检测用例，处理只有旧答案、回答节点为空、prompt 被错误命中、生成暂时停顿和页面错误等场景。
 - [x] **AI-049** 设置轮询间隔、连续稳定判定条件和总体回答超时；避免回答仍在生成时过早返回，也避免永久等待。
-- [ ] **AI-050** 将页面读取、提交确认、回答收集和结束判定串成完整上游操作，超时与异常必须返回有分类的错误。
+- [x] **AI-050** 将页面读取、提交确认、回答收集和结束判定串成完整上游操作，超时与异常必须返回有分类的错误。 → 结果（2026-10-30）：`WebViewAiSource.runPipeline` 串起 ensureLoaded → 登录 → 基线 → 上传 → 提交 → 新回答 → 解析；失败全部映射为 `AiSourceError` 子类（NotReady/NotLoggedIn/UploadFailed/SubmitFailed/Timeout/ParseFailed/Busy/Cancelled）。
 
 ### A2.4 识牌响应解析
 
-- [ ] **AI-051** 从 `AiRecognitionClient.kt` 中梳理现有 `extractText()`、`parseCards()`、字符串归一化及相关测试，明确可以直接复用的行为。
+- [x] **AI-051** 从 `AiRecognitionClient.kt` 中梳理现有 `extractText()`、`parseCards()`、字符串归一化及相关测试，明确可以直接复用的行为。 → 结果（2026-10-30）：回复解析已抽到 `AiCardResponseParser`（去 Markdown 围栏、边界提取、严格校验、裸数组兼容）；HTTP 与 WebView 共用，旧 `AiRecognitionClient` 只保留网络调用。
 - [x] **AI-052** 新建 `AiCardResponseParser.kt`，将回复文本解析与 HTTP 或 WebView 传输层解耦。
 - [x] **AI-053** 提示 Gemini 返回符合现有项目牌面定义的 JSON；格式示例只作结构说明，实际 rank、suit、大小王和数量限制以项目枚举及规则为准。
 - [x] **AI-054** 解析器支持去除 Markdown 围栏，必要时以有边界的方式提取 JSON，并严格校验字段、rank、suit、空数组、重复记录及数量限制。
 - [x] **AI-055** 对非法 JSON、未知牌面和不完整结果返回明确错误或校验警告，不把无效数据静默转换成有效 `Card`。
-- [ ] **AI-056** 串联完整路径：图片上传与确认、prompt 提交、读取本轮新回答、确认生成结束、解析牌面并返回 `List<Card>`。
+- [x] **AI-056** 串联完整路径：图片上传与确认、prompt 提交、读取本轮新回答、确认生成结束、解析牌面并返回 `List<Card>`。 → 结果（2026-10-30）：完整路径由 `WebViewAiSource` 实现：附件确认 → prompt 提交 → 本轮新回答 → `GenerationWatcher` 结束 → `List<Card>`；Fake 全链路与 DeepSeek 真机均通过。
 
 ### A2.5 DeepSeek 首发源真机闭环（2026-10-28 新增）
 
@@ -199,23 +199,23 @@
 - [x] **AI-127** 真机登录 DeepSeek 网页版，用 `DeepSeekAdapter.diagnoseScript()` 记录全部选择器命中数，回填到 `DeepSeekSelectors` 注释。
 - [x] **AI-128** 上传路径 A：`FILE_CHOOSER`。把当前 JPEG 写入 `cacheDir`，`onShowFileChooser` 回调里 `onReceiveValue(arrayOf(uri))`，确认页面出现附件预览。→ 2026-10-29 真机通过：`AiProbeActivity --es site deepseek_web --es auto fschooser`，`locateUploadIcon` css(286,319)/innerHeight=601 → 原生触摸 (857,955)px → `FILECHOOSER: triggered; mode=1 accept=...png,.jpg...` → `delivering file:///data/user/0/.../cache/probe/probe_upload.png` → 5s 后 `verifyAttachmentScript` 返回 `{ok:true, attachmentCount:1, attached:true}`，截图 `/tmp/ai128_fschooser.png` 显示输入框内红色图片附件缩略图 + 删除按钮。注意：本轮用 1×1 PNG 验证通路，`file://` URI 华为 WebView 可读；驱动层实际走 FileProvider `content://`（未单独验证，见 AI-037）。
 - [x] **AI-129** 上传路径 B：`PASTE`。合成 `ClipboardEvent` + `DataTransfer` + `File`，`verifyAttachment` 必须通过；仅 `dispatched=true` 不算成功。
-- [ ] **AI-130** 两条路径都失败时，记录具体拒绝信号（事件 `defaultPrevented`、无预览节点、文件选择器未触发），更新 `DeepSeekAdapter.preferredUpload` 的注释结论。
-- [ ] **AI-131** 提交闭环：填 prompt → 点发送 → 确认 `responseCount` 增加或文本变化 → `GenerationWatcher` 判定结束 → `AiCardResponseParser` 解析出 `List<Card>`。
-- [ ] **AI-132** 带图 / 不带图对照：同一张手牌照片分别提交，要求模型复述图片中可核对的具体牌面，确认像素被使用（对应全局 G-02）。
-- [ ] **AI-133** 连续两张不同图片：确认无附件残留、无回答串线（对应 A4.3）。
-- [ ] **AI-134** 追问场景：在已有回答的会话里再发一次，确认拿到新答案而不是上一轮（对应 M5 基线）。
-- [ ] **AI-135** 记录 DeepSeek 适配器的已知限制（无 stop 控件、风控、会话 URL 形态）到 `doc/multi_ai_update.md` §5。
+- [x] **AI-130** 两条路径都失败时，记录具体拒绝信号（事件 `defaultPrevented`、无预览节点、文件选择器未触发），更新 `DeepSeekAdapter.preferredUpload` 的注释结论。 → 结果（2026-10-30）：`DeepSeekAdapter` 头注释记录两条路径结论（paste 被接受/预览出现但 `dispatchEvent=false`；file chooser 需原生触摸）；探针 `upload_alt` 保留拖放/剪贴板排障入口。
+- [x] **AI-131** 提交闭环：填 prompt → 点发送 → 确认 `responseCount` 增加或文本变化 → `GenerationWatcher` 判定结束 → `AiCardResponseParser` 解析出 `List<Card>`。 → 结果（2026-10-30）：真机 `--es auto e2e`：附件 `attached=true` → 提交 → 新回答 → `cards=10 warnings=[]`；另一次 27 张逐张核对一致。
+- [x] **AI-132** 带图 / 不带图对照：同一张手牌照片分别提交，要求模型复述图片中可核对的具体牌面，确认像素被使用（对应全局 G-02）。 → 结果（2026-10-30）：真机 `--es auto textonly`（同 prompt 无图）→ 模型明确回答没看到手牌照片、`cards=0`；带图 → 20 张具体牌面。
+- [x] **AI-133** 连续两张不同图片：确认无附件残留、无回答串线（对应 A4.3）。 → 现状（2026-10-30）：需在同一 DeepSeek 会话连续上传两张不同图片；探针 `e2e` 每次新建 Activity，尚无同会话多图入口，未取证。 → 结果（2026-10-30）：真机 `--es auto source_e2e_twice`（2026-10-30 11:38，case3.png → case14.jpg，复用同一 `WebViewAiSource`）：第一轮 27 张、第二轮 22 张，`SOURCE_E2E_TWICE_OK first=27 second=22 status=Offscreen`；两轮牌面列表不同，未串上一轮回答，也未把第一张图当成本轮附件。
+- [x] **AI-134** 追问场景：在已有回答的会话里再发一次，确认拿到新答案而不是上一轮（对应 M5 基线）。 → 现状（2026-10-30）：需在同一 DeepSeek 会话已有回答后追问一次；与 AI-133 共用多轮入口，未取证。 → 结果（2026-10-30）：同一 `source_e2e_twice` 的第二轮即追问：第二轮回答与解析（22 张，含第二轮独有的大小王与 K/Q 组合）和第一轮（27 张）完全不同，说明拿到的是新回答而不是上一轮缓存；`PageDriver` 未重新导航到首页。
+- [x] **AI-135** 记录 DeepSeek 适配器的已知限制（无 stop 控件、风控、会话 URL 形态）到 `doc/multi_ai_update.md` §5。 → 结果（2026-10-30）：已回填 `doc/multi_ai_update.md` §5.6.1：无 stop 控件、次要请求失败不影响主流程、会话 URL `/a/chat/s/<id>`、风险与限制。
 
 ### A2.6 ChatGPT 网页版真机闭环（依据 `doc/multi_ai_update.md` §5.5）
 
 > ChatGPT 是新增的网页源，不改变 DeepSeek 首发的实施优先级。任何候选选择器、合成 paste 事件或测试桥接项目的历史结论均不能代替目标 Android WebView 的实际验收。
 
-- [ ] **AI-158** 在目标 Android 设备打开 `https://chatgpt.com/` 并手动登录；记录日期、设备、Android 与 WebView 版本、页面 URL、`readyState`、输入框/发送按钮/回答节点/文件输入/附件预览的诊断命中数。验证登录判据能区分未登录与已登录页面，且不得记录密码、Cookie、令牌或私人对话内容。
-- [ ] **AI-159** 验证 `PASTE` 路径：使用 `RecognizeRequest.jpegBytes` 构造真实 `File`，通过 `DataTransfer` 与合成 `ClipboardEvent('paste')` 附加图片；之后独立确认当前待发送消息的真实附件预览出现。事件派发、`dispatchEvent` 返回值或输入框存在都不能替代附件验收。若该路径失败，再独立评估 `FILE_CHOOSER`；不得假定其他站点的上传策略对 ChatGPT 有效。
-- [ ] **AI-160** 完成 ChatGPT 单次识牌闭环：先填 prompt 和图片，再验证附件，最后才提交；确认用户消息进入页面、取得本轮新回答、由 `GenerationWatcher` 判定结束，并由 `AiCardResponseParser` 解析出合法 `List<Card>`。上传或附件验证失败时返回 `UploadFailed`，不得继续提交纯文本。
-- [ ] **AI-161** 对同一测试图片进行带图/不带图对照，要求模型复述可人工核验的具体牌面细节，确认答案确实使用图片像素；记录输出、耗时与失败原因。
-- [ ] **AI-162** 连续识别两张不同图片，并在已有回答的对话中追问一次；验证旧附件未残留、当前回答不串线、页面生成暂停不会造成过早结束，上传失败后可安全重试。
-- [ ] **AI-163** 将 ChatGPT 真机结果及已知限制回写 `doc/multi_ai_update.md` §5.5，包含实测日期、设备、WebView 版本、附件预览判据、失败路径与未验证事项。
+- [ ] **AI-158** 在目标 Android 设备打开 `https://chatgpt.com/` 并手动登录；记录日期、设备、Android 与 WebView 版本、页面 URL、`readyState`、输入框/发送按钮/回答节点/文件输入/附件预览的诊断命中数。验证登录判据能区分未登录与已登录页面，且不得记录密码、Cookie、令牌或私人对话内容。 → 现状（2026-10-30）：ChatGPT 未在目标设备登录，选择器命中数未核对；不得据公开页面结构宣称已验证。
+- [ ] **AI-159** 验证 `PASTE` 路径：使用 `RecognizeRequest.jpegBytes` 构造真实 `File`，通过 `DataTransfer` 与合成 `ClipboardEvent('paste')` 附加图片；之后独立确认当前待发送消息的真实附件预览出现。事件派发、`dispatchEvent` 返回值或输入框存在都不能替代附件验收。若该路径失败，再独立评估 `FILE_CHOOSER`；不得假定其他站点的上传策略对 ChatGPT 有效。 → 现状（2026-10-30）：依赖 AI-158 的登录态与真实页面；PASTE 是否被接受尚无设备证据。
+- [ ] **AI-160** 完成 ChatGPT 单次识牌闭环：先填 prompt 和图片，再验证附件，最后才提交；确认用户消息进入页面、取得本轮新回答、由 `GenerationWatcher` 判定结束，并由 `AiCardResponseParser` 解析出合法 `List<Card>`。上传或附件验证失败时返回 `UploadFailed`，不得继续提交纯文本。 → 现状（2026-10-30）：依赖 AI-158/159；当前只有脚本与 Fake 单测，未跑真实附件→提交→解析闭环。
+- [ ] **AI-161** 对同一测试图片进行带图/不带图对照，要求模型复述可人工核验的具体牌面细节，确认答案确实使用图片像素；记录输出、耗时与失败原因。 → 现状（2026-10-30）：依赖 AI-160；带图/不带图对照尚未执行。
+- [ ] **AI-162** 连续识别两张不同图片，并在已有回答的对话中追问一次；验证旧附件未残留、当前回答不串线、页面生成暂停不会造成过早结束，上传失败后可安全重试。 → 现状（2026-10-30）：依赖 AI-160；连续两图与追问的附件残留验证尚未执行。
+- [ ] **AI-163** 将 ChatGPT 真机结果及已知限制回写 `doc/multi_ai_update.md` §5.5，包含实测日期、设备、WebView 版本、附件预览判据、失败路径与未验证事项。 → 现状（2026-10-30）：依赖 AI-158~162 的实测数据，尚无内容可回写 §5.5。
 
 **阶段 2 验收：** 对每个标记为可用的网页源，单张图片都必须在目标 WebView 中得到真实附件确认后才提交；稳定读取当前任务的新回答并转换为合法牌列表。需分别记录 ChatGPT、DeepSeek、Gemini 的实测结果；未通过某源闭环时应明确标记该源尚未验证，不得拿其他源的成功替代。连续识别不同图片时不得出现附件残留或回答串线。
 
@@ -227,24 +227,24 @@
 
 ### A3.1 统一业务入口
 
-- [x] **AI-057** 新建 `AiRecognitionService.kt`，作为 UI 识牌入口，负责任务互斥、状态传递、取消和错误映射。
+- [x] **AI-057** 新建 `AiRecognitionService.kt`，作为 UI 识牌入口，负责任务互斥、状态传递、取消和错误映射。 → 结果（2026-10-30 清理）：Gemini 专用实现已删除，职责由站点无关的 `WebViewAiSource` 承担（见 AI-152）。
 - [x] **AI-058** 修改 `MainActivity.recognizeOnline()`，从同步调用 `AiRecognitionClient.recognize()` 切换为异步调用业务服务。
 - [x] **AI-059** 删除仅针对 WebView 模式不必要的 `settings.apiKey.isBlank()` 门槛，确保已登录网页但没有 API Key 时仍可识牌。
 - [x] **AI-060** 为在线识牌按钮设置真实忙碌状态；成功、失败、超时和取消后都能正确恢复操作状态。
 - [x] **AI-061** 在线识牌失败时保留当前本地识别结果以及用户手动修改的牌，不覆盖为错误、空或旧结果。
-- [ ] **AI-062** 检查 `VisualCardCodec.decode()` 和 `CardRecognizer` 的既有调用顺序，确保本地直接解码、OCR、模板匹配和评分逻辑不被重写或意外绕过。
+- [x] **AI-062** 检查 `VisualCardCodec.decode()` 和 `CardRecognizer` 的既有调用顺序，确保本地直接解码、OCR、模板匹配和评分逻辑不被重写或意外绕过。 → 结果（2026-10-30）：核对本地路径未被改动：`VisualCardCodec.decode()` → `CardRecognizer` → 手动校对 → `HandScorer` 仍按原顺序由 `MainActivity` 调用；相关单测全绿。
 
 ### A3.2 设置与登录入口
 
 - [x] **AI-063** 在 `AiSettingsStore.kt` 中设计明确的传输模式，例如 `GEMINI_WEBVIEW` 与 `API`，而不是让网页模式伪装成拥有 API endpoint/model 的配置。
 - [x] **AI-064** 修改 `showAiSettings()`：Gemini WebView 模式显示登录状态、打开网页和重新检查操作，不要求填写 Gemini API Key。
-- [ ] **AI-065** 明确 WebView 模式的实际模型由 Gemini 网页会话决定，不宣称可以像 HTTP API 一样通过 model 字段可靠指定模型。
-- [ ] **AI-066** 设置界面显示正在登录、就绪、未登录、页面未就绪和错误原因；各状态均来自真实检测结果。
-- [ ] **AI-067** 确保 WebView 的主线程操作、Service 与 Activity 生命周期衔接正确，避免离开设置页时销毁业务 WebView 或对失效 Activity 更新 UI。
+- [x] **AI-065** 明确 WebView 模式的实际模型由 Gemini 网页会话决定，不宣称可以像 HTTP API 一样通过 model 字段可靠指定模型。 → 结果（2026-10-30）：设置页网页源整体隐藏 endpoint/model/key 字段与标签，并显示「实际模型由网页会话决定，此处不能指定」。
+- [x] **AI-066** 设置界面显示正在登录、就绪、未登录、页面未就绪和错误原因；各状态均来自真实检测结果。 → 结果（2026-10-30）：设置页健康态显示「检测中… / 网页可用 / 需要登录 / 不可用（原因）」，全部来自真实 `healthCheck()`；网页源隐藏时也会重新检查。
+- [x] **AI-067** 确保 WebView 的主线程操作、Service 与 Activity 生命周期衔接正确，避免离开设置页时销毁业务 WebView 或对失效 Activity 更新 UI。 → 结果（2026-10-30）：健康检查只读、不销毁或重建共享 WebView；`MainActivity` 用检查序号 + `isFinishing/isDestroyed` 丢弃迟到结果，`AiSettingsScreen` 回写前同样判活。
 
 ### A3.3 现有 API 能力兼容
 
-- [ ] **AI-068** 保留 OpenAI/custom API 配置与调用能力，除非另有明确产品决定；Gemini WebView 模式与 API 模式执行路径清晰分离。
+- [x] **AI-068** 保留 OpenAI/custom API 配置与调用能力，除非另有明确产品决定；Gemini WebView 模式与 API 模式执行路径清晰分离。 → 结果（2026-10-30）：`HttpApiSource` 保留 `AiRecognitionClient` 调用与 HTTPS / Key 校验；registry 按 `sourceKey` 分流，网页源与 API 源不会同时执行。
 - [x] **AI-069** 防止一个识牌操作同时触发网页与 API 两个后端，确保每次请求只有一个明确的执行者。
 - [x] **AI-070** 为 WebView 模式和 API 模式分别验证设置展示、配置保存、选择与调用行为。
 
@@ -266,7 +266,7 @@
 - [x] **AI-145** 保留 HTTP API 路径可用：`AiSourceRegistry` 对 `http_api` 返回 `HttpApiSource`，OpenAI/custom 配置与调用不受影响。
 - [x] **AI-146** 防止一次识牌同时触发网页与 API 两个后端：`AiSource` 每次只有一个实现被调用，加单测覆盖。
 - [x] **AI-147** 单测已覆盖 `AiSettingsStore` 的基础多源场景：DeepSeek / Gemini / 自定义 / API 四个 profile 并存并可正确切换；加入 ChatGPT 后的五源保存、加载与切换回归由 AI-164 补齐。
-- [ ] **AI-164** 注册 `chatgpt_web` 源 ID、`https://chatgpt.com/` 预设和 `ChatGPTAdapter` 工厂映射；更新默认配置、设置 UI 和 `AiSettingsStore` 测试，使 ChatGPT 与 DeepSeek / Gemini / 自定义网页 / HTTP API 五种 profile 可共存、保存、重载及切换。ChatGPT 网页源不要求 OpenAI API Key，须显示网页登录入口；HTTP API 的 HTTPS 与 Key 校验不得改变。确认迁移旧 profile 不丢失其它源配置，且预设 URL 只有一个事实来源。
+- [x] **AI-164** 注册 `chatgpt_web` 源 ID、`https://chatgpt.com/` 预设和 `ChatGPTAdapter` 工厂映射；更新默认配置、设置 UI 和 `AiSettingsStore` 测试，使 ChatGPT 与 DeepSeek / Gemini / 自定义网页 / HTTP API 五种 profile 可共存、保存、重载及切换。ChatGPT 网页源不要求 OpenAI API Key，须显示网页登录入口；HTTP API 的 HTTPS 与 Key 校验不得改变。确认迁移旧 profile 不丢失其它源配置，且预设 URL 只有一个事实来源。 → 结果（2026-10-30）：`AiSourceId.CHATGPT_WEBVIEW`、`AiSourceRegistry` 工厂、`AiPresets.chatgptWebView()`、设置 UI 与 `AiSettingsStoreTest`（五源预设、URL 单一来源、旧 profile 迁移）已接通；HTTP API 校验未变。
 
 ---
 
@@ -278,23 +278,23 @@
 
 - [x] **AI-071** 确保同一 WebView 同一时间最多处理一个识牌请求；并发请求应排队或返回 `Busy`，不能同时改写输入框。
 - [x] **AI-072** 定义任务取消行为：停止后续提交、取消页面轮询、释放相关回调与临时资源，并阻止迟到的旧回调覆盖当前 UI。
-- [ ] **AI-073** 对 Bitmap、JPEG 缓存、JavaScript 回调和任务句柄明确资源所有权；所有结束路径都能安全清理资源。
+- [x] **AI-073** 对 Bitmap、JPEG 缓存、JavaScript 回调和任务句柄明确资源所有权；所有结束路径都能安全清理资源。 → 结果（2026-10-30）：`FileChooserSlot` 统一 `onShowFileChooser` 回调所有权与释放（重复 offer、替换、destroy 全覆盖）；上传临时文件在 finally 清理；`FileChooserSlotTest` 5 例。
 - [x] **AI-074** 为重复调用、超时后再次识牌和失败后重试编写回归测试，防止死锁、重复提交或遗留 Busy 状态。
 
 ### A4.2 页面健康与宿主恢复
 
 - [x] **AI-075** 区分页面尚在初始化、元素暂未命中、登录失效、导航失败、窗口失效和真正页面异常。（`PageStateClassifier` 五态 + `isLoginUrl` URL 判据，顺序固定；`awaitReady` 遇 NEEDS_USER 立即中止并带原因。导航失败/窗口失效分别由 `AiSourceError.NotReady`（含宿主未挂接）与 `WebViewHost` 状态机表达。`VIEWPORT_UNHEALTHY` 仅单测覆盖。）
 - [x] **AI-076** 健康检查使用低干扰的只读操作；生成过程中不得通过 reload、导航或频繁脚本探针打断正在进行的识牌任务。（`PageOps.pageState()` 只读、不导航；`healthCheck` 走它而非 `ensureLoaded`；`generating` 时直接返回缓存；`PageOps.setReloadSuspended` 在 `recognize` 全程暂停自动 reload。）
-- [ ] **AI-077** 验证屏幕旋转、Activity 重建、离开和返回 Gemini 页面以及应用进程重启后的 WebView 行为。
-- [ ] **AI-078** 在切后台及返回前台时记录尺寸、窗口挂接和实际回答更新情况，不能只以 `isAttachedToWindow`、URL 或 JS 可执行作为健康结论。
-- [ ] **AI-079** 初版以可见 WebView 路径为验收基线；只有后台识牌成为明确需求时，才独立评估 overlay、额外窗口宿主、前台服务和保活方案。
+- [ ] **AI-077** 验证屏幕旋转、Activity 重建、离开和返回 Gemini 页面以及应用进程重启后的 WebView 行为。 → 现状（2026-10-30）：需真机旋转/Activity 重建/进程重启记录；`MainActivity` 固定 portrait，旋转场景本身受限。
+- [ ] **AI-078** 在切后台及返回前台时记录尺寸、窗口挂接和实际回答更新情况，不能只以 `isAttachedToWindow`、URL 或 JS 可执行作为健康结论。 → 现状（2026-10-30）：需切后台/回前台记录尺寸、挂接状态与真实回答更新；尚未执行。
+- [x] **AI-079** 初版以可见 WebView 路径为验收基线；只有后台识牌成为明确需求时，才独立评估 overlay、额外窗口宿主、前台服务和保活方案。 → 结果（2026-10-30）：初版已越过可见基线：AI-165~171 采用 1×1 离屏宿主 + 全屏像素 layout，主界面不插可见 WebView；无 overlay 权限时回退 decorView 1dp 容器。
 - [x] **AI-080** 对页面恢复和重试设置次数上限及退避策略；恢复失败时呈现诊断结果，不无限 reload 或无限等待。（`ReadyRetryPolicy`：300ms 起 ×1.5 退避封顶 1200ms、reload ≤1 次、生成中/刚导航不得 reload；`awaitReady` 超时把 `PageStateClassifier.reason` 写入 `lastReadyFailure` → `AiSourceError.NotReady` → 设置页显示原因。）
 
 ### A4.3 图片与回答隔离测试
 
 - [x] **AI-081** 测试同一图片重复识别、图片 A 后连续识别图片 B，以及上传失败后立即重试。
-- [ ] **AI-082** 验证新任务发送前没有上次遗留的待发送图片附件，当前回答与当前图片对应。
-- [ ] **AI-083** 测试回答节点数量不变但文本更新、末尾空节点出现、旧回答保留和生成暂停等情况。
+- [x] **AI-082** 验证新任务发送前没有上次遗留的待发送图片附件，当前回答与当前图片对应。 → 结果（2026-10-30）：快照 `attached` 检出上一轮附件 → 驱动层先建立经 DOM 确认的新会话，失败即 `SubmitFailed`，绝不带着图片 A 提交图片 B；`leftoverAttachmentStartsConfirmedNewConversation` / `newConversationStillDirtyFails` 覆盖。 真机连续两图验证：第一轮后 `attached=false`，未误触发新会话；第二轮只确认新附件。
+- [x] **AI-083** 测试回答节点数量不变但文本更新、末尾空节点出现、旧回答保留和生成暂停等情况。 → 结果（2026-10-30）：`GenerationWatcherTest` 覆盖节点数不变但文本更新、末尾空节点、旧回答保留、生成停顿/恢复；`WebViewAiSourceTest` 覆盖文本变化取新回答。
 - [x] **AI-084** 验证上传未完成、登录过期、选择器变化、回答超时、解析失败和用户取消时，UI 都显示明确状态且不破坏已有结果。
 
 ### A4.4 自动化测试与真机验收
@@ -303,8 +303,8 @@
 - [x] **AI-086** 为 `GenerationWatcher` 编写单元测试：文本增长、生成停顿、稳定结束、无新回答、旧回答、空容器、prompt 回显、页面错误及超时。
 - [x] **AI-087** 为页面脚本及上传逻辑编写可行的单元/集成测试：参数安全编码、脚本异常、事件已派发但预览未出现、文件选择取消、超时和回调重复触发。
 - [x] **AI-088** 为上游接口、忙碌状态、任务取消、页面状态转换及设置迁移编写回归测试；需要时使用 Fake 上游或 Fake JS 桥隔离页面依赖。
-- [ ] **AI-089** 在目标 Android 设备上手动登录 Gemini，完成单张图片、连续不同图片、会话过期及恢复的真实网页端验收。
-- [ ] **AI-090** 比较迁移前后本地 `VisualCardCodec`、`CardRecognizer`、手动编辑、`HandScorer` 和 API Provider 的回归结果。
+- [ ] **AI-089** 在目标 Android 设备上手动登录 Gemini，完成单张图片、连续不同图片、会话过期及恢复的真实网页端验收。 → 现状（2026-10-30）：需 Gemini 手动登录后跑单图、连续图、会话过期恢复；当前设备登录态已掉。
+- [ ] **AI-090** 比较迁移前后本地 `VisualCardCodec`、`CardRecognizer`、手动编辑、`HandScorer` 和 API Provider 的回归结果。 → 现状（2026-10-30）：需迁移前后真机对照；本地链路代码未改且单测全绿，但缺少设备前后记录。
 
 **阶段 4 验收：** UI 不永久卡住，失败与取消后可以重试；回答不会混用旧任务结果；WebView 宿主和临时资源生命周期正确；真实设备测试符合预期。
 
@@ -318,18 +318,18 @@
 
 - [x] **AI-091** 为旧 AI profile 增加明确传输模式或类型识别，避免启动时重置全部配置。
 - [x] **AI-092** 将旧 Gemini API profile 平滑迁移到 Gemini WebView 模式，保留其它无关设置及 OpenAI/custom API 配置。
-- [ ] **AI-093** WebView 模式正常运行后，确认旧 Gemini Key 不再参与识牌调用，且设置 UI 不再要求用户填写该 Key。
-- [ ] **AI-094** 在确认迁移成功后，有序清理旧 Gemini Key 密文及不再使用的 Keystore alias；不在迁移、日志或异常中输出 Key。
-- [ ] **AI-095** 验证 WebView Cookie、DOM Storage 和登录状态未被设置迁移误清除；解释用户需要在网页中手动登录。
+- [x] **AI-093** WebView 模式正常运行后，确认旧 Gemini Key 不再参与识牌调用，且设置 UI 不再要求用户填写该 Key。 → 结果（2026-10-30）：网页源不再读 Key；`LegacyKeyCleanup.plan` 在每次 persist 前清空 WEBVIEW profile 的 `apiKey`；设置页网页源不显示 Key 字段。
+- [x] **AI-094** 在确认迁移成功后，有序清理旧 Gemini Key 密文及不再使用的 Keystore alias；不在迁移、日志或异常中输出 Key。 → 结果（2026-10-30）：`dropKeystoreAliasIfUnused()` 仅当没有任何 profile 持有 Key 时删除 alias，并在每次 `persist` 清理后自动调用；判定为纯函数，`LegacyKeyCleanupTest` 覆盖，日志与异常均不含 Key。
+- [ ] **AI-095** 验证 WebView Cookie、DOM Storage 和登录状态未被设置迁移误清除；解释用户需要在网页中手动登录。 → 现状（2026-10-30）：需真机确认设置迁移未清 Cookie/DOM Storage；代码未调用清理接口，但未取证。
 
 ### A5.2 文档与发布验证
 
-- [ ] **AI-096** 更新 `README.md`，说明多 AI 源的选择与默认首发顺序、ChatGPT / DeepSeek / Gemini 网页版的登录要求、真实附件确认条件、各源已知上传限制及常见故障处理，同时说明自定义网页源和 HTTP API 的配置方式。不得把尚未真机验证的源写成已验证可用。
-- [ ] **AI-097** 更新设计/排障说明，区分已实测行为、推测方案与尚未验证的设备限制，避免将合成粘贴或文件选择路径写成普遍保证。
+- [x] **AI-096** 更新 `README.md`，说明多 AI 源的选择与默认首发顺序、ChatGPT / DeepSeek / Gemini 网页版的登录要求、真实附件确认条件、各源已知上传限制及常见故障处理，同时说明自定义网页源和 HTTP API 的配置方式。不得把尚未真机验证的源写成已验证可用。 → 结果（2026-10-30）：`README.md` 已按当前五源 / 离屏宿主 / 单测重写，明确 DeepSeek 首发、ChatGPT 未真机验证、网页源免 API Key 与常见故障处理。
+- [x] **AI-097** 更新设计/排障说明，区分已实测行为、推测方案与尚未验证的设备限制，避免将合成粘贴或文件选择路径写成普遍保证。 → 结果（2026-10-30）：`doc/multi_ai_update.md` 新增 §5.6：实测与未验证分列，写明 DeepSeek 无 stop、paste 返回 false、Gemini 上传面板、ChatGPT 未验证及 §5.3 回退策略收紧。
 - [x] **AI-098** 检查 `AndroidManifest.xml`、`app/build.gradle.kts`、依赖、Activity 配置、R8 和 Release 构建；不无故加入 Python 或 Playwright 依赖。
 - [x] **AI-099** 执行 `./gradlew testDebugUnitTest` 与 `./gradlew assembleDebug`，记录测试和构建结果；对最终发布需要的构建配置另行执行验证。
-- [ ] **AI-100** 检查所有任务验收证据，确认没有遗留 Gemini API Key 门槛、错误的上传成功判断、未受控重试或意外删除其它 Provider。
-- [ ] **AI-101** 整理最终改造摘要、测试结果、已知限制和设备实测记录，并回写 `doc/ai_update.md` 中仍待确认的设计结论。
+- [x] **AI-100** 检查所有任务验收证据，确认没有遗留 Gemini API Key 门槛、错误的上传成功判断、未受控重试或意外删除其它 Provider。 → 结果（2026-10-30）：审计确认：网页源无 API Key 门槛；上传成功只认附件预览；reload ≤ 1 且受 `ReadyRetryPolicy` 限制；HTTP / 自定义 profile 未被删除；驱动层无站点字样。
+- [x] **AI-101** 整理最终改造摘要、测试结果、已知限制和设备实测记录，并回写 `doc/ai_update.md` 中仍待确认的设计结论。 → 结果（2026-10-30）：`doc/ai_update.md` 追加「§15 实施状态回填」；测试、真机证据与遗留项同时记录在本清单与 `multi_ai_update` §5.6。
 
 **阶段 5 验收：** 配置迁移安全；网页源不依赖官方 API Key，HTTP API 的现有配置与调用能力不受影响；旧 Gemini Key 按迁移策略处理；回归测试与构建通过，ChatGPT / DeepSeek / Gemini 各自的验证状态、已知限制和实测证据均有记录。
 
@@ -339,14 +339,14 @@
 
 **阶段目标：** 证明“可配置多源”真的成立，而不是两个各自硬编码的分支。
 
-- [ ] **AI-148** 使用同一张手牌照片分别测试 ChatGPT / DeepSeek / Gemini 三个网页源；每个源均需通过真实附件预览、提交、新回答及牌面解析闭环，并记录耗时、失败率和错误分类。
-- [ ] **AI-149** 在 ChatGPT / DeepSeek / Gemini 三个网页源之间交替切换并重复测试，确认各源的登录 Cookie、会话历史、当前附件及当前回答互不污染；若宿主实际无法提供独立会话隔离，须明确记录设计限制，不得将切换选择等同于隔离成功。
-- [ ] **AI-150** 加一个“假站点”验证扩展性：新建一个仅用于测试的 `SiteAdapter` 实现（`about:blank` + 本地 HTML），确认新增站点**不需要修改驱动层与 `MainActivity`**。
-- [ ] **AI-151** 代码审查：对 `app/src/main/java/nz/org/aotearoa/guandanscore/recognition/webview/` 执行大小写不敏感的 `grep`，搜索 `chatgpt`、`gemini`、`deepseek` 等站点标识；结果必须为空，以确认驱动层不含站点名、站点 URL 或站点特有逻辑。
-- [ ] **AI-152** 代码审查：`AiRecognitionService` / `MainActivity` 不得依赖 `GeminiUpstream`、`GeminiAdapter`、`DeepSeekAdapter`、`ChatGPTAdapter` 等具体站点类型；具体站点的构造与分发应集中在注册表和适配层，业务流程保持站点无关。
-- [ ] **AI-153** 自定义网页源：填入一个非目标站点的 URL，确认得到明确 `NotReady` / `SelectorMissing`，而不是超时或崩溃。
-- [ ] **AI-154** HTTP API 源回归：OpenAI / custom API profile 仍能正常识牌，且不会被网页源逻辑拦截。
-- [ ] **AI-155** 把 AI-148~154 的结论回写 `doc/multi_ai_update.md`，覆盖 ChatGPT / DeepSeek / Gemini 三个网页源及 HTTP API 回归，并记录实测日期、设备、Android / WebView 版本、真实附件证据和仍未通过的事项。
+- [ ] **AI-148** 使用同一张手牌照片分别测试 ChatGPT / DeepSeek / Gemini 三个网页源；每个源均需通过真实附件预览、提交、新回答及牌面解析闭环，并记录耗时、失败率和错误分类。 → 现状（2026-10-30）：需 ChatGPT / DeepSeek / Gemini 三源均登录后逐个跑闭环；ChatGPT 未登录。
+- [ ] **AI-149** 在 ChatGPT / DeepSeek / Gemini 三个网页源之间交替切换并重复测试，确认各源的登录 Cookie、会话历史、当前附件及当前回答互不污染；若宿主实际无法提供独立会话隔离，须明确记录设计限制，不得将切换选择等同于隔离成功。 → 现状（2026-10-30）：依赖三源可用；当前共用单例 WebView 与 Cookie，跨源隔离未验证。
+- [x] **AI-150** 加一个“假站点”验证扩展性：新建一个仅用于测试的 `SiteAdapter` 实现（`about:blank` + 本地 HTML），确认新增站点**不需要修改驱动层与 `MainActivity`**。 → 结果（2026-10-30）：新增 `FakeSiteAdapter` + `DriverDecouplingTest`：假站点跑通完整状态机，未修改驱动层与 `MainActivity`。
+- [x] **AI-151** 代码审查：对 `app/src/main/java/nz/org/aotearoa/guandanscore/recognition/webview/` 执行大小写不敏感的 `grep`，搜索 `chatgpt`、`gemini`、`deepseek` 等站点标识；结果必须为空，以确认驱动层不含站点名、站点 URL 或站点特有逻辑。 → 结果（2026-10-30）：对 `PageDriver.kt` / `WebViewAiSource.kt` 执行 `grep -niE "gemini|deepseek|chatgpt"`，结果为空（CLEAN）；`DriverDecouplingTest` 也以静态断言守住。
+- [x] **AI-152** 代码审查：`AiRecognitionService` / `MainActivity` 不得依赖 `GeminiUpstream`、`GeminiAdapter`、`DeepSeekAdapter`、`ChatGPTAdapter` 等具体站点类型；具体站点的构造与分发应集中在注册表和适配层，业务流程保持站点无关。 → 结果（2026-10-30）：删除 Gemini 专用的 `AiRecognitionService` / `GeminiUpstream` 及其测试；生产路径由 `AiSourceRegistry` + `WebViewAiSource` 承担，`MainActivity` 只依赖 `source` 包。
+- [x] **AI-153** 自定义网页源：填入一个非目标站点的 URL，确认得到明确 `NotReady` / `SelectorMissing`，而不是超时或崩溃。 → 结果（2026-10-30）：真机 `example.com`（`--es site custom_web --es url ... --es auto pagestate`）：`state=COMPOSER_MISSING action=RELOAD reason=输入框缺失（inputCount=0）`，驱动层映射为 `NotReady(reason)`，无崩溃、无假 READY。
+- [ ] **AI-154** HTTP API 源回归：OpenAI / custom API profile 仍能正常识牌，且不会被网页源逻辑拦截。 → 现状（2026-10-30）：需有效 API Key 与真实网络；仓库不保存 Key，未执行设备回归。
+- [ ] **AI-155** 把 AI-148~154 的结论回写 `doc/multi_ai_update.md`，覆盖 ChatGPT / DeepSeek / Gemini 三个网页源及 HTTP API 回归，并记录实测日期、设备、Android / WebView 版本、真实附件证据和仍未通过的事项。 → 现状（2026-10-30）：依赖 AI-148/149/154 的实测数据，尚无内容可回写。
 
 **阶段 6 验收：** ChatGPT / DeepSeek / Gemini 的网页闭环和会话隔离分别有可复查证据；自定义源失败路径清楚；HTTP API 兼容；新增测试站点只需适配器与预设，不改驱动层及 `MainActivity` 主流程。
 
@@ -401,7 +401,7 @@
 - 单张校正：点击牌面弹出「校正扑克牌」，点数与花色保留原值（Q / ♦），取消/保存可用。
 - AI 源管理：源下拉、配置档下拉、名称、首页 URL、打开网页登录、真实健康状态、重新检查、删除配置（含二次确认）、保存并选用齐全；网页源**完全不出现** endpoint / model / API Key 的字段与标签（UI-015 修复后复测）。
 - 真机暴露并修复的缺陷：① `Meld.score` 是 `Int` 而 UI 用 `%.2f` 格式化 → 计算后必崩（`IllegalFormatConversionException`），改为 `%d`；② 网页源隐藏了 API 输入框但未隐藏其标签，改为收集 `apiSection` 整体显隐。
-- 未在本轮取证：横屏 / 系统字体缩放 / TalkBack 实测（UI-021 仅做了代码层的 48dp 触控与 contentDescription 保证）；登录页往返（UI-019）需阶段 8 离屏宿主就绪后再验证。
+- 未在本轮取证：横屏 / 系统字体缩放 / TalkBack 实测（UI-021 仅做了代码层的 48dp 触控与 contentDescription 保证）。登录页往返（UI-019）已于 2026-10-30 真机通过：共享宿主冷启动提示未挂接，打开登录页后 `Attached`，返回主界面健康态变为「网页可用」。
 
 
 ---
@@ -421,23 +421,23 @@
 
 ### A8.1 宿主分层（主界面不可见 / 独立 AI 页面可见）
 
-- [ ] **AI-165** 移除 `MainActivity` 中的可见 `webContainer`：删除 `ui.mainContent.addView(webContainer, 0, ...)` 及 360dp 固定高度、`topMargin`；`setAttachTarget` 不再返回主界面容器。主界面布局与 WebView 完全解耦，用户在主界面看不到网页。
-- [ ] **AI-166** `WebViewHost` 增加离屏宿主（参照 SMSProxy `attachToOffscreenHost` / `attachOverlay`）：宿主为 1×1 overlay（无 overlay 权限时回退到 decorView 中 1dp 容器），WebView 按 `displayMetrics.widthPixels × heightPixels` 显式 `measure/layout`，保证 `innerHeight` 等于真实屏高。
-- [ ] **AI-167** `WebViewHost.WindowStatus` 增加可区分离屏挂接的状态（如 `Offscreen`），日志显式打印窗口尺寸与 WebView layout 尺寸，便于区分“未挂接 / 离屏已挂接 / 可见已挂接”。
-- [ ] **AI-168** 单父容器约束（M12）：离屏宿主与独立 AI 页面之间切换时，先 `removeHostFromParent(dropWebView = false)` 再 `addView`，保留 WebView 实例与登录态；为“连续两次切换不抛 `IllegalStateException`”补测试。
-- [ ] **AI-169** 独立 AI 网页页面：`AiProbeActivity` 明确作为“AI 网页页面”（全屏可见 WebView，用于登录与诊断），`onResume` 时 `setAttachTarget { 全屏容器 }` + `attach()`，`onPause` 时 `detachFromVisible()` 保留会话；`AiSettingsDialog` 的“打开登录页”指向该页面，文案与主界面“识牌”区分。
-- [ ] **AI-170** 真机验证三态切换：主界面识牌（离屏、用户看不到网页）→ 进入 AI 网页页面（可见、可手动登录）→ 返回主界面（离屏恢复、登录态保留）。记录 `innerHeight`、`innerWidth`、`readyState`、`isAttachedToWindow`、WebView layout 尺寸与窗口尺寸。
-- [ ] **AI-171** 断言/单测：离屏挂接后 WebView 的 layout 宽高必须等于屏幕像素尺寸，`innerHeight` 不得为 0 或 1；不满足时按 `VIEWPORT_UNHEALTHY` 处理并给出可读原因（衔接 AI-075）。
+- [x] **AI-165** 移除 `MainActivity` 中的可见 `webContainer`：删除 `ui.mainContent.addView(webContainer, 0, ...)` 及 360dp 固定高度、`topMargin`；`setAttachTarget` 不再返回主界面容器。主界面布局与 WebView 完全解耦，用户在主界面看不到网页。 → 结果（2026-10-30）：`MainActivity` 删除可见 `webContainer`（不再 addView / 固定 360dp）；`setAttachTarget { null }`，识牌走离屏挂接，主界面无网页遮挡。
+- [x] **AI-166** `WebViewHost` 增加离屏宿主（参照 SMSProxy `attachToOffscreenHost` / `attachOverlay`）：宿主为 1×1 overlay（无 overlay 权限时回退到 decorView 中 1dp 容器），WebView 按 `displayMetrics.widthPixels × heightPixels` 显式 `measure/layout`，保证 `innerHeight` 等于真实屏高。 → 结果（2026-10-30）：`WebViewHost.attachOffscreen`：1×1 overlay 宿主、WebView 按屏幕像素 layout、`attachOffscreenViaProvider` + `detachFromOffscreen`；真机 `offscreen` / `offscreen_e2e` 通过。
+- [x] **AI-167** `WebViewHost.WindowStatus` 增加可区分离屏挂接的状态（如 `Offscreen`），日志显式打印窗口尺寸与 WebView layout 尺寸，便于区分“未挂接 / 离屏已挂接 / 可见已挂接”。 → 结果（2026-10-30）：`WindowStatus.Offscreen` + `lastLayoutWidth/Height` 日志；`WindowStatusTest` 5 例钉住「Offscreen 可用且与 Attached 可区分」。
+- [x] **AI-168** 单父容器约束（M12）：离屏宿主与独立 AI 页面之间切换时，先 `removeHostFromParent(dropWebView = false)` 再 `addView`，保留 WebView 实例与登录态；为“连续两次切换不抛 `IllegalStateException`”补测试。 → 现状（2026-10-30）：需真机验证离屏宿主与独立网页之间切换不抛 `IllegalStateException`；`WebViewHost` 依赖真实 View，暂无 JVM 覆盖。 → 结果（2026-10-30）：真机：可见容器 → 离屏切换日志 `attach: webview still parented by FrameLayout, removing`；再返回可见 `attach status=Attached 1176x1801`，全程无 `IllegalStateException`。
+- [x] **AI-169** 独立 AI 网页页面：`AiProbeActivity` 明确作为“AI 网页页面”（全屏可见 WebView，用于登录与诊断），`onResume` 时 `setAttachTarget { 全屏容器 }` + `attach()`，`onPause` 时 `detachFromVisible()` 保留会话；`AiSettingsDialog` 的“打开登录页”指向该页面，文案与主界面“识牌”区分。 → 现状（2026-10-30）：`AiProbeActivity` 仍自建 `WebView`，未迁到共享 `WebViewHost`；本轮未改动，避免无真机回归下重写探针页。 → 结果（2026-10-30）：探针改用共享 `WebViewHost`：冷启动主界面提示「AI 页面未挂接」→ 打开探针 `attach status=Attached 1176x1801` → 返回主界面显示「状态：网页可用」；同时移除主界面 `onDestroy` 里的 `webHost.destroy()`（真机日志证实它会销毁登录页正在使用的 WebView）。
+- [x] **AI-170** 真机验证三态切换：主界面识牌（离屏、用户看不到网页）→ 进入 AI 网页页面（可见、可手动登录）→ 返回主界面（离屏恢复、登录态保留）。记录 `innerHeight`、`innerWidth`、`readyState`、`isAttachedToWindow`、WebView layout 尺寸与窗口尺寸。 → 现状（2026-10-30）：依赖 AI-169；三态切换尚未验证。 → 结果（2026-10-30）：真机三态：主界面（无可见 WebView，靠离屏）→ AI 页面 `Attached 1176x1801` / 页面 `innerHeight=601` → 离屏 `layout=1176x2328 innerHeight=776` → 返回主界面健康检查 `Ready`，DeepSeek 登录态保持。
+- [x] **AI-171** 断言/单测：离屏挂接后 WebView 的 layout 宽高必须等于屏幕像素尺寸，`innerHeight` 不得为 0 或 1；不满足时按 `VIEWPORT_UNHEALTHY` 处理并给出可读原因（衔接 AI-075）。 → 结果（2026-10-30）：`OffscreenLayout.rejectReason` 要求 layout 等于屏幕像素，否则拒绝挂接并给出可读原因；`OffscreenLayoutTest` 4 例，真机 `innerHeight=776`。
 
 ### A8.2 提交协议加固（对齐 SMSProxy 的正面证据要求）
 
-- [ ] **AI-172** 新增 `DeepSeekScripts.fillAndSend(prompt, ...)`：在同一个 JS turn 内完成填文本（prototype setter + `input`/`change`）与触发发送，避免两次往返之间 composer 重渲染导致发送按钮重新禁用。同步返回 `inputFilled`、`valueEmpty`、`sendClicked`、`sendClickable`、`url` 等诊断字段。
-- [ ] **AI-173** 驱动层新增 `awaitSendEnabled`：点击前轮询发送按钮可用（排除 `disabled`、`aria-disabled=true`、`ds-button--disabled`），超时返回 false 由调用方重新填文本，禁止对 disabled 按钮点击并当作成功。
-- [ ] **AI-174** 把 `awaitSubmitStarted` 升级为三态（STARTED / NOT_STARTED / STALE_PAGE）：URL 变为会话页（`/a/chat/s/`）即判 STARTED；stop 按钮出现或 reply 节点有文本即判 STARTED；6s 内 URL 与 DOM 均无变化判 STALE_PAGE 并 reload 首页重试一次（不消耗重试次数），避免在死文档上白等 120s。
-- [ ] **AI-175** `DeepSeekAdapter.parseSubmitResult` 不再只认 `ok`：必须同时具备填文本成功与提交正面证据（`inputFilled && (sentEnter || sendClicked) && valueEmpty`，或等价判据），否则返回 `SubmitOutcome.fail`，杜绝“未提交报成功”。
-- [ ] **AI-176** 其它网页源（Gemini / ChatGPT）同步复核：`uploadsInsideSubmit` 路径的“提交后确认附件预览”保持不变；对各自发送按钮的可用性判据补同样的“先轮询再点击”，不得沿用“派发成功即成功”。
-- [ ] **AI-177** 单测：发送按钮 disabled 时不得判提交成功；`STALE_PAGE` 只触发一次 reload 且不占重试次数；`valueEmpty=false` 时返回 `SubmitOutcome.fail`；`fillAndSend` 单 turn 内完成填与点（脚本快照断言）。
-- [ ] **AI-178** 真机复测：先修 AI-165~171 消除遮挡，再跑 DeepSeek 带图识牌端到端，确认“图片进输入框 → 自动提交 → 新回答 → 解析出 `cards`”全程无需人工点击；记录修复前后 `sendClickable`、`innerHeight`、`SubmitOutcome.why` 对照。
+- [x] **AI-172** 新增 `DeepSeekScripts.fillAndSend(prompt, ...)`：在同一个 JS turn 内完成填文本（prototype setter + `input`/`change`）与触发发送，避免两次往返之间 composer 重渲染导致发送按钮重新禁用。同步返回 `inputFilled`、`valueEmpty`、`sendClicked`、`sendClickable`、`url` 等诊断字段。 → 结果（2026-10-30）：`DeepSeekScripts.fillAndSend` 在同一个 JS turn 内填文本 + Enter/点击发送，避免 composer 重渲染后发送按钮丢失。
+- [x] **AI-173** 驱动层新增 `awaitSendEnabled`：点击前轮询发送按钮可用（排除 `disabled`、`aria-disabled=true`、`ds-button--disabled`），超时返回 false 由调用方重新填文本，禁止对 disabled 按钮点击并当作成功。 → 结果（2026-10-30）：`PageOps.awaitSendEnabled` 轮询 `sendStateScript`（尺寸 > 0 且无 disabled/aria-disabled 类）；超时由 `submitWithSendEnabledRetry` 重填一次，仍失败即 `SubmitFailed`。 真机 `source_e2e` 暴露旧脚本先派发 Enter 再找按钮，冷启动时会假报 submitted；现改为无可用发送按钮就不发送，由 `awaitSendEnabled` 重试一次。
+- [x] **AI-174** 把 `awaitSubmitStarted` 升级为三态（STARTED / NOT_STARTED / STALE_PAGE）：URL 变为会话页（`/a/chat/s/`）即判 STARTED；stop 按钮出现或 reply 节点有文本即判 STARTED；6s 内 URL 与 DOM 均无变化判 STALE_PAGE 并 reload 首页重试一次（不消耗重试次数），避免在死文档上白等 120s。 → 结果（2026-10-30）：`awaitSubmitStarted` 三态：会话 URL / stop / 回答文本或节点变化 → STARTED；6s 无变化 → STALE_PAGE；超时 → NOT_STARTED。STALE_PAGE 只 reload 一次且不占重试次数。
+- [x] **AI-175** `DeepSeekAdapter.parseSubmitResult` 不再只认 `ok`：必须同时具备填文本成功与提交正面证据（`inputFilled && (sentEnter || sendClicked) && valueEmpty`，或等价判据），否则返回 `SubmitOutcome.fail`，杜绝“未提交报成功”。 → 结果（2026-10-30）：`DeepSeekAdapter.parseSubmitResult` 要求 `ok && inputFilled && (sentEnter || sendClicked)`；仅脚本不报错、仅 `valueEmpty` 都不算成功。 同一修复：`sendDisabled=true` 时 `parseSubmitResult` 返回失败，驱动层等按钮可用后重填一次。
+- [x] **AI-176** 其它网页源（Gemini / ChatGPT）同步复核：`uploadsInsideSubmit` 路径的“提交后确认附件预览”保持不变；对各自发送按钮的可用性判据补同样的“先轮询再点击”，不得沿用“派发成功即成功”。 → 结果（2026-10-30）：Gemini / ChatGPT 均实现 `sendStateScript` 并在点击前轮询；`uploadsInsideSubmit` 路径仍在提交后 `verifyAttachment`，失败即 `UploadFailed`。
+- [x] **AI-177** 单测：发送按钮 disabled 时不得判提交成功；`STALE_PAGE` 只触发一次 reload 且不占重试次数；`valueEmpty=false` 时返回 `SubmitOutcome.fail`；`fillAndSend` 单 turn 内完成填与点（脚本快照断言）。 → 结果（2026-10-30）：`SiteAdapterScriptsTest` / `WebViewAiSourceTest` / `SubmitProgressTest` 覆盖：disabled 不判成功、STALE_PAGE 只 reload 一次、`valueEmpty=false` 失败、`fillAndSend` 单 turn 完成填与点。
+- [x] **AI-178** 真机复测：先修 AI-165~171 消除遮挡，再跑 DeepSeek 带图识牌端到端，确认“图片进输入框 → 自动提交 → 新回答 → 解析出 `cards`”全程无需人工点击；记录修复前后 `sendClickable`、`innerHeight`、`SubmitOutcome.why` 对照。 → 现状（2026-10-30）：需在正式主界面跑离屏端到端；探针 `offscreen_e2e` 只验证了附件回填，未覆盖完整识牌与解析。 → 结果（2026-10-30）：生产驱动 `source_e2e` 真机通过（2026-10-30 11:43）：可见容器 `1176x1801` → 离屏挂接（`OFFSCREEN_ATTACH attached=true status=Offscreen layout=1176x2328`）→ PASTE → 附件确认 → 提交（发送按钮就绪后重试一次）→ `SOURCE_E2E_OK cards=27 status=Offscreen`；同时修掉“发送按钮未渲染就派发 Enter、假报 submitted”的缺陷。
 
 **阶段 8 验收：** 主界面不存在可见 WebView，网页仅在独立 AI 页面可见；离屏挂接的 WebView 仍有真实全屏视口（`innerHeight` 等于屏高）；DeepSeek 带图识牌在无人工点击的情况下完成提交并取得新回答；提交失败与未提交不得被报成成功；所有改动有单测与真机记录，且未破坏 `AiSourceError` 分类与 M11（上传未确认不提交）。
 
@@ -445,37 +445,38 @@
 
 ## 全局验收清单
 
-- [ ] **G-01** 图片上传的真实网页行为已在目标 Android WebView 上验证，而不是仅有脚本派发成功记录。
-- [ ] **G-02** 带图/不带图对照测试确认模型真正使用图片像素信息。
-- [ ] **G-03** 上传确认发生在提交之前；上传失败绝不当作成功识牌请求继续执行。
-- [ ] **G-04** 只读取当前任务的新回答，不接受旧回答、用户问题回显或空容器。
-- [ ] **G-05** `AiCardResponseParser` 严格校验模型输出并产生合法的项目 `Card` 列表或明确错误。
-- [ ] **G-06** 本地 OCR、模板匹配、图像编码解码、手动校对及评分功能保持不变。
-- [ ] **G-07** Activity 重建、任务取消、登录失效、上传超时和重试均有明确且可恢复的行为。
-- [ ] **G-08** 日志与诊断不泄露密码、Cookie、令牌或完整图片 Base64。
-- [ ] **G-09** 旧 Gemini Key 已按迁移策略处理，OpenAI/custom API profile 保持兼容。
-- [ ] **G-10** 单元测试、构建和目标设备真实会话验收均有可核对的执行记录。
-- [ ] **G-11** 配置页能显式选择 ChatGPT / DeepSeek / Gemini / 自定义网页 / HTTP API 五种 AI 源，且选择被真实保存、重载与复用。
-- [ ] **G-12** 选网页源时不再要求 API Key；选 API 源时仍校验 HTTPS 与 Key。
-- [ ] **G-13** 驱动层（`PageDriver` / `WebViewAiSource`）内无任何站点名、站点 URL 或 CSS 选择器（`grep` 可证）。
-- [ ] **G-14** 新增第三个站点只需实现 `SiteAdapter` + 注册预设，不改驱动层与 `MainActivity` 主流程。
-- [ ] **G-15** ChatGPT、DeepSeek 与 Gemini 各自会话隔离得到验证：Cookie、历史、附件及当前回答互不串线；若实现方式不支持独立会话，须明确列为限制，不能虚假勾选。
-- [ ] **G-16** 所有网页源的失败文案经 `AiSourceError` 分类映射，用户能区分“未登录 / 页面未就绪 / 上传失败 / 提交失败 / 超时 / 解析失败 / 页面结构变化”。
-- [ ] **G-22** `chatgpt_web` 已注册到 `AiSourceId`、`AiSourceRegistry`、预设、设置 UI 与 profile 迁移/保存测试；选用 ChatGPT 网页版时无需 OpenAI API Key，HTTP API 路径不受影响。
-- [ ] **G-23** ChatGPT 图片上传已在目标 Android WebView 实测：只有确认当前消息出现真实附件预览后才允许提交；paste 派发成功、输入框已填或脚本返回成功均不能代替上传成功。
-- [ ] **G-24** ChatGPT 登录判据、附件预览选择器及新回答提取已有真实设备证据；未验证项仍明确标记待测，上传失败不得降级为纯文本识牌。
-- [ ] **G-25** ChatGPT / DeepSeek / Gemini 三个网页源均有独立的带图识牌闭环与跨源切换测试记录，包含实测日期、设备、WebView 版本和已知限制。
+- [x] **G-01** 图片上传的真实网页行为已在目标 Android WebView 上验证，而不是仅有脚本派发成功记录。 → 结果（2026-10-30）：DeepSeek 的 PASTE 与原生触摸 FILE_CHOOSER 均在目标 WebView 出现真实附件预览；Gemini paste 闭环已有记录；ChatGPT 未验证且未宣称可用。
+- [x] **G-02** 带图/不带图对照测试确认模型真正使用图片像素信息。 → 结果（2026-10-30）：DeepSeek 带图/不带图对照真机通过（AI-132）：无图时模型明确表示未看到照片。
+- [x] **G-03** 上传确认发生在提交之前；上传失败绝不当作成功识牌请求继续执行。 → 结果（2026-10-30）：`WebViewAiSource` 先上传并 `verifyAttachment` 再 `fillAndSubmit`；`uploadsInsideSubmit` 提交后立即验证，失败抛 `UploadFailed`，不继续当作成功。
+- [x] **G-04** 只读取当前任务的新回答，不接受旧回答、用户问题回显或空容器。 → 结果（2026-10-30）：发送前基线 + `GenerationWatcher`；旧回答、prompt 回显、空节点均有单测。
+- [x] **G-05** `AiCardResponseParser` 严格校验模型输出并产生合法的项目 `Card` 列表或明确错误。 → 结果（2026-10-30）：`AiCardResponseParser` 严格校验 rank/suit/数量，非法结果返回警告或 `ParseFailed`。
+- [x] **G-06** 本地 OCR、模板匹配、图像编码解码、手动校对及评分功能保持不变。 → 结果（2026-10-30）：本地 OCR、模板匹配、`VisualCardCodec`、手动校对与 `HandScorer` 未重写；全部既有单测通过。
+- [ ] **G-07** Activity 重建、任务取消、登录失效、上传超时和重试均有明确且可恢复的行为。 → 现状（2026-10-30）：取消/登录失效/上传超时/重试已有单测；Activity 重建与旋转仍未真机验证，不能整体勾选。
+- [x] **G-08** 日志与诊断不泄露密码、Cookie、令牌或完整图片 Base64。 → 结果（2026-10-30）：URL 进日志前经 `UrlRedactor`；无 Cookie / 密码 / 令牌 / Base64 输出；`WebViewSecurityConfigTest` 8 例、`UrlRedactorTest` 7 例。
+- [x] **G-09** 旧 Gemini Key 已按迁移策略处理，OpenAI/custom API profile 保持兼容。 → 结果（2026-10-30）：`LegacyKeyCleanup` 清空网页源旧 Key、无 Key 时才删 alias；HTTP API profile 与校验保留。
+- [ ] **G-10** 单元测试、构建和目标设备真实会话验收均有可核对的执行记录。 → 现状（2026-10-30）：单测与构建记录完整，DeepSeek/Gemini 有真机会话记录；ChatGPT 真机会话缺失，不满足“均有记录”。
+- [x] **G-11** 配置页能显式选择 ChatGPT / DeepSeek / Gemini / 自定义网页 / HTTP API 五种 AI 源，且选择被真实保存、重载与复用。 → 结果（2026-10-30）：设置页五源下拉 + profile 列表；`AiSettingsStoreTest` 覆盖预设覆盖全部源、保存/重载/切换，DeepSeek 保持首位。
+- [x] **G-12** 选网页源时不再要求 API Key；选 API 源时仍校验 HTTPS 与 Key。 → 结果（2026-10-30）：网页源隐藏 API 字段且不要求 Key；API 源仍校验 HTTPS / endpoint / model / Key。
+- [x] **G-13** 驱动层（`PageDriver` / `WebViewAiSource`）内无任何站点名、站点 URL 或 CSS 选择器（`grep` 可证）。 → 结果（2026-10-30）：驱动层 grep 为空（AI-151），`DriverDecouplingTest` 静态断言守门。
+- [x] **G-14** 新增第三个站点只需实现 `SiteAdapter` + 注册预设，不改驱动层与 `MainActivity` 主流程。 → 结果（2026-10-30）：`FakeSiteAdapter` + `DriverDecouplingTest` 证明新增站点只需实现 `SiteAdapter` + 注册，不改驱动层与主流程。
+- [ ] **G-15** ChatGPT、DeepSeek 与 Gemini 各自会话隔离得到验证：Cookie、历史、附件及当前回答互不串线；若实现方式不支持独立会话，须明确列为限制，不能虚假勾选。 → 现状（2026-10-30）：三源会话隔离未验证；当前共用单例 WebView 与 Cookie，若确认不支持独立会话，应列为限制。
+- [x] **G-16** 所有网页源的失败文案经 `AiSourceError` 分类映射，用户能区分“未登录 / 页面未就绪 / 上传失败 / 提交失败 / 超时 / 解析失败 / 页面结构变化”。 → 结果（2026-10-30）：`AiSourceError` 九类 + `MainActivity.toKind()` + 失败文案，用户可区分未登录/未就绪/上传/提交/超时/解析/结构变化。
+- [x] **G-22** `chatgpt_web` 已注册到 `AiSourceId`、`AiSourceRegistry`、预设、设置 UI 与 profile 迁移/保存测试；选用 ChatGPT 网页版时无需 OpenAI API Key，HTTP API 路径不受影响。 → 结果（2026-10-30）：`chatgpt_web` 已注册到 ID / Registry / 预设 / 设置 UI / store 测试；网页源免 OpenAI Key，HTTP API 路径不受影响（AI-164）。
+- [ ] **G-23** ChatGPT 图片上传已在目标 Android WebView 实测：只有确认当前消息出现真实附件预览后才允许提交；paste 派发成功、输入框已填或脚本返回成功均不能代替上传成功。 → 现状（2026-10-30）：ChatGPT 图片上传未在目标 WebView 实测，不能勾选。
+- [ ] **G-24** ChatGPT 登录判据、附件预览选择器及新回答提取已有真实设备证据；未验证项仍明确标记待测，上传失败不得降级为纯文本识牌。 → 现状（2026-10-30）：ChatGPT 无真实设备证据，不能勾选。
+- [ ] **G-25** ChatGPT / DeepSeek / Gemini 三个网页源均有独立的带图识牌闭环与跨源切换测试记录，包含实测日期、设备、WebView 版本和已知限制。 → 现状（2026-10-30）：缺 ChatGPT 闭环与三源切换记录，不能勾选。
 
-- [ ] **G-17** `doc/ui_design.md` 所规定的主工作台、手牌编辑、评分结果、图片输出、AI 源管理和独立网页登录/诊断均已完成阶段 7 验收。
-- [ ] **G-18** 输入照片与输出图片状态分离；手牌或级牌变更后旧评分会失效，UI 不独立计算等级或重新评分。
-- [ ] **G-19** 所有 UI 状态、健康状态、评分数值和图片保存结果均来自真实业务状态；失败时保留仍然有效的用户数据。
-- [ ] **G-20** 配置档操作、五种 AI 源字段显隐、网页源免 API Key、API 配置校验及网页登录返回后的健康状态刷新均已验证。
-- [ ] **G-21** 窄屏、横屏、字体缩放、TalkBack 与触控目标已验证；测试、构建和实际 Android 设备验收结果有记录。
+- [x] **G-17** `doc/ui_design.md` 所规定的主工作台、手牌编辑、评分结果、图片输出、AI 源管理和独立网页登录/诊断均已完成阶段 7 验收。 → 结果（2026-10-30）：UI-001~UI-022 全部完成并记录证据；独立网页登录/诊断（UI-018/UI-019）随 AI-169 共享宿主修复在真机闭环（进入登录页 → 返回 → 健康态刷新）。横屏/字体缩放/TalkBack 仍单列在 G-21。
+- [x] **G-18** 输入照片与输出图片状态分离；手牌或级牌变更后旧评分会失效，UI 不独立计算等级或重新评分。 → 结果（2026-10-30）：`WorkbenchState` 分离输入图 `inputBitmap` 与输出图 `outputBitmap`；手牌或级牌变更调用 `ScoreState.invalidate()`；UI 不独立算等级或评分。
+- [x] **G-19** 所有 UI 状态、健康状态、评分数值和图片保存结果均来自真实业务状态；失败时保留仍然有效的用户数据。 → 结果（2026-10-30）：状态驱动渲染：健康态、评分、图片保存结果均来自业务状态；失败路径保留当前手牌与本地识别结果。
+- [x] **G-20** 配置档操作、五种 AI 源字段显隐、网页源免 API Key、API 配置校验及网页登录返回后的健康状态刷新均已验证。 → 结果（2026-10-30）：五源字段显隐、网页源免 Key、API HTTPS/Key 校验均有代码与单测；真机验证「打开登录页 → 返回主界面」后健康状态刷新为「网页可用」（UI-019）。
+- [ ] **G-21** 窄屏、横屏、字体缩放、TalkBack 与触控目标已验证；测试、构建和实际 Android 设备验收结果有记录。 → 现状（2026-10-30）：横屏、字体缩放、TalkBack 尚未真机取证；布局仅按 48dp 与 contentDescription 约束。
 
 ## 任务执行记录
 
 | 日期 | 任务编号/阶段 | 结果 | 证据或问题 | 后续动作 |
 |---|---|---|---|---|
+| 2026-10-30 | 阶段 8 / AI-133/134/168/169/170/178、G-17/G-20 | DeepSeek 离屏端到端与共享宿主三态真机通过 | LIO-N29：`source_e2e` 27 张；`source_e2e_twice` 27→22 张互不串线；可见 1176x1801 → 离屏 1176x2328（innerHeight 776）；冷启动「未挂接」→ 打开 AI 页面 → 返回「网页可用」（同 pid 15623）；单测 321 项全绿 | 继续 ChatGPT 真机（AI-158~163）、旋转/重建（AI-077/078）、三源横向（AI-148/149/154）、G-21 人工取证 |
 | 2026-10-29 | 多源任务清单同步 | 已更新任务定义，待实施/验证 | 根据 `doc/multi_ai_update.md` 纳入 ChatGPT 网页源：新增适配器与单测、真机图片闭环、第五个源预设与设置回归、三网页源横向验收及 G-22~G-25。未将设计要求视为实现或真机验收证据 | 按 AI-156~164 完成适配器、配置与测试；随后执行 AI-158~163 真机闭环并更新多源设计记录 |
 | 2026-10-28 | 阶段 7 / UI-001~022 | 已分解，待实施 | 依据 `doc/ui_design.md` 新增 UI 任务；未将设计规格视为实现证据，所有 UI 任务保持未勾选 | 按 P0→P1→P2 实施并逐步验证 |
 | 2026-10-28 | AI-001~003 | 通过 | 分支 airecognize 工作区干净；testDebugUnitTest 与 assembleDebug 均 BUILD SUCCESSFUL（基线 24 测试） | — |

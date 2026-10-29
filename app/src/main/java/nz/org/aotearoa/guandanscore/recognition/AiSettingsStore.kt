@@ -184,6 +184,9 @@ class AiSettingsStore(private val context: Context) {
             .putString("active_profile", activeId)
             .remove("provider").remove("endpoint").remove("model").remove("api_key")
             .apply()
+        // AI-094：所有 Key 都已清空时才回收 Keystore alias。只要还有 API 源在用，
+        // 删别名会让现存密文永久解不开；因此判定复用 LegacyKeyCleanup，而不是在这里猜。
+        if (!sanitized.any { it.apiKey.isNotEmpty() }) dropKeystoreAliasIfUnused()
     }
 
     companion object {

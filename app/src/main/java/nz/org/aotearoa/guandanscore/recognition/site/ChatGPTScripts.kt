@@ -57,10 +57,25 @@ object ChatGPTScripts {
           catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
           var last = nodes && nodes.length > 0 ? nodes[nodes.length - 1] : null;
           var text = last ? (last.textContent || '').trim() : '';
-          var generating = 0, password = 0, loginUi = 0;
+          var generating = 0, password = 0, loginUi = 0, attach = 0;
           try { generating = document.querySelectorAll(${q(ChatGPTSelectors.generating())}).length; } catch (e) {}
           try { password = document.querySelectorAll(${q(ChatGPTSelectors.password())}).length; } catch (e) {}
           try { loginUi = document.querySelectorAll(${q(ChatGPTSelectors.login())}).length; } catch (e) {}
+          // AI-042：发送前的输入区现状与可读会话标识（只读，不修改页面）。
+          var inputEl = null;
+          try { inputEl = document.querySelector(${q(ChatGPTSelectors.input())}); } catch (e) {}
+          // 附件只数 composer 附近的预览：全局会把历史消息里的 blob 图片算进来。
+          if (inputEl) {
+            var box = inputEl;
+            for (var bi = 0; bi < 6 && box.parentElement; bi++) box = box.parentElement;
+            try { attach = box.querySelectorAll(${q(ChatGPTSelectors.attachment())}).length; } catch (e) {}
+          }
+          var inputText = inputEl ? (inputEl.value === undefined ? (inputEl.textContent || '') : inputEl.value) : '';
+          var sessionId = '';
+          try {
+            var sm = (location.pathname || '').match(/\/c\/([^\/?#]+)/);
+            sessionId = sm ? sm[1] : '';
+          } catch (e) {}
           return JSON.stringify({
             ok: true,
             responseCount: nodes ? nodes.length : 0,
@@ -68,6 +83,10 @@ object ChatGPTScripts {
             generating: generating > 0,
             passwordCount: password,
             loginIndicatorCount: loginUi,
+            inputText: inputText,
+            attachmentCount: attach,
+            attached: attach > 0,
+            sessionId: sessionId,
             href: location.href
           });
         })()
@@ -84,14 +103,23 @@ object ChatGPTScripts {
         })()
     """.trimIndent()
 
-    /** 校验附件预览是否真的出现。 */
+    /**
+     * 校验附件预览是否真的出现。
+     * 只数 composer 附近，避免命中历史消息里的图片（与 Gemini / DeepSeek 同一原则）。
+     */
     fun verifyAttachment(): String = """
         (function() {
+          var input = null;
+          try { input = document.querySelector(${q(ChatGPTSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!input) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          var box = input;
+          for (var i = 0; i < 6 && box.parentElement; i++) box = box.parentElement;
           var n = 0;
-          try { n = document.querySelectorAll(${q(ChatGPTSelectors.attachment())}).length; } catch (e) {
+          try { n = box.querySelectorAll(${q(ChatGPTSelectors.attachment())}).length; } catch (e) {
             return JSON.stringify({ ok: false, why: 'selector-error' });
           }
-          return JSON.stringify({ ok: true, attachmentCount: n, attached: n > 0 });
+          return JSON.stringify({ ok: true, attachmentCount: n, attached: n > 0, scoped: true });
         })()
     """.trimIndent()
 

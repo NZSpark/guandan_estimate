@@ -63,10 +63,39 @@ object DeepSeekScripts {
           catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
           var last = nodes && nodes.length > 0 ? nodes[nodes.length - 1] : null;
           var text = last ? (last.textContent || '').trim() : '';
-          var generating = 0, password = 0, loginUi = 0;
+          var generating = 0, password = 0, loginUi = 0, attach = 0;
           try { generating = document.querySelectorAll(${q(DeepSeekSelectors.generating())}).length; } catch (e) {}
           try { password = document.querySelectorAll(${q(DeepSeekSelectors.password())}).length; } catch (e) {}
           try { loginUi = document.querySelectorAll(${q(DeepSeekSelectors.login())}).length; } catch (e) {}
+          // AI-042：发送前的输入区现状与可读会话标识（只读，不修改页面）。
+          var inputEl = null;
+          try { inputEl = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
+          // 附件必须**限定在 composer 内**：上一条消息的图片缩略图也是 blob:，
+          // 全局计数会在第二轮把历史图片误判成“待发送附件”（真机已复现）。
+          // 向上找到包含隐藏 input[type=file] 的最近容器，就是 composer root。
+          if (inputEl) {
+            // 真机 levels 实测（2026-10-30）：composer 附件在输入框上方第 3~5 层；
+            // 已发送消息里的图片从第 6 层才出现。固定取第 3 层，把历史图片排除在外。
+            var box = inputEl;
+            for (var bi = 0; bi < 3 && box.parentElement; bi++) box = box.parentElement;
+            try { attach = box.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length; } catch (e) {}
+          }
+          var inputText = inputEl ? (inputEl.value === undefined ? (inputEl.textContent || '') : inputEl.value) : '';
+          // 诊断：各祖先层附件命中数，用于把 composer 与历史消息区分开。
+          var levels = [];
+          if (inputEl) {
+            var lb = inputEl;
+            for (var li = 0; li < 8 && lb && lb.parentElement; li++) {
+              lb = lb.parentElement;
+              try { levels.push(lb.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length); }
+              catch (e) { levels.push(-1); }
+            }
+          }
+          var sessionId = '';
+          try {
+            var sm = (location.pathname || '').match(/\/a\/chat\/s\/([^\/?#]+)/);
+            sessionId = sm ? sm[1] : '';
+          } catch (e) {}
           return JSON.stringify({
             ok: true,
             responseCount: nodes ? nodes.length : 0,
@@ -74,6 +103,11 @@ object DeepSeekScripts {
             generating: generating > 0,
             passwordCount: password,
             loginIndicatorCount: loginUi,
+            inputText: inputText,
+            attachmentCount: attach,
+            attached: attach > 0,
+            attachmentLevels: levels.join('|'),
+            sessionId: sessionId,
             href: location.href
           });
         })()
@@ -318,17 +352,9 @@ object DeepSeekScripts {
 
           var filled = (el.value === undefined ? el.textContent : el.value) === text;
 
-          // 主路径：Enter keydown（实测可提交）。
-          var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
-          var enterSent = false;
-          try {
-            el.dispatchEvent(new KeyboardEvent('keydown', opts));
-            el.dispatchEvent(new KeyboardEvent('keyup', opts));
-            enterSent = true;
-          } catch (e) {}
-
-          // 兜底：若输入框仍保留文本，再点一次启用的发送按钮。
-          // sendDisabled 记录“页面上只有禁用按钮”这一事实，供适配器拒绝虚假成功。
+          // AI-173 / AI-175：发送按钮可用是提交的正面证据，不能只看“事件派发没抛异常”。
+          // 冷启动时 composer 已存在但 React 还没渲染出发送按钮；此时派发 Enter
+          // 不会产生任何请求，却会被当成“已提交”（真机复现：6s 后判 STALE_PAGE）。
           var sendCount = 0;
           function findSend() {
             var list;
@@ -337,17 +363,32 @@ object DeepSeekScripts {
             sendCount = list.length;
             for (var i = 0; i < list.length; i++) {
               var b = list[i];
+              var r = b.getBoundingClientRect();
               var cls = (b.className || '').toString();
               var dis = b.disabled === true ||
                         b.getAttribute('aria-disabled') === 'true' ||
                         cls.indexOf('ds-button--disabled') >= 0;
-              if (!dis) return b;
+              if (!dis && r.width > 0 && r.height > 0) return b;
             }
             return null;
           }
           var btn = findSend();
-          var clicked = false;
-          if (btn) { try { btn.click(); clicked = true; } catch (e) {} }
+          var enterSent = false, clicked = false;
+          if (btn) {
+            // 主路径：Enter keydown（实测可提交）。
+            var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+            try {
+              el.dispatchEvent(new KeyboardEvent('keydown', opts));
+              el.dispatchEvent(new KeyboardEvent('keyup', opts));
+              enterSent = true;
+            } catch (e) {}
+            // 兜底：若 Enter 后输入框仍保留文本，再点一次启用的发送按钮。
+            // 文本已被清空时不再点击，避免跳到空的新会话。
+            var beforeClick = (el.value === undefined ? (el.textContent || '') : el.value);
+            if (String(beforeClick || '').trim().length > 0) {
+              try { btn.click(); clicked = true; } catch (e) {}
+            }
+          }
 
           var valueNow = (el.value === undefined ? (el.textContent || '') : el.value);
           return JSON.stringify({
@@ -435,14 +476,38 @@ object DeepSeekScripts {
         })(${q(fileName)}, ${q(mimeType)}, ${q(base64)})
     """.trimIndent()
 
-    /** 校验附件预览是否真的出现。 */
+    /**
+     * 校验附件预览是否真的出现。
+     *
+     * AI-042/AI-082：只在 composer 范围内计数。全局 `img[src^='blob:']` 会把
+     * **上一条已发送消息里的图片**也算进来，导致第二轮跳过上传、甚至把旧图当新图。
+     * composer 的判定是「从输入框向上、最近的包含 `input[type=file]` 的祖先」。
+     */
     fun verifyAttachment(): String = """
         (function() {
+          var input = null;
+          try { input = document.querySelector(${q(DeepSeekSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!input) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          // 与快照同一范围：第 3 层开始是 composer 附件；第 6 层会命中历史消息图片。
+          var box = input;
+          for (var i = 0; i < 3 && box.parentElement; i++) box = box.parentElement;
           var n = 0;
-          try { n = document.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length; } catch (e) {
+          try { n = box.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length; } catch (e) {
             return JSON.stringify({ ok: false, why: 'selector-error' });
           }
-          return JSON.stringify({ ok: true, attachmentCount: n, attached: n > 0 });
+          // 诊断：各祖先层的附件命中数，用于确认 composer 的真实边界。
+          var levels = [];
+          var b = input;
+          for (var li = 0; li < 8 && b && b.parentElement; li++) {
+            b = b.parentElement;
+            try { levels.push(b.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length); }
+            catch (e) { levels.push(-1); }
+          }
+          return JSON.stringify({
+            ok: true, attachmentCount: n, attached: n > 0, scoped: true,
+            levels: levels.join('|')
+          });
         })()
     """.trimIndent()
 

@@ -57,17 +57,18 @@ P    = 15 × N_waste        （N ≥ 10；N < 10 的残局不扣散牌惩罚）
 | --- | --- | --- | --- |
 | DeepSeek 网页版 | WebView | 否 | 首发源，默认选中；真机端到端闭环已验证 |
 | Gemini 网页版 | WebView | 否 | 在应用内用 Google 账号登录后识图 |
-| ChatGPT 网页版 | WebView | 否 | 上传首选合成粘贴 |
+| ChatGPT 网页版 | WebView | 否 | 适配器与配置已接入，选择器/上传**未真机验证** |
 | 自定义网页源 | WebView | 否 | 只需填 `https://` 网页地址，选择器复用通用聊天页结构 |
 | HTTP API | HTTPS | 是 | Gemini `generateContent` / OpenAI Responses / OpenAI Chat Completions |
 
 **网页源的运行方式**
 
 1. **登录**：设置页「打开网页登录」进入独立页面完成登录，Cookie 由 `CookieManager` 在应用内全局保留，之后主界面识图复用同一登录态。
-2. **上传**：按适配器的首选策略——多数站点先构造合成 `paste` 事件注入图片，自定义网页源先用原生触摸触发文件选择器；首选失败则回退另一条。两条路径都必须以页面出现附件预览为成功判据，**附件未确认绝不提交**。
+2. **上传**：按适配器声明的 `supportedUploads` 尝试（每个源只启用真机验证过的路径，不再无条件回退）——DeepSeek 支持合成 `paste` 与原生触摸文件选择器，Gemini/ChatGPT 仅合成 `paste`，自定义源走文件选择器。所有路径都必须以页面出现附件预览为成功判据，**附件未确认绝不提交**。
 3. **提交与等待**：先记录回答基线 → 填 prompt → 提交（必须同时 `filled` 与 `submitted`）→ 轮询页面新增回答，文本连续稳定才判定生成结束，避免追问拿到上一轮回答。
 4. **健康检查**：只读诊断，不导航、不 reload；页面被分为 READY / LOADING / COMPOSER_MISSING / VIEWPORT_UNHEALTHY / LOGIN_REQUIRED / HOST_NOT_ATTACHED，分别对应「继续 / 重试 / 重载 / 需人处理（视口异常）/ 请登录 / 请先打开一次 AI 页面」。选择器缺失与视口异常不会被误报成未登录。
 5. **不占界面**：主界面不插入可见 WebView，页面挂在 1×1 离屏锚点上按全屏像素布局，`innerHeight` 等于屏高，页面照常出帧、文件选择器照常触发。
+6. **共享宿主**：主界面与「打开网页登录」页共用同一个 WebView 实例；在可见容器与离屏锚点之间切换前会先解除旧父容器。冷启动尚未挂接时提示「请先打开一次 AI 页面」，而不是误报未登录。
 
 **HTTP API 源**
 
@@ -146,7 +147,7 @@ adb install -r -t app/build/outputs/apk/debug/app-debug.apk
 
 ## 测试
 
-`./gradlew testDebugUnitTest` 是提交前基线。当前 32 个测试类、300 项单元测试全绿，覆盖：
+`./gradlew testDebugUnitTest` 是提交前基线。当前 34 个测试类、321 项单元测试全绿，覆盖：
 
 - 牌型分值：普通牌型映射上下界（191）、最小四炸（192）、高阶炸弹对数分、火箭（1000）、级牌逢人配的三种语义。
 - 拆牌与指标：1～27 张部分/完整手牌、`T_max(N)`、SPI/NSPI、散牌惩罚、动态评级、并列方案的取舍。
@@ -209,11 +210,12 @@ adb shell am start -n nz.org.aotearoa.guandanscore/.probe.AiProbeActivity \
 
 - 被相邻牌或手指完全遮挡的牌角无法从单张照片恢复，必须人工补录。
 - 本地识别是 OCR + 模板匹配的工程方案（非训练模型），花色依赖点数下方小图形投票，低置信度会在警告里点名，需要核对。
-- Gemini 网页版的上传入口可能先弹出网页自渲染的二级面板（`Upload and tools` → `Photos` / `Files`），当前只驱动到第一级；DeepSeek 的完整闭环已真机验收。
+- Gemini 网页版的上传入口可能先弹出网页自渲染的二级面板（`Upload and tools` → `Photos` / `Files`），当前只驱动到第一级；DeepSeek 的完整闭环（离屏、连续两图、追问）已真机验收。
+- 模型对真实拍摄照片仍可能读错或输出重复牌（实测 `case14.jpg` 22 张中出现重复的黑桃 A/K），识牌结果需要人工核对；含重复牌的输入请在核对页修正后再评分。
 - 最优拆牌图要求 27 张；不足 27 张只能查看文字明细。
 - 精确覆盖是 NP-hard，极端手牌会触发 3 秒 / 12 万状态上限，退化为「剩余单张」收尾。
 - 横屏、字体缩放与 TalkBack 尚未真机取证（布局已按 48dp 触控目标与 `contentDescription` 约束）。
-- 早期单源 Gemini 路径（`AiRecognitionService` / `GeminiUpstream`）仍保留在代码树中，但已不被界面调用。
+- ChatGPT 网页源的适配器、脚本与配置已接入，但**未在目标设备登录验证**；选择器与上传路径均按“未验证”标注。
 
 ## 规则与设计文档
 
