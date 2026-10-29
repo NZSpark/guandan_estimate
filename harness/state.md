@@ -33,6 +33,8 @@
 4. 同步忙等（`while(Date.now()<dl)`）会阻塞 JS 事件循环，Angular 永远渲染不出按钮 —— 实测 2s 内 `bySel/byAria` 恒 0。**禁止同步忙等**，已有单测断言。
 5. 探针 `runScript` 只做 `removeSurrounding("\"")`，未还原 `\n`/`\\`/`\uXXXX` 转义 → 含引号的 JSON 数组回答解析成 null（`E2E_POLL: snapshot null`）。改用 `JSONTokener` 正确解码（AI-133）。
 6. `AiCardResponseParser.parseStrict` 只认 `{"cards":[...]}` 对象格式 → 模型返回顶层裸数组 `[...]`（探针 prompt 要求）时必然退回正则兜底并告警。已兼容裸数组（AI-134），新增 2 个单测。
+7. **`JsonParse.parse` 漏解 `evaluateJavascript` 的二次 JSON 编码**（2026-10-30 补修）：`evaluateJavascript` 对字符串返回值会再编码一次，脚本 `JSON.stringify(obj)` 到达 Kotlin 时是带外层引号、内部反斜杠转义的字符串字面量。旧实现直接 `JSONObject(raw)` 必失败，`probeLiveness` 恒 `NOT_READY`，表现为「页面健康却永远判未就绪」。现 `JsonParse.parse` 先判 `{` 直解，否则按 JSON 字符串字面量 `JSONTokener` 反转义后再解析；新增 `JsonParseTest` 4 例（对象文本 / 二次编码字面量 / 空与 null / 垃圾输入）。
+8. `probeLiveness` 的 `NOT_READY` 原先静默返回，无法区分「页面未 commit」「视口塌陷」「composer 缺失」。现三条失败分支各打一行 `Log.i(TAG, "probeLiveness NOT_READY: ...")`，带 `readyState / href(已脱敏) / innerHeight / inputCount`，配合 `UrlRedactor` 不泄漏完整 URL 查询串。
 
 ### 已完成（AI-011 窗口基线）
 
@@ -57,6 +59,7 @@
 - AI-015 Gemini 端 `--es site gemini_web` 的原生触摸 → `onShowFileChooser` 回填真机实测（代码路径已就绪，DeepSeek 同路径已由 AI-128 验收）。
 - 阶段 7 UI-001~022（见 `doc/ui_design.md`）。
 - 旧 Gemini Key 清理（AI-093~101）。
+- 阶段 8（`doc/ai_tasks.md` AI-165~178）尚未开工：仅完成任务书撰写，代码未动。
 
 ### 已完成（AI-018 带图/不带图对照，真机实测）
 

@@ -254,8 +254,14 @@ class PageDriver(
      * 把它当 DEAD 会触发自持的 reload 循环（SMSProxy P23）。
      */
     fun probeLiveness(): PageLiveness {
-        val json = JsonParse.parse(runBlockingEvaluate(adapter.diagnoseScript()))
-            ?: return PageLiveness.NOT_READY
+        val raw = runBlockingEvaluate(adapter.diagnoseScript())
+        val json = JsonParse.parse(raw)
+        if (json == null) {
+            // 诊断脚本本身失败（页面未 commit / evaluate 返回空 / JSON 不合法）。
+            // 这是「页面在但读不到」与「页面还没到」的分界点，必须留痕。
+            Log.i(TAG, "probeLiveness NOT_READY: diagnose unparsable raw=${raw.take(200)}")
+            return PageLiveness.NOT_READY
+        }
         val diag = adapter.parseDiagnose(json)
         // AI-031: 把静态诊断分类成五种状态并存下来，供 awaitReady 失败时给具体原因、
         // 也供 NEEDS_USER 类状态立刻中止重试（登录失效 / 视口塌陷重试无用）。
@@ -263,11 +269,27 @@ class PageDriver(
         lastProbeState = PageStateClassifier.classify(diag, adapter.isLoginUrl(diag.href))
         val ready = diag.readyState == "interactive" || diag.readyState == "complete"
         val hasOrigin = diag.href.isNotBlank() && !diag.href.startsWith("about:")
-        if (!ready || !hasOrigin) return PageLiveness.NOT_READY
+        if (!ready || !hasOrigin) {
+            Log.i(
+                TAG,
+                "probeLiveness NOT_READY: ready=$ready(${diag.readyState}) hasOrigin=$hasOrigin " +
+                    "href=${UrlRedactor.redact(diag.href)}"
+            )
+            return PageLiveness.NOT_READY
+        }
         // AI-024：阈值只在 AttachGate 定义一次（MIN_VIEWPORT_HEIGHT），避免两处各写 100 漂移。
         val viewportOk = AttachGate.viewportRejectReason(diag.innerHeight) == null
         val composerOk = diag.inputCount > 0
-        if (!viewportOk || !composerOk) return PageLiveness.NOT_READY
+        if (!viewportOk || !composerOk) {
+            // AI-031/AI-024：这两项失败是「页面在但不可用」的最常见原因，必须能从日志分辨。
+            Log.i(
+                TAG,
+                "probeLiveness NOT_READY: viewportOk=$viewportOk innerHeight=${diag.innerHeight} " +
+                    "composerOk=$composerOk inputCount=${diag.inputCount} " +
+                    "readyState=${diag.readyState} href=${UrlRedactor.redact(diag.href)}"
+            )
+            return PageLiveness.NOT_READY
+        }
         // 静态诊断全部通过，仍可能是“URL 正确、元素在、但页面已卡死”的假活页。
         // 用一个同步同源 XHR 探活：健康页毫秒级返回；卡死的 WebView 永远不返回。
         // 同步（第三个参数 false）是刻意的：异步请求可能悬挂到 evaluate 结束之后，

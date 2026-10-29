@@ -1,6 +1,7 @@
 package nz.org.aotearoa.guandanscore.recognition.site
 
 import org.json.JSONObject
+import org.json.JSONTokener
 
 /** 图片上传的首选策略。失败后驱动层会回退到另一条。 */
 enum class UploadStrategy { PASTE, FILE_CHOOSER }
@@ -175,10 +176,34 @@ object JsonParse {
 
     fun why(o: JSONObject): String? = o.optString("why").takeIf { it.isNotBlank() }
 
-    /** 安全解析：脚本返回空串或非 JSON 时给出可诊断的失败结果。 */
-    fun parse(raw: String): JSONObject? = try {
-        if (raw.isBlank() || raw == "null") null else JSONObject(raw)
-    } catch (_: Exception) {
-        null
+    /**
+     * 安全解析：脚本返回空串或非 JSON 时给出可诊断的失败结果。
+     *
+     * AI-133 同源缺陷：`evaluateJavascript` 对**字符串**返回值会再做一次 JSON 编码，
+     * 于是脚本 `JSON.stringify({...})` 的结果到这里变成带外层引号、内部反斜杠转义的
+     * 字符串字面量：`"{\"ok\":true,...}"`。直接 `JSONObject(raw)` 必然失败，表现为
+     * 页面明明健康却一律判成「未就绪」。
+     *
+     * 因此这里先尝试按 JSON 字符串字面量解码一次，再解析对象。
+     */
+    fun parse(raw: String): JSONObject? {
+        if (raw.isBlank() || raw == "null") return null
+        val text = raw.trim()
+        // 形态一：已是被解码过的对象文本。
+        if (text.startsWith("{")) {
+            return try {
+                JSONObject(text)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        // 形态二：JSON 字符串字面量，需先反转义。
+        if (!text.startsWith("\"") || !text.endsWith("\"") || text.length < 2) return null
+        return try {
+            val unescaped = JSONTokener(text).nextValue()
+            if (unescaped is String) JSONObject(unescaped) else null
+        } catch (_: Exception) {
+            null
+        }
     }
 }

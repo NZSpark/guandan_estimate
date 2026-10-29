@@ -116,3 +116,15 @@
 **约束**：新增 WebView 能力开关时先改 `WebViewSecurityConfig` 并在 `violations()` 里加规则，不要在 `ensureWebView()` 里直接写 `settings.xxx = ...`。新增任何 URL 日志点必须套 `UrlRedactor.redact()`；脱敏保留结构是为了排障时能看出"被重定向到登录页"，不是为了让值可读。
 
 **状态**：Active
+
+---
+
+## ADR-0012 · 2026-10-30 · `evaluateJavascript` 的二次 JSON 编码必须在解析层统一消解
+
+**决策**：所有脚本返回值进入 Kotlin 前的统一入口是 `recognition/site/SiteAdapter.kt` 的 `JsonParse.parse(raw)`，由它负责消解 `evaluateJavascript` 对**字符串返回值**再做的 JSON 编码：若 `raw` 以 `{` 开头按对象文本直解；若以 `"` 包住则先用 `JSONTokener.nextValue()` 反转义成字符串，再按对象解析；其它形态返回 `null`。适配器与驱动层一律走这一个入口，禁止各自 `JSONObject(raw)` 或 `removeSurrounding("\"")`。
+
+**理由**：`evaluateJavascript` 对字符串结果会再编码一次，脚本 `JSON.stringify(obj)` 到达 Kotlin 时是 `"{\"ok\":true,...}"`。此前 `JsonParse.parse` 直接 `JSONObject(raw)` 必然失败，`PageDriver.probeLiveness()` 恒返回 `NOT_READY`，表现为「页面明明健康却永远判未就绪」，并可能把健康页误推入 reload 判定链。这是与 AI-133（探针 `runScript` 漏解转义）同源的缺陷，说明「解码只做一半」是这类桥接的固定陷阱。
+
+**约束**：新增任何从脚本取结构化数据的路径，必须经 `JsonParse.parse`；不得在调用点重复实现反转义。脚本侧仍以 `JSON.stringify` 返回对象（而非裸值），解析层只做「一层」消解，不做多轮循环解码。`JsonParseTest` 覆盖对象文本、二次编码字面量、空/null、垃圾输入四种形态，改动解析逻辑必须同步扩充。
+
+**状态**：Active

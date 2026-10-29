@@ -394,6 +394,43 @@
 
 ---
 
+## 阶段 8：WebView 宿主分层与提交协议加固（2026-10-30 新增）
+
+**阶段目标：** 修正“主界面可见 WebView”这一历史设计缺陷：WebView 只承担后台驱动，不应占据主界面布局；需要人看网页时走独立的 AI 网页页面（登录/诊断）。同时把提交协议从“派发即成功”加固为“有正面证据才算提交”。
+
+**背景与现状（已核实，非推测）：**
+
+- `MainActivity` 把 `webContainer`（固定 360dp 高、`topMargin`）插进 `mainContent` 第 0 个子节点，挂接时由 `GONE` 改成 `VISIBLE`。真机上表现为主界面被顶下、WebView 只露出一半，DeepSeek 底部 composer 与发送按钮被裁出视口，出现“图片已进输入框但不自动提交”。
+- `WebViewHost` 当前只有可见挂接路径；`attachTargetProvider` 由 `MainActivity` 提供可见容器。
+- 参考 SMSProxy `server/.../upstream/WebViewUpstream.kt`：窗口只有 1×1（overlay，`FLAG_NOT_FOCUSABLE or FLAG_NOT_TOUCHABLE`），但 WebView 用 `displayMetrics` 全屏 `measure/layout`，因此 `innerHeight` 是真实屏高；注释明确写着离屏未布局会让 `innerHeight == 0`、DOM 测量全为 0。
+- 参考同文件的提交流程：`fillAndSend` 在**同一个 JS turn** 内填文本并点击（DeepSeek 在 input 事件后会重渲染 composer 并重新禁用发送按钮，分两次往返必撞 disabled，旧报错 `all_disabled`）；`awaitSendEnabled` 在点击前轮询按钮可用；`awaitGenerationStarted` 三态（STARTED / NOT_STARTED / STALE_PAGE），STALE_PAGE 时 reload 首页一次并重试且不占重试次数；Enter 为主路径，只有 composer 清空或 stop 按钮/新 reply 节点出现才算提交成功。
+
+> 约束提醒：离屏不等于零视口。若把 WebView 直接设成 1px×1px 的 layout，`innerHeight=1`，DeepSeek composer 会彻底塌陷，比现状更差。正确做法是“窗口 1×1（不可见）+ WebView layout 全屏”。
+
+### A8.1 宿主分层（主界面不可见 / 独立 AI 页面可见）
+
+- [ ] **AI-165** 移除 `MainActivity` 中的可见 `webContainer`：删除 `ui.mainContent.addView(webContainer, 0, ...)` 及 360dp 固定高度、`topMargin`；`setAttachTarget` 不再返回主界面容器。主界面布局与 WebView 完全解耦，用户在主界面看不到网页。
+- [ ] **AI-166** `WebViewHost` 增加离屏宿主（参照 SMSProxy `attachToOffscreenHost` / `attachOverlay`）：宿主为 1×1 overlay（无 overlay 权限时回退到 decorView 中 1dp 容器），WebView 按 `displayMetrics.widthPixels × heightPixels` 显式 `measure/layout`，保证 `innerHeight` 等于真实屏高。
+- [ ] **AI-167** `WebViewHost.WindowStatus` 增加可区分离屏挂接的状态（如 `Offscreen`），日志显式打印窗口尺寸与 WebView layout 尺寸，便于区分“未挂接 / 离屏已挂接 / 可见已挂接”。
+- [ ] **AI-168** 单父容器约束（M12）：离屏宿主与独立 AI 页面之间切换时，先 `removeHostFromParent(dropWebView = false)` 再 `addView`，保留 WebView 实例与登录态；为“连续两次切换不抛 `IllegalStateException`”补测试。
+- [ ] **AI-169** 独立 AI 网页页面：`AiProbeActivity` 明确作为“AI 网页页面”（全屏可见 WebView，用于登录与诊断），`onResume` 时 `setAttachTarget { 全屏容器 }` + `attach()`，`onPause` 时 `detachFromVisible()` 保留会话；`AiSettingsDialog` 的“打开登录页”指向该页面，文案与主界面“识牌”区分。
+- [ ] **AI-170** 真机验证三态切换：主界面识牌（离屏、用户看不到网页）→ 进入 AI 网页页面（可见、可手动登录）→ 返回主界面（离屏恢复、登录态保留）。记录 `innerHeight`、`innerWidth`、`readyState`、`isAttachedToWindow`、WebView layout 尺寸与窗口尺寸。
+- [ ] **AI-171** 断言/单测：离屏挂接后 WebView 的 layout 宽高必须等于屏幕像素尺寸，`innerHeight` 不得为 0 或 1；不满足时按 `VIEWPORT_UNHEALTHY` 处理并给出可读原因（衔接 AI-075）。
+
+### A8.2 提交协议加固（对齐 SMSProxy 的正面证据要求）
+
+- [ ] **AI-172** 新增 `DeepSeekScripts.fillAndSend(prompt, ...)`：在同一个 JS turn 内完成填文本（prototype setter + `input`/`change`）与触发发送，避免两次往返之间 composer 重渲染导致发送按钮重新禁用。同步返回 `inputFilled`、`valueEmpty`、`sendClicked`、`sendClickable`、`url` 等诊断字段。
+- [ ] **AI-173** 驱动层新增 `awaitSendEnabled`：点击前轮询发送按钮可用（排除 `disabled`、`aria-disabled=true`、`ds-button--disabled`），超时返回 false 由调用方重新填文本，禁止对 disabled 按钮点击并当作成功。
+- [ ] **AI-174** 把 `awaitSubmitStarted` 升级为三态（STARTED / NOT_STARTED / STALE_PAGE）：URL 变为会话页（`/a/chat/s/`）即判 STARTED；stop 按钮出现或 reply 节点有文本即判 STARTED；6s 内 URL 与 DOM 均无变化判 STALE_PAGE 并 reload 首页重试一次（不消耗重试次数），避免在死文档上白等 120s。
+- [ ] **AI-175** `DeepSeekAdapter.parseSubmitResult` 不再只认 `ok`：必须同时具备填文本成功与提交正面证据（`inputFilled && (sentEnter || sendClicked) && valueEmpty`，或等价判据），否则返回 `SubmitOutcome.fail`，杜绝“未提交报成功”。
+- [ ] **AI-176** 其它网页源（Gemini / ChatGPT）同步复核：`uploadsInsideSubmit` 路径的“提交后确认附件预览”保持不变；对各自发送按钮的可用性判据补同样的“先轮询再点击”，不得沿用“派发成功即成功”。
+- [ ] **AI-177** 单测：发送按钮 disabled 时不得判提交成功；`STALE_PAGE` 只触发一次 reload 且不占重试次数；`valueEmpty=false` 时返回 `SubmitOutcome.fail`；`fillAndSend` 单 turn 内完成填与点（脚本快照断言）。
+- [ ] **AI-178** 真机复测：先修 AI-165~171 消除遮挡，再跑 DeepSeek 带图识牌端到端，确认“图片进输入框 → 自动提交 → 新回答 → 解析出 `cards`”全程无需人工点击；记录修复前后 `sendClickable`、`innerHeight`、`SubmitOutcome.why` 对照。
+
+**阶段 8 验收：** 主界面不存在可见 WebView，网页仅在独立 AI 页面可见；离屏挂接的 WebView 仍有真实全屏视口（`innerHeight` 等于屏高）；DeepSeek 带图识牌在无人工点击的情况下完成提交并取得新回答；提交失败与未提交不得被报成成功；所有改动有单测与真机记录，且未破坏 `AiSourceError` 分类与 M11（上传未确认不提交）。
+
+---
+
 ## 全局验收清单
 
 - [ ] **G-01** 图片上传的真实网页行为已在目标 Android WebView 上验证，而不是仅有脚本派发成功记录。
