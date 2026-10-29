@@ -129,7 +129,8 @@ class PageDriver(
         val ready = diag.readyState == "interactive" || diag.readyState == "complete"
         val hasOrigin = diag.href.isNotBlank() && !diag.href.startsWith("about:")
         if (!ready || !hasOrigin) return PageLiveness.NOT_READY
-        val viewportOk = diag.innerHeight >= 100
+        // AI-024：阈值只在 AttachGate 定义一次（MIN_VIEWPORT_HEIGHT），避免两处各写 100 漂移。
+        val viewportOk = AttachGate.viewportRejectReason(diag.innerHeight) == null
         val composerOk = diag.inputCount > 0
         if (!viewportOk || !composerOk) return PageLiveness.NOT_READY
         // 静态诊断全部通过，仍可能是“URL 正确、元素在、但页面已卡死”的假活页。

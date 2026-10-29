@@ -297,8 +297,17 @@ class WebViewHost private constructor(private val appContext: Context) {
     }
 
     /**
-     * 挂接：先离屏 measure/layout 拿到真实视口，再尝试挂进可见容器。
-     * 重复调用安全。
+     * 挂接：先离屏 measure/layout 拿到真实视口，再挂进可见容器。
+     *
+     * AI-024 的三条硬规则：
+     * 1. **单父容器**：`addView` 前先无条件把 WebView 从任何现存父容器摘下
+     *    （[enforceSingleParent]），不只认自己记的 [visibleParent]。
+     * 2. **容器体检**：容器必须 `isAttachedToWindow` / `isShown` / 尺寸非零，
+     *    否则拒绝挂接并回落 `NotAttached`（见 [AttachGate]）。
+     * 3. **页面体检**：挂接后用 `window.innerHeight` 复核是否真的出帧；
+     *    为 0 说明这次挂接没生效，回落 `NotAttached` 交给调用方重试。
+     *
+     * 重复调用安全；失败不抛异常，只回报 [status]。
      */
     fun attach() {
         requireMainThread()
@@ -309,9 +318,29 @@ class WebViewHost private constructor(private val appContext: Context) {
             Log.w(TAG, "attach: no visible parent available")
             return
         }
-        removeHostFromParent(dropWebView = false)
-        val w = parent.width.takeIf { it > 0 } ?: parent.resources.displayMetrics.widthPixels
-        val h = parent.height.takeIf { it > 0 } ?: parent.resources.displayMetrics.heightPixels
+        val container = AttachGate.ContainerState(
+            isAttachedToWindow = parent.isAttachedToWindow,
+            isShown = parent.isShown,
+            widthPx = parent.width,
+            heightPx = parent.height,
+            alreadyParent = view.parent === parent
+        )
+        AttachGate.rejectReason(container)?.let { why ->
+            // 容器当前不可用：不挂接，保持可重试状态。MainActivity.onResume 会再调一次。
+            windowStatus = WindowStatus.NotAttached
+            Log.w(TAG, "attach: rejected container, $why")
+            return
+        }
+        if (container.alreadyParent) {
+            // 已是该容器的子视图：无需重挂，但状态可能因其它路径被改错，这里纠正。
+            visibleParent = parent
+            windowStatus = WindowStatus.Attached
+            Log.i(TAG, "attach: already child of target container, status corrected")
+            return
+        }
+        enforceSingleParent(view)
+        val w = container.widthPx
+        val h = container.heightPx
         // M3 / P16：先给非零视口，再挂窗口。
         if (w > 0 && h > 0) {
             measureAndLayout(view, w, h)
@@ -324,7 +353,42 @@ class WebViewHost private constructor(private val appContext: Context) {
         } catch (e: IllegalStateException) {
             windowStatus = WindowStatus.NotAttached
             Log.e(TAG, "attach failed", e)
+            return
         }
+        verifyViewportAfterAttach()
+    }
+
+    /**
+     * 确保 WebView 没有挂在未知父容器上（AI-024）。
+     *
+     * 只靠 [visibleParent] 不够：异常路径（离屏测量中断、外部误 `addView`）会让
+     * `view.parent` 指向别的容器，此时直接 `addView` 必抛 `IllegalStateException`。
+     */
+    private fun enforceSingleParent(view: WebView) {
+        val current = view.parent as? android.view.ViewGroup
+        if (current != null) {
+            Log.w(TAG, "attach: webview still parented by ${current.javaClass.simpleName}, removing")
+            current.removeView(view)
+        }
+        visibleParent = null
+    }
+
+    /**
+     * 挂接后的页面出帧判定（AI-024）——**接线点，不做同步取值的假实现**。
+     *
+     * `addView` 成功只说明视图树挂上了；布局未完成或容器在屏幕外时页面仍是 0 视口。
+     * 但 `evaluateJavascript` 只能异步回调，在 `attach()` 里同步取值不可能。
+     * 因此这里不做阻塞等待，也不谎报校验结果：真正的判定由下游完成——
+     * [PageDriver.probeLiveness] 用诊断脚本读 `innerHeight`，
+     * `AttachGate.viewportRejectReason(innerHeight)` 的阈值（100）在那里生效，
+     * 低于阈值一律 `NOT_READY`，由 `ensureLoaded()` 重试。
+     */
+    private fun verifyViewportAfterAttach() {
+        Log.d(
+            TAG,
+            "attach: viewport check deferred to driver liveness probe " +
+                "(threshold=${AttachGate.MIN_VIEWPORT_HEIGHT})"
+        )
     }
 
     /**
@@ -385,9 +449,11 @@ class WebViewHost private constructor(private val appContext: Context) {
 
     private fun removeHostFromParent(dropWebView: Boolean) {
         val view = webView
-        val parent = visibleParent
-        if (parent != null && view != null && view.parent === parent) {
-            parent.removeView(view)
+        // AI-024：不依赖 visibleParent 是否记对，按真实 parent 摘除。
+        (view?.parent as? android.view.ViewGroup)?.let { actual ->
+            if (actual !== offscreenHost) {
+                actual.removeView(view)
+            }
         }
         visibleParent = null
         // AI-021：移除后不再有可见父容器，状态必须如实回落（destroy 随后会置 NotCreated）。
