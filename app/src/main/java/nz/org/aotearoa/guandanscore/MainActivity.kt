@@ -304,9 +304,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        // AI-021：退到后台只“移除”，保留 WebView 与登录会话，onResume 直接挂回。
         webHost.detachFromVisible()
         super.onPause()
     }
 
-    override fun onDestroy() { worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() {
+        worker.shutdownNow()
+        // AI-021：Activity 真正销毁时才是终态，必须拆掉宿主并清理状态。
+        webHost.destroy()
+        super.onDestroy()
+    }
 }

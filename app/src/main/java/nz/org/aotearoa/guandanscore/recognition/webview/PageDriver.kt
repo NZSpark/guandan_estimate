@@ -85,12 +85,15 @@ class PageDriver(
             current.startsWith(target.substringBefore('?'))
         if (already) return true
 
+        // AI-021：这里要的是“换页重建”，必须走终态销毁；若只想临时隐藏，
+        // 调用方应改用 detachFromVisible()/attach() 以保留会话。
         host.destroy()
         host.attach()
         if (host.status() != WindowStatus.Attached) {
             throw AiSourceError.NotReady("WebView 未挂接窗口；请在应用界面内打开或授予悬浮窗权限")
         }
         navigatedTo = target
+        host.navigatedTarget = target
         bridge.evaluateOnMain("location.href = ${jsonQuote(target)};") {}
         Log.i(TAG, "navigating to configured home")
         return awaitReady()

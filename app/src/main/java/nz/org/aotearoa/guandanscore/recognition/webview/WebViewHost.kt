@@ -59,6 +59,10 @@ class WebViewHost private constructor(private val appContext: Context) {
     @Volatile
     private var windowStatus: WindowStatus = WindowStatus.NotCreated
 
+    /** 最近一次导航的目标首页；[destroy] 时清空，避免重建后跳过导航。 */
+    @Volatile
+    internal var navigatedTarget: String = ""
+
     /** 由宿主注入：如何把 WebView 挂到可见容器里。 */
     @Volatile
     private var attachTargetProvider: (() -> FrameLayout?)? = null
@@ -313,18 +317,29 @@ class WebViewHost private constructor(private val appContext: Context) {
         }
     }
 
-    /** 从可见容器摘下，但**保留** WebView（会话不丢）。 */
+    /**
+     * 从可见容器摘下，但**保留** WebView（会话不丢）。
+     *
+     * AI-021：这是“移除”，不是“销毁”。WebView 实例、Cookie、DOM Storage、
+     * 已加载页面都保留，[visibleParent] 置空、[WindowStatus] 变为 NotAttached；
+     * 再调 [attach] 即可挂回同一个会话。
+     */
     fun detachFromVisible() {
         requireMainThread()
         removeHostFromParent(dropWebView = false)
+        visibleParent = null
         windowStatus = if (webView == null) WindowStatus.NotCreated else WindowStatus.NotAttached
+        Log.i(TAG, "detachFromVisible: webview kept, status=$windowStatus")
     }
 
     /**
      * 彻底拆除：移除视图、释放挂起回调并置空引用。用于进程结束或源切换。
      *
-     * 与 [detachFromVisible] 的区别（AI-021）：detach 只把 WebView 从可见容器摘下并保留会话；
-     * destroy 是终态，WebView 不可再用，下一次 [ensureWebView] 会重建。
+     * 与 [detachFromVisible] 的区别（AI-021）：
+     * - detach：仅从父容器移除，WebView / Cookie / 页面 / 会话全部保留，可 `attach()` 恢复；
+     * - destroy：终态。移除视图、释放挂起回调、`WebView.destroy()` 并置空引用，
+     *   会话与页面状态一并丢弃，下一次 [ensureWebView] 重建一个全新 WebView。
+     * 调用方按“是否还要复用登录态与当前页面”二选一，不得混用。
      *
      * 注意：不清除注入配置（fileChooserHandler / onPageFinished / attachTargetProvider）。
      * 它们属于宿主而非 WebView；PageDriver.ensureLoaded() 会先 destroy() 再 attach() 重建视图，
@@ -343,6 +358,8 @@ class WebViewHost private constructor(private val appContext: Context) {
         webView = null
         visibleParent = null
         currentUrl = ""
+        // 置空导航记录，避免重建后 ensureLoaded 误判“已在该页”而跳过导航。
+        navigatedTarget = ""
         pendingUploadUri = null
         windowStatus = WindowStatus.NotCreated
         Log.i(TAG, "destroy: webview released")
@@ -363,6 +380,8 @@ class WebViewHost private constructor(private val appContext: Context) {
             parent.removeView(view)
         }
         visibleParent = null
+        // AI-021：移除后不再有可见父容器，状态必须如实回落（destroy 随后会置 NotCreated）。
+        if (windowStatus == WindowStatus.Attached) windowStatus = WindowStatus.NotAttached
         // 离屏容器同样要清理，否则下次 addView 会因已有 parent 抛异常。
         val off = offscreenHost
         if (off != null && view != null && view.parent === off) {
