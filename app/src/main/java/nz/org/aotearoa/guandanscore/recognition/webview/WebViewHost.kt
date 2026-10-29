@@ -107,8 +107,11 @@ class WebViewHost private constructor(private val appContext: Context) {
     @Volatile
     var fileChooserHandler: FileChooserHandler? = null
 
-    /** 页面最近一次挂起的文件选择回调；[destroy] 时用它释放页面等待。 */
-    private var filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
+    /**
+     * 页面挂起的文件选择回调（AI-073：唯一所有者语义，见 [FileChooserSlot]）。
+     * [destroy] 时用它释放页面等待。
+     */
+    private val fileChooser = FileChooserSlot<android.webkit.ValueCallback<Array<android.net.Uri>>>()
 
     /** 由宿主注入：页面加载完成回调（用于就绪等待）。 */
     @Volatile
@@ -161,15 +164,23 @@ class WebViewHost private constructor(private val appContext: Context) {
      *
      * @param x CSS 像素（视口坐标）
      * @param y CSS 像素（视口坐标）
-     * @param viewportHeight 页面 `window.innerHeight`，用于坐标换算
+     * @param viewportHeight 页面 `window.innerHeight`，用于纵向坐标换算
+     * @param viewportWidth 页面 `window.innerWidth`，用于横向坐标换算。
+     *   不传则退回按纵向比例缩放横向 —— 只在视口与视图严格等比时才对，
+     *   而 WebView 会被布局拉伸出非等比尺寸（AI-015 真机点偏的根因）。
      * @return 是否成功派发
      */
-    fun tapViewportPoint(x: Int, y: Int, viewportHeight: Int): Boolean {
+    fun tapViewportPoint(
+        x: Int,
+        y: Int,
+        viewportHeight: Int,
+        viewportWidth: Int = 0
+    ): Boolean {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             val latch = java.util.concurrent.CountDownLatch(1)
             var result = false
             main.post {
-                result = tapViewportPoint(x, y, viewportHeight)
+                result = tapViewportPoint(x, y, viewportHeight, viewportWidth)
                 latch.countDown()
             }
             latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -178,13 +189,18 @@ class WebViewHost private constructor(private val appContext: Context) {
         val view = webView ?: return false
         if (viewportHeight <= 0) return false
         val density = appContext.resources.displayMetrics.density
-        val viewH = view.height
+        val mapped = ViewportTapMapper.map(
+            cssX = x,
+            cssY = y,
+            viewWidth = view.width,
+            viewHeight = view.height,
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight
+        ) ?: return false
         val viewW = view.width
-        if (viewH <= 0 || viewW <= 0) return false
-        // 视口高度（CSS px）→ 视图高度（物理 px）的换算；宽度同比例。
-        val scale = (viewH.toFloat() / viewportHeight.toFloat())
-        val px = (x * scale).toInt().coerceIn(0, viewW - 1)
-        val py = (y * scale).toInt().coerceIn(0, viewH - 1)
+        val viewH = view.height
+        val px = mapped.x
+        val py = mapped.y
         val now = android.os.SystemClock.uptimeMillis()
         val down = android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN, px.toFloat(), py.toFloat(), 0)
         val up = android.view.MotionEvent.obtain(now, now + 40, android.view.MotionEvent.ACTION_UP, px.toFloat(), py.toFloat(), 0)
@@ -199,7 +215,12 @@ class WebViewHost private constructor(private val appContext: Context) {
             down.recycle()
             up.recycle()
         }
-        Log.i(TAG, "tapViewportPoint ($x,$y) css -> ($px,$py) px, scale=$scale density=$density")
+        Log.i(
+            TAG,
+            "tapViewportPoint ($x,$y) css -> ($px,$py) px, view=${viewW}x${viewH} " +
+                "viewport=${viewportWidth}x$viewportHeight " +
+                "scaleX=${mapped.scaleX} scaleY=${mapped.scaleY} density=$density"
+        )
         return ok
     }
 
@@ -294,8 +315,18 @@ class WebViewHost private constructor(private val appContext: Context) {
                     filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>?,
                     fileChooserParams: FileChooserParams?
                 ): Boolean {
+                    // AI-073：本字段是「唯一所有者」语义 —— 系统再次回调时旧回调若还挂着，
+                    // 必须先释放，否则旧页面请求会永久等待（比泄漏更难查：表现为某次上传后
+                    // 整个页面再也不响应 input[type=file]）。
                     // 记录挂起的回调，destroy() 时才能释放，否则页面侧永久等待（AI-020）。
-                    this@WebViewHost.filePathCallback = filePathCallback
+                    // AI-073：唯一所有者语义 —— 旧回调若还挂着，先以 null 释放，
+                    // 否则旧页面请求会永久等待（表现为此后该 WebView 再也不响应 input[type=file]）。
+                    val orphaned = this@WebViewHost.fileChooser.offer(filePathCallback) { orphan ->
+                        try { orphan.onReceiveValue(null) } catch (_: Exception) {}
+                    }
+                    if (orphaned) {
+                        Log.w(TAG, "onShowFileChooser: released orphaned callback before replacing")
+                    }
                     // 已有待投递的图片就立即回填，不再弹系统选择器（AI-124 的 FILE_CHOOSER 路径）。
                     // AI-009D：如实记录系统回调的入参，作为“真实触发”的证据。
                     val acceptTypes = fileChooserParams?.acceptTypes ?: emptyArray()
@@ -314,28 +345,33 @@ class WebViewHost private constructor(private val appContext: Context) {
                     if (pending != null) {
                         pendingUploadUri = null
                         Log.i(TAG, "onShowFileChooser: delivering pending image")
-                        filePathCallback?.onReceiveValue(arrayOf(pending))
-                        this@WebViewHost.filePathCallback = null
+                        val cb = this@WebViewHost.fileChooser.take()
+                        try { cb?.onReceiveValue(arrayOf(pending)) } catch (_: Exception) {}
                         return true
                     }
                     val handler = fileChooserHandler
                     if (handler == null) {
                         Log.w(TAG, "onShowFileChooser but no handler registered")
                         // 无人接管也必须释放，否则下一次选择永久卡死。
-                        filePathCallback?.onReceiveValue(null)
-                        this@WebViewHost.filePathCallback = null
+                        this@WebViewHost.fileChooser.release { cb ->
+                            try { cb.onReceiveValue(null) } catch (_: Exception) {}
+                        }
                         return false
                     }
                     // 若宿主无法接管，必须回调 null 释放，否则下一次选择永久卡死。
                     return try {
                         val handled = handler.onFileChooser(fileChooserParams?.acceptTypes)
-                        if (!handled) filePathCallback?.onReceiveValue(null)
-                        this@WebViewHost.filePathCallback = null
+                        if (!handled) {
+                            this@WebViewHost.fileChooser.release { cb ->
+                                try { cb.onReceiveValue(null) } catch (_: Exception) {}
+                            }
+                        }
                         handled
                     } catch (e: Exception) {
                         Log.w(TAG, "file chooser handler threw", e)
-                        filePathCallback?.onReceiveValue(null)
-                        this@WebViewHost.filePathCallback = null
+                        this@WebViewHost.fileChooser.release { cb ->
+                            try { cb.onReceiveValue(null) } catch (_: Exception) {}
+                        }
                         false
                     }
                 }
@@ -476,8 +512,9 @@ class WebViewHost private constructor(private val appContext: Context) {
     fun destroy() {
         requireMainThread()
         // 必须先释放挂起的文件选择回调，否则页面侧会永久等待，下一次选择直接卡死。
-        filePathCallback?.onReceiveValue(null)
-        filePathCallback = null
+        fileChooser.release { cb ->
+            try { cb.onReceiveValue(null) } catch (_: Exception) {}
+        }
         removeHostFromParent(dropWebView = true)
         // 离屏容器里的残留子视图也要清掉，避免持有已销毁的 WebView。
         offscreenHost?.removeAllViews()
