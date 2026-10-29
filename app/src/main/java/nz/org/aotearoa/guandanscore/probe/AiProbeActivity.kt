@@ -109,6 +109,7 @@ open class AiProbeActivity : Activity() {
         }
         button("基线") { logBaseline() }
         button("诊断") { runAdapterScript("DIAG") { adapter.diagnoseScript() } }
+        button("深度探测") { runAdapterScript("DEEP") { adapter.deepProbeScript() } }
         button("快照") { runAdapterScript("SNAP") { adapter.snapshotScript() } }
         button("登录检查") { runAdapterScript("LOGIN") { adapter.loginCheckScript() } }
         button("附件检查") { runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() } }
@@ -281,6 +282,8 @@ open class AiProbeActivity : Activity() {
             "gemini_attach" -> runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() }
             "gemini_senddiag" -> runScript(GEMINI_SEND_DIAG) { r -> log("GSDIAG", r) }
             "gemini_diag" -> runAdapterScript("DIAG") { adapter.diagnoseScript() }
+            // AI-008D：页面结构深度探测（只读）。
+            "deep_probe" -> runAdapterScript("DEEP") { adapter.deepProbeScript() }
             "fschooser" -> {
                 prepareChooserImage()
                 tapUploadIcon()

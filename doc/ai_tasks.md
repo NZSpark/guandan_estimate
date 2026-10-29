@@ -64,7 +64,7 @@
 
 - [x] **AI-006D** 扩展探测入口：`GeminiProbeActivity` 泛化为 `AiProbeActivity`，可在运行期切换 `homeUrl`（Gemini / DeepSeek / 自定义），并保留旧入口名以便既有 adb 脚本不失效。
 - [x] **AI-007D** 在目标设备手动登录 DeepSeek 网页版，分别记录 Activity 重建与应用进程重启后的登录态是否保持（Cookie + DOM Storage 生效）。
-- [ ] **AI-008D** 在真实 DeepSeek 页面检查：`location.href`、`readyState`、`innerHeight`、输入框元素（`textarea#chat-input` 是否为唯一/最内层）、发送按钮的可点击判据、回答节点容器、是否存在 Shadow DOM。
+- [x] **AI-008D** 在真实 DeepSeek 页面检查：`location.href`、`readyState`、`innerHeight`、输入框元素（`textarea#chat-input` 是否为唯一/最内层）、发送按钮的可点击判据、回答节点容器、是否存在 Shadow DOM。→ 结果：新增 DeepSeekScripts.deepProbe()（只读）、SiteAdapter.deepProbeScript() 契约、DeepSeekAdapter 实现，探针加「深度探测」按钮与 --es auto deep_probe。真机 LIO-N29 / Android 10 / webview 114.0.5.302（2026-10-29，chat.deepseek.com 已登录）实测：readyState=complete、视口 392x601、dpr=3；输入框 唯一且最内层（inputCount=1 inputUnique=true inputTag=textarea inputInnerEditableCount=0 inputIsInnermost=true，无 id，class 为哈希）；发送键 sendCount=1 sendTag=div sendDisabled=false sendBox=34x34@(313,302) sendClickable=true —— disabled/aria-disabled 均不生效，必须用尺寸 + ds-button--disabled 类判定；首屏 responseCount=0，回答容器仍取 .ds-assistant-message-main-content 待有答案再核；无 Shadow DOM（shadowHostCount=0 hasShadowDom=false），querySelectorAll 可覆盖全文档。实测值已回填 DeepSeekSelectors 注释。
 - [ ] **AI-009D** 探测 `input[type=file]` 与上传按钮，记录 `WebChromeClient.onShowFileChooser()` 是否真实触发、`accept` 类型与 `multiple` 属性。
 - [x] **AI-010D** 用只读诊断脚本记录每个候选选择器的 `querySelectorAll(sel).length`，写入 `DeepSeekSelectors` 注释（日期 + 命中数 + 实测方法）。
 - [ ] **AI-011D** 记录是否存在可用的“停止生成”控件；若为 0 命中，明确写下“不得作为结束判定前提”。

@@ -29,6 +29,18 @@ package nz.org.aotearoa.guandanscore.recognition.site
  * 结论：`dispatchEvent` 的返回值被 DeepSeek `preventDefault` 掉，**不能作为成败判据**；
  * 唯一权威判据是 [ATTACHMENT] 命中数。PASTE 路径在本机可行，保持为首选。
  *
+ * ## AI-008D 深度探测 2026-10-29（`DeepSeekScripts.deepProbe()` 真机）
+ * 设备同上，页面 https://chat.deepseek.com/ （已登录，readyState=complete）。
+ * - 视口 `innerWidth×innerHeight = 392×601`，`dpr=3`；本机 DNS 不通时页面仍能完整渲染并命中选择器。
+ * - **INPUT 唯一且最内层**：`inputCount=1 inputUnique=true inputTag=textarea inputInnerEditableCount=0
+ *   inputIsInnermost=true`，无 id，class 为哈希（`_27c9245 ds-scroll-area ...`），
+ *   确有 `ds-scroll-area` 类但元素仍是 `textarea`，故 `textarea[placeholder*='Message DeepSeek']` 可靠。
+ * - **SEND 可点击判据**：`sendCount=1 sendTag=div sendDisabled=false sendBox=34×34 @(313,302) sendClickable=true`。
+ *   即 `disabled` 与 `aria-disabled` 均不生效（`sendAriaLabel` 为空），必须用尺寸 + `ds-button--disabled` 类判定。
+ * - **RESPONSE**：新会话首屏 `responseCount=0`（无历史回答），选择器待有回答后再核；容器标识仍取
+ *   `.ds-assistant-message-main-content`。
+ * - **无 Shadow DOM**：`shadowHostCount=0 hasShadowDom=false` → `querySelectorAll` 可覆盖全文档。
+ *
  * ## 关键行为（实测）
  * 1. **发送按钮不是 `<button>`**，是 `div[role=button].ds-button`；启用/禁用靠
  *    `ds-button--disabled` 类，不看 `aria-disabled`/`disabled`。

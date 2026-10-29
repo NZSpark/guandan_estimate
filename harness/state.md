@@ -75,7 +75,7 @@
 
 ## 上次完成
 
-2026-10-29 · AI-008D DeepSeek 页面结构深度探测脚本（DeepSeekScripts.deepProbe() + SiteAdapter.deepProbeScript() + DeepSeekAdapter 实现）：输出输入框唯一性/最内层、发送键可点击判据、回答节点容器与深度、Shadow DOM 宿主计数；./gradlew testDebugUnitTest 全绿
+2026-10-29 · AI-008D DeepSeek 页面结构深度探测真机验收通过（LIO-N29 / Android 10 / webview 114.0.5.302）：inputCount=1 inputUnique=true inputIsInnermost=true；sendCount=1 sendBox=34x34 sendClickable=true（disabled/aria-disabled 不生效）；shadowHostCount=0；实测值已回填 DeepSeekSelectors 注释
 
 ## 阻塞
 
