@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 4dp 基础间距（doc/ui_design.md §8.4）。 -->
+    <dimen name="space_1">4dp</dimen>
+    <dimen name="space_2">8dp</dimen>
+    <dimen name="space_3">12dp</dimen>
+    <dimen name="space_4">16dp</dimen>
+    <dimen name="space_5">20dp</dimen>
+    <dimen name="space_6">24dp</dimen>
+
+    <dimen name="page_margin">20dp</dimen>
+    <dimen name="section_gap">20dp</dimen>
+    <dimen name="card_padding">16dp</dimen>
+    <dimen name="card_radius">16dp</dimen>
+    <dimen name="touch_min">48dp</dimen>
+    <dimen name="button_height">52dp</dimen>
+    <dimen name="preview_height">240dp</dimen>
+</resources>

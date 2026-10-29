@@ -9,7 +9,7 @@
 
 ## 当前任务
 
-**执行 `doc/ai_tasks.md`：多 AI 源 WebView 迁移 + 阶段 7 UI**（进行中）
+**执行 `doc/ai_tasks.md`：多 AI 源 WebView 迁移 + 阶段 7 UI**（阶段 7 已完成）
 
 ### 已完成（离线可验证）
 
@@ -57,9 +57,32 @@
 - ~~AI-009 / AI-128 FILE_CHOOSER 原生触摸路径的真机验收~~ ✅ 已完成（DeepSeek 真机 10 张牌零告警）。
 - AI-012 压缩后识牌精度的真机复跑记录（DeepSeek 端到端已在 AI-128 用同源真实手牌图通过）。
 - AI-015 Gemini 端 `--es site gemini_web` 的原生触摸 → `onShowFileChooser` 回填真机实测（代码路径已就绪，DeepSeek 同路径已由 AI-128 验收）。
-- 阶段 7 UI-001~022（见 `doc/ui_design.md`）。
+
 - 旧 Gemini Key 清理（AI-093~101）。
 - 阶段 8（`doc/ai_tasks.md` AI-165~178）尚未开工：仅完成任务书撰写，代码未动。
+
+### 已完成（阶段 7 UI 全面重设计，2026-10-30）
+
+代码：
+
+- `res/layout/activity_main.xml` 重写为五分区（01 输入 / 02 识别 / 03 核对 / 级牌+计算 / 04 结果），全部走 View Binding。
+- 新增 `ui/WorkbenchState.kt`：8 个状态域（image / localRecognition / aiRecognition / hand / level / score / outputImage / source）+ `ScoreState.invalidate()` 失效规则，纯 JVM 可测。
+- 新增 `ui/AiSettingsScreen.kt` 取代旧对话框：按源显隐字段（网页源整体隐藏 endpoint/model/key 及其标签）、字段级错误文案、删除二次确认写明 profile 名、真实 healthCheck。
+- 新增 `res/values/dimens.xml`、`styles.xml`，扩充 `colors.xml` 为设计 Token。
+- `MainActivity.kt` 重写为状态驱动渲染；`inputBitmap` / `outputBitmap` 分离（UI-013），保存当前图片永远取输入图。
+- 新增 `WorkbenchStateTest`（8 例）。
+
+真机（LIO-N29 / Android 10 / 1176×2400 / density 480，WiFi adb `192.168.3.158:5555`）：
+
+- 主流程：空状态 → 随机 27 张 → 网格 27/27 → 计算 → 结果卡（强势 / SPI 187.13 / NSPI 1247.6 / 分子 2245.60 / 轮数 12 / T_max 15 / P=45）→ 展开拆牌 12 组按分值降序。
+- 单张校正弹窗保留原值（Q / ♦）；AI 源管理五源可选、网页源无 API 字段、删除有二次确认。
+
+真机暴露并已修复：
+
+9. `Meld.score` 是 `Int`，UI 用 `%.2f` → 计算后 `IllegalFormatConversionException` 崩溃。改为 `%d`。
+10. 网页源隐藏了 API 输入框却没隐藏其标签。改为收集 `apiSection` 整体显隐。
+
+未取证：横屏 / 字体缩放 / TalkBack 实测（仅代码层 48dp 与 contentDescription 保证）；登录页往返（UI-019）待阶段 8 离屏宿主就绪后复验。
 
 ### 已完成（AI-018 带图/不带图对照，真机实测）
 
