@@ -75,6 +75,8 @@
 
 ## 上次完成
 
+2026-10-29 · AI-025 WebView 安全配置契约 + URL 日志脱敏（离线完成，待真机复测）：新增 `webview/WebViewSecurityConfig` —— JS / DOM Storage / database 开，`allowFileAccess` / `allowContentAccess` / `saveFormData` / `geolocationEnabled` 关，混合内容 `NEVER_ALLOW`，接受 Cookie（含第三方，OAuth 跳转依赖）；`violations()` 自检，默认值即契约。`WebViewHost.applySecurityConfig()` 把契约落到 `WebSettings` + `CookieManager.setAcceptCookie`；第三方 Cookie 需具体实例，改在 `webView = view` 之后由 `applyThirdPartyCookies()` 设置（创建期传 null 会 NPE）。新增 `webview/UrlRedactor`：保留 scheme/host/path 便于判断是否被重定向到登录页，query 与 fragment 的**值**替换为 `<redacted>`、键名保留，无 `=` 的裸片段整体抹掉；`onPageStarted` / `onPageFinished` / 新增 `onReceivedError` 全部经它输出，避免 `?token=` / `#access_token=` 进 logcat。全仓 grep 确认无 cookie/token/password/secret/authorization/localStorage 直出日志。新增 `WebViewSecurityConfigTest` 8 例、`UrlRedactorTest` 7 例；`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。
+
 2026-10-29 · AI-024 单父容器 + 挂接体检（离线完成，待真机复测）：抽出纯逻辑 `recognition/webview/AttachGate`（容器体检 `isAttachedToWindow` / `isShown` / 尺寸非零；页面体检 `MIN_VIEWPORT_HEIGHT=100`），`AttachGateTest` 7 例全绿。`WebViewHost.attach()`：`enforceSingleParent()` 按真实 `view.parent` 摘除（不再信任自记的 `visibleParent`，异常路径下直接 `addView` 会抛 `IllegalStateException`）；容器体检不过回落 `NotAttached` 交 `MainActivity.onResume` 重试、不谎报 `Attached`；`alreadyParent` 时只纠正状态。`evaluateJavascript` 只异步回调，`attach()` 内无法同步读 `innerHeight`，故 `verifyViewportAfterAttach()` 仅打接线点日志、不做假实现；出帧判定落在 `PageDriver.probeLiveness()`，其硬编码 `innerHeight >= 100` 改为 `AttachGate.viewportRejectReason()`，阈值单点定义。`removeHostFromParent()` 同样按真实 parent 摘除。`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。
 
 2026-10-29 · AI-023 JS 回调 ↔ 协程/同步壳的死锁防线（离线完成）：确认既有机制合法前提是「`AiSource.recognize` 在 worker 线程同步调用」，但 `PageDriver.runBlockingEvaluate` 的 `runBlocking` 在主线程会**静默永久卡死**（回调永远排不上主线程），此前无任何防线。新增 `recognition/webview/BlockingBridge`：`awaitBlocking(where, onMain, block)` 在主线程**进入挂起块之前**抛 `IllegalStateException`（消息含 AI-023 与调用点），worker 线程才 `runBlocking`；`isMainThread()` 对纯 JVM 单测降级为 false。`PageDriver.runBlockingEvaluate` 接入；`awaitReady`/`verifyAttachment`/`awaitSubmitStarted` 补 KDoc 说明 `sleepMillis`（默认 `Thread.sleep`）只能在 worker 线程、单测注入 no-op。新增 `BlockingBridgeTest` 3 例。`testDebugUnitTest --rerun-tasks` + `assembleDebug` BUILD SUCCESSFUL。
@@ -96,7 +98,7 @@
 无。真机可复测（WiFi adb -s 192.168.3.158:5555，USB adb -s J7R0220110001216）。
 
 ## 下一步
-1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-025（正确配置 WebViewClient / WebChromeClient / JS / DOM Storage / Cookie 策略，日志不输出敏感登录数据）。
+1. 按 doc/ai_tasks.md 顺序推进：下一个未完成项是 AI-030（用真实 Gemini DOM 验证各选择器，不把 GeminiBridge 现有选择器当既定正确常量；需真机）。
    另：AI-021 / AI-022 / AI-023 / AI-024 需真机复测一次「后台→前台挂回不丢登录态」「Activity 销毁后重建可用」「识牌全链路无 CalledFromWrongThread、无主线程阻塞」「容器不可用时不挂假 Attached」。
 2. 用真机实测值复核 GeminiSelectors 其余候选（response/generating）。
 3. 阶段 7 UI 按 P0→P1→P2 实施。

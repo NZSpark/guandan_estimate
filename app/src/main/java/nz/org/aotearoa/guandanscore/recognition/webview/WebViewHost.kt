@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -45,6 +46,41 @@ fun interface FileChooserHandler {
 class WebViewHost private constructor(private val appContext: Context) {
 
     private val main = Handler(Looper.getMainLooper())
+
+    /** AI-025：默认安全配置；改动即改契约，单测会同步报警。 */
+    private val securityConfig: WebViewSecurityConfig = WebViewSecurityConfig()
+
+    /**
+     * 把 [config] 应用到 `WebSettings` 与 `CookieManager`（AI-025）。
+     *
+     * 单独抽方法是为了让"契约对象 → 真实 WebView"这一步可读、可审；
+     * `CookieManager` 侧的两个开关也一并在这里设置，避免与 settings 分散。
+     */
+    private fun applySecurityConfig(settings: WebSettings, config: WebViewSecurityConfig) {
+        config.violations().forEach { Log.w(TAG, "security config violation: $it") }
+        settings.javaScriptEnabled = config.javaScriptEnabled
+        settings.domStorageEnabled = config.domStorageEnabled
+        settings.databaseEnabled = config.databaseEnabled
+        settings.allowFileAccess = config.allowFileAccess
+        settings.allowContentAccess = config.allowContentAccess
+        settings.mixedContentMode = if (config.mixedContentNeverAllow) {
+            WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        } else {
+            WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+        }
+        settings.saveFormData = config.saveFormData
+        settings.setGeolocationEnabled(config.geolocationEnabled)
+        // 接受 Cookie 是全局开关，创建期即可设置。
+        CookieManager.getInstance().setAcceptCookie(config.acceptCookie)
+    }
+
+    /**
+     * 第三方 Cookie 必须绑定具体 WebView 实例，创建期还没有实例，
+     * 因此在 `webView = view` 之后单独设置（AI-025）。
+     */
+    private fun applyThirdPartyCookies(view: WebView, config: WebViewSecurityConfig) {
+        CookieManager.getInstance().setAcceptThirdPartyCookies(view, config.acceptThirdPartyCookies)
+    }
 
     @Volatile
     private var webView: WebView? = null
@@ -180,6 +216,9 @@ class WebViewHost private constructor(private val appContext: Context) {
     /**
      * 懒创建 WebView（必须在主线程）。
      * 配置项集中在这里，避免各处重复设置导致行为不一致。
+     *
+     * AI-025：安全与隐私开关不写死在此，统一由 [WebViewSecurityConfig] 声明，
+     * 并在启动时用 [WebViewSecurityConfig.violations] 自检。
      */
     @SuppressLint("SetJavaScriptEnabled")
     fun ensureWebView(): WebView {
@@ -188,24 +227,38 @@ class WebViewHost private constructor(private val appContext: Context) {
         val view = WebView(appContext).apply {
             // 华为/EMUI WebView 会给 DeepSeek 登录输入框选 RTL，导致输入字符倒序（SMSProxy 实测）。
             layoutDirection = android.view.View.LAYOUT_DIRECTION_LTR
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.databaseEnabled = true
+            // AI-025：安全/隐私开关由契约对象统一声明并自检，不再散落硬编码。
+            applySecurityConfig(settings, securityConfig)
             settings.loadWithOverviewMode = true
             settings.useWideViewPort = true
             settings.mediaPlaybackRequiresUserGesture = false
-            CookieManager.getInstance().setAcceptCookie(true)
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webViewClient = object : WebViewClient() {
                 // SPA 跳转中途 onPageFinished 可能迟迟不来；提前记录 URL，
                 // 供 currentUrl 的读者拿到尽量新的值（只读缓存，不碰 WebView.url）。
                 override fun onPageStarted(v: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     if (url != null) currentUrl = url
+                    // AI-025：URL 可能带 token / code，进日志前必须脱敏。
+                    Log.d(TAG, "page started: ${UrlRedactor.redact(url)}")
                 }
 
                 override fun onPageFinished(v: WebView?, url: String?) {
                     if (url != null) currentUrl = url
+                    Log.d(TAG, "page finished: ${UrlRedactor.redact(url)}")
                     onPageFinished?.invoke(url.orEmpty())
+                }
+
+                // AI-025：加载失败要可诊断，但不能把 WebView 内部描述（可能含 URL 参数）直出。
+                override fun onReceivedError(
+                    v: WebView?,
+                    request: android.webkit.WebResourceRequest?,
+                    error: android.webkit.WebResourceError?
+                ) {
+                    Log.w(
+                        TAG,
+                        "page error: mainFrame=${request?.isForMainFrame} " +
+                            "url=${UrlRedactor.redact(request?.url?.toString())} " +
+                            "code=${error?.errorCode}"
+                    )
                 }
             }
             webChromeClient = object : WebChromeClient() {
@@ -291,6 +344,7 @@ class WebViewHost private constructor(private val appContext: Context) {
         // 允许 chrome://inspect 调试；Release 由 R8 保留规则与正式流程另行把关。
         WebView.setWebContentsDebuggingEnabled(true)
         webView = view
+        applyThirdPartyCookies(view, securityConfig)
         windowStatus = WindowStatus.NotAttached
         Log.i(TAG, "WebView created")
         return view

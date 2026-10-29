@@ -104,3 +104,15 @@
 **约束**：注入配置的生命周期由宿主（`MainActivity` / `AiProbeActivity` / 调用方）负责；只有宿主主动 `setAttachTarget(null)` 或替换 handler 时才变更。新增「每视图」状态与「每宿主」配置时必须分清归属，写进对应一侧的清理路径。
 
 **状态**：Active
+
+---
+
+## ADR-0011 · 2026-10-29 · WebView 安全开关收敛为契约对象；URL 进日志必须脱敏
+
+**决策**：① WebView 的 JavaScript / DOM Storage / 文件访问 / 混合内容 / 表单保存 / 定位 / Cookie 开关不再散落硬编码在 `ensureWebView()`，统一由 `recognition/webview/WebViewSecurityConfig` 声明，默认值即契约，`violations()` 供启动自检与单测断言。② 任何打印页面 URL 的日志必须先经 `recognition/webview/UrlRedactor`：保留 scheme/host/path，query 与 fragment 的**值**替换为 `<redacted>`，键名保留。
+
+**理由**：设置项只有"写对了"这一种保证，后来者顺手打开 `allowFileAccess` 或关闭混合内容拦截不会有任何阻力；SPA 登录后 URL 常带 `?code=` / `#access_token=`，原样进 logcat 等于把凭据写进系统日志，违反 CRITICAL §6/§8（API Key / 私有端点绝不入库、不入日志）。
+
+**约束**：新增 WebView 能力开关时先改 `WebViewSecurityConfig` 并在 `violations()` 里加规则，不要在 `ensureWebView()` 里直接写 `settings.xxx = ...`。新增任何 URL 日志点必须套 `UrlRedactor.redact()`；脱敏保留结构是为了排障时能看出"被重定向到登录页"，不是为了让值可读。
+
+**状态**：Active
