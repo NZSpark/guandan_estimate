@@ -364,8 +364,10 @@ class PageDriver(
                 val x = json.optInt("x", -1)
                 val y = json.optInt("y", -1)
                 val viewportH = json.optInt("innerHeight", 0)
+                // 视口宽度可能缺省（旧脚本），0 表示由宿主按高度比例兜底。
+                val viewportW = json.optInt("innerWidth", 0)
                 if (x >= 0 && y >= 0 && viewportH > 0) {
-                    if (host.tapViewportPoint(x, y, viewportH)) return true
+                    if (host.tapViewportPoint(x, y, viewportH, viewportW)) return true
                 }
             }
         }

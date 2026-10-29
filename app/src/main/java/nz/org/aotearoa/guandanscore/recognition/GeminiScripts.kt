@@ -54,6 +54,7 @@ object GeminiScripts {
           var c = center(r);
           c.ok = true;
           c.innerHeight = window.innerHeight;
+          c.innerWidth = window.innerWidth;
           c.dpr = window.devicePixelRatio || 1;
           c.label = (el.getAttribute('aria-label') || '').toString();
           return JSON.stringify(c);

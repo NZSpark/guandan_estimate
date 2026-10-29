@@ -18,7 +18,8 @@ object AiSourcePresets {
     /** 各网页源首页。`custom_web` 没有默认值，必须由用户填写。 */
     private val WEB_HOME_URLS: Map<AiSourceId, String> = mapOf(
         AiSourceId.DEEPSEEK_WEBVIEW to "https://chat.deepseek.com",
-        AiSourceId.GEMINI_WEBVIEW to "https://gemini.google.com/app"
+        AiSourceId.GEMINI_WEBVIEW to "https://gemini.google.com/app",
+        AiSourceId.CHATGPT_WEBVIEW to "https://chatgpt.com/"
     )
 
     fun homeUrlFor(id: AiSourceId): String? = WEB_HOME_URLS[id]
@@ -27,6 +28,7 @@ object AiSourcePresets {
     fun presets(): List<AiSettings> = listOf(
         deepseekWebView(),
         geminiWebView(),
+        chatgptWebView(),
         customWebView(),
         httpApiGemini(),
         httpApiOpenAi()
@@ -58,6 +60,17 @@ object AiSourcePresets {
         model = "",
         apiKey = "",
         homeUrl = WEB_HOME_URLS.getValue(AiSourceId.GEMINI_WEBVIEW),
+        transport = AiTransport.WEBVIEW
+    )
+
+    fun chatgptWebView() = AiSettings(
+        id = "preset_chatgpt_webview",
+        sourceKey = AiSourceId.CHATGPT_WEBVIEW.key,
+        provider = AiSourceId.CHATGPT_WEBVIEW.label,
+        endpoint = "",
+        model = "",
+        apiKey = "",
+        homeUrl = WEB_HOME_URLS.getValue(AiSourceId.CHATGPT_WEBVIEW),
         transport = AiTransport.WEBVIEW
     )
 

@@ -26,6 +26,7 @@ import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import nz.org.aotearoa.guandanscore.recognition.webview.AcceptTypes
+import nz.org.aotearoa.guandanscore.recognition.webview.ViewportTapMapper
 import org.json.JSONObject
 
 /**
@@ -485,9 +486,12 @@ open class AiProbeActivity : Activity() {
     private fun logBaseline() {
         val wv = webView
         val dm = resources.displayMetrics
+        // AI-015：原生触摸的坐标换算必须知道 WebView 在窗口内的偏移。
+        // 探测页 WebView 上方还有按钮栏，把视口坐标直接按高度比例缩放会整体点偏。
+        val loc = IntArray(2).also { wv.getLocationInWindow(it) }
         log(
             "BASELINE_VIEW",
-            "view=${wv.width}x${wv.height} density=${dm.density} densityDpi=${dm.densityDpi} " +
+            "view=${wv.width}x${wv.height} at=${loc[0]},${loc[1]} density=${dm.density} densityDpi=${dm.densityDpi} " +
                 "screen=${dm.widthPixels}x${dm.heightPixels} attachedToWindow=${wv.isAttachedToWindow} " +
                 "visibility=${wv.visibility} shown=${wv.isShown} scale=${wv.scale} " +
                 "parent=${wv.parent?.javaClass?.simpleName}"
@@ -704,12 +708,27 @@ open class AiProbeActivity : Activity() {
             val x = o.optInt("x")
             val y = o.optInt("y")
             val innerH = o.optInt("innerHeight")
-            log("TAPICON", "icon at css ($x,$y) innerHeight=$innerH; dispatching native touch")
-            // 探测页 WebView 是普通布局，直接用视图坐标比例换算。
+            val innerW = o.optInt("innerWidth")
+            log("TAPICON", "icon at css ($x,$y) viewport=${innerW}x$innerH; dispatching native touch")
+            // AI-015：换算逻辑只有一份（ViewportTapMapper）。探针以前自带一套
+            // 「按高度等比缩放」的实现，与驱动层漂移，真机表现为触摸已派发但
+            // onShowFileChooser 从不触发 —— 点空了。
             val wv = webView
-            val scale = wv.height.toFloat() / innerH.toFloat()
-            val px = (x * scale).toInt()
-            val py = (y * scale).toInt()
+            val mapped = ViewportTapMapper.map(
+                cssX = x,
+                cssY = y,
+                viewWidth = wv.width,
+                viewHeight = wv.height,
+                viewportWidth = innerW,
+                viewportHeight = innerH
+            )
+            if (mapped == null) {
+                log("TAPICON", "cannot map: view=" + wv.width + "x" + wv.height +
+                    " viewport=" + innerW + "x" + innerH)
+                return@runScript
+            }
+            val px = mapped.x
+            val py = mapped.y
             val now = android.os.SystemClock.uptimeMillis()
             val down = android.view.MotionEvent.obtain(
                 now, now, android.view.MotionEvent.ACTION_DOWN, px.toFloat(), py.toFloat(), 0
@@ -721,7 +740,12 @@ open class AiProbeActivity : Activity() {
             wv.dispatchTouchEvent(up)
             down.recycle()
             up.recycle()
-            log("TAPICON", "native touch dispatched at ($px,$py) px")
+            log(
+                "TAPICON",
+                "native touch dispatched at (" + px + "," + py + ") px, view=" +
+                    wv.width + "x" + wv.height + " scaleX=" + mapped.scaleX +
+                    " scaleY=" + mapped.scaleY
+            )
         }
     }
 

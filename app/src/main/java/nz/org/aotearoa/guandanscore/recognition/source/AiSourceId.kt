@@ -12,6 +12,7 @@ enum class AiSourceId(val key: String, val label: String) {
     DEEPSEEK_WEBVIEW("deepseek_web", "DeepSeek 网页版"),
     GEMINI_WEBVIEW("gemini_web", "Gemini 网页版"),
     CUSTOM_WEBVIEW("custom_web", "自定义网页源"),
+    CHATGPT_WEBVIEW("chatgpt_web", "ChatGPT 网页版"),
     HTTP_API("http_api", "HTTP API（API Key）");
 
     val isWebView: Boolean get() = this != HTTP_API

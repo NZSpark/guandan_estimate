@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import nz.org.aotearoa.guandanscore.recognition.AiSettings
 import nz.org.aotearoa.guandanscore.recognition.AiTransport
+import nz.org.aotearoa.guandanscore.recognition.site.ChatGPTAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.CustomAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.DeepSeekAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.GeminiAdapter
@@ -29,6 +30,7 @@ object AiSourceRegistry {
     fun adapterFor(settings: AiSettings): SiteAdapter? = when (settings.source) {
         AiSourceId.DEEPSEEK_WEBVIEW -> DeepSeekAdapter()
         AiSourceId.GEMINI_WEBVIEW -> GeminiAdapter()
+        AiSourceId.CHATGPT_WEBVIEW -> ChatGPTAdapter()
         AiSourceId.CUSTOM_WEBVIEW -> CustomAdapter(settings.homeUrl)
         AiSourceId.HTTP_API -> null
     }

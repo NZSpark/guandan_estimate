@@ -3,6 +3,7 @@ package nz.org.aotearoa.guandanscore.recognition
 import nz.org.aotearoa.guandanscore.recognition.AiTransport.API
 import nz.org.aotearoa.guandanscore.recognition.AiTransport.WEBVIEW
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceId
+import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -106,7 +107,12 @@ class AiSettingsStoreTest {
 
     @Test
     fun webViewPresetsHaveNoEndpointOrKey() {
-        listOf(AiPresets.geminiWebView(), AiPresets.deepseekWebView(), AiPresets.customWebView()).forEach {
+        listOf(
+            AiSourcePresets.geminiWebView(),
+            AiSourcePresets.deepseekWebView(),
+            AiSourcePresets.chatgptWebView(),
+            AiSourcePresets.customWebView()
+        ).forEach {
             assertEquals(WEBVIEW, it.transport)
             assertEquals("", it.endpoint)
             assertEquals("", it.model)
@@ -119,6 +125,7 @@ class AiSettingsStoreTest {
     fun webViewPresetHomeUrlsMatchRegistry() {
         assertEquals("https://chat.deepseek.com", AiPresets.deepseekWebView().homeUrl)
         assertEquals("https://gemini.google.com/app", AiPresets.geminiWebView().homeUrl)
+        assertEquals("https://chatgpt.com/", AiSourcePresets.chatgptWebView().homeUrl)
         assertEquals("", AiPresets.customWebView().homeUrl)
     }
 

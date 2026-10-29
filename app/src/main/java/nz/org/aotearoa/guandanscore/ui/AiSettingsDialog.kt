@@ -249,6 +249,7 @@ class AiSettingsDialog(
     private fun newProfileFor(source: AiSourceId): AiSettings = when (source) {
         AiSourceId.DEEPSEEK_WEBVIEW -> AiSourcePresets.deepseekWebView().copy(id = UUID.randomUUID().toString())
         AiSourceId.GEMINI_WEBVIEW -> AiSourcePresets.geminiWebView().copy(id = UUID.randomUUID().toString())
+        AiSourceId.CHATGPT_WEBVIEW -> AiSourcePresets.chatgptWebView().copy(id = UUID.randomUUID().toString())
         AiSourceId.CUSTOM_WEBVIEW -> AiSourcePresets.customWebView().copy(id = UUID.randomUUID().toString())
         AiSourceId.HTTP_API -> AiSourcePresets.httpApiGemini().copy(id = UUID.randomUUID().toString())
     }

@@ -78,7 +78,26 @@
 - `GeminiScripts.uploadTrigger()`：如实返回 `js-click-needs-user-activation`，不伪装成功。
 - `GeminiScripts.locateUploadIcon()`：返回视口坐标 / innerHeight / dpr，无同步忙等（单测断言）。
 - `GeminiAdapter.uploadTriggerScript()` / `uploadIconScript()` 已实现，与 DeepSeek 共用同一原生触摸驱动路径。
+
+### 已完成（AI-073 FILE_CHOOSER 回调唯一所有者重构，离线）
+
+- 新增 `recognition/webview/FileChooserSlot.kt`：把 `onShowFileChooser` 回调的所有权/释放规则独立成不持有 WebView 的纯 Kotlin 类 —— `offer`（换入新回调时以 `null` 释放旧的不同实例）、`take`（交出所有权）、`release`（幂等释放）、`peek`（只读）。同一实例重复 `offer` 不重复释放（系统可能重入）。
+- `WebViewHost` 删除裸 `var filePathCallback` 字段，改用 `private val fileChooser = FileChooserSlot<...>()`；孤儿释放、无 handler 释放、handler 返回 false / 抛异常释放、`destroy()` 释放全部统一走该槽位，不再存在「字段置空但回调没释放」的路径。
+- 新增 `FileChooserSlotTest`（5 例）：offer→take 移交、替换并释放旧回调、同实例重复 offer 不释放、null 被忽略、release 幂等。
+- `./gradlew testDebugUnitTest --tests 'nz.org.aotearoa.guandanscore.recognition.webview.*'` BUILD SUCCESSFUL（仅剩既有 `databaseEnabled` / `saveFormData` deprecated 警告）。
+- 未做：真机复跑上传（DeepSeek / Gemini）确认行为等价。
 - 新增 4 个单测；`./gradlew testDebugUnitTest` 176 项全绿。
+
+### 进行中（AI-015 视口坐标换算修复 + 真机复测，2026-10-29 18:45）
+
+- 新增 `recognition/webview/ViewportTapMapper`（纯函数）：横纵**分别**缩放，不再用单一高度比例缩放 x。真机点偏的根因是旧实现假设「WebView 宽高比 == 视口宽高比」，而探测页/正式页 WebView 都被布局拉伸。缺 `innerWidth` 时退回纵向比例（旧脚本兼容，降级路径）。`isWithinViewport()` 供换算前拒绝越界点。`ViewportTapMapperTest` 6 例（含「x 必须用横向比例算出」的回归断言）。
+- `WebViewHost.tapViewportPoint` 新增 `viewportWidth`（默认 0 走降级），改用 `ViewportTapMapper`；日志打印 `view/viewport/scaleX/scaleY`。`PageDriver` 从脚本 JSON 读 `innerWidth` 一并传入。`GeminiScripts.locateUploadIcon()` 补 `innerWidth`。
+- 探针 `tapUploadIcon()` 删掉自带的「按高度等比」实现，改调 `ViewportTapMapper`（此前与驱动层各写一套、真机漂移）；`logBaseline()` 增加 WebView `getLocationInWindow` 输出（`at=x,y`）。
+- `./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。
+- **真机复测（LIO-N29 / Android 10，18:45，Gemini）**：`TAPICON: icon at css (56,507) viewport=392x601` → `dispatched at (168,1519) px, view=1176x1801 scaleX=3.0 scaleY≈2.9967`。截图确认**触摸精确命中了 `Upload and tools`**，Gemini 弹出附件面板（Photos / Files / Drive / Google Photos）。坐标换算修复**已验证有效**。
+- **但 `FILECHOOSER` 零输出**：该面板是网页自渲染菜单，不是系统文件选择器；「点上传图标即触发 `onShowFileChooser`」这一前提对当前 Gemini 版本不成立，需再点面板里的 `Photos` / `Files` 才会唤起 chooser。
+- **Gemini 登录态已掉**：截图显示右上 `Sign in`，页面有 `Add files, create and try tools / Sign in to try tools`。`gemini_diag` 实测 `inputCount=2 fileInputCount=1 loginIndicatorCount=1 passwordCount=0` → `parseLogin` 因缺 password 正确判为**未登录**。
+- 结论：AI-015 下一步须先恢复 Gemini 登录态，再验证「上传图标 → 面板 → Photos/Files → onShowFileChooser」两段式路径；`uploadTrigger()` / `locateUploadIcon()` 对面板内二级入口尚无实现。
 
 ### 已完成（AI-012 上传图片压缩）
 

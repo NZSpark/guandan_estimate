@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -136,14 +137,36 @@ class AiSettingsStore(private val context: Context) {
         if (loadAll().any { it.id == id }) prefs.edit().putString("active_profile", id).apply()
     }
 
+    /**
+     * AI-094：删除不再使用的 Keystore alias。
+     *
+     * 只在整个配置里已经没有任何 Key 时调用；否则现存密文会永久无法解密。
+     * 返回是否真的删了。不记录任何 Key 内容。
+     */
+    fun dropKeystoreAliasIfUnused(): Boolean {
+        if (!LegacyKeyCleanup.canDropKeystoreAlias(loadAll())) return false
+        return try {
+            val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (!store.containsAlias(alias)) return false
+            store.deleteEntry(alias)
+            Log.i(TAG, "dropped legacy keystore alias (no profile retains a key)")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "drop alias failed: ${e.javaClass.simpleName}")
+            false
+        }
+    }
+
     fun delete(id: String) {
         val remaining = loadAll().filterNot { it.id == id }.ifEmpty { AiPresets.defaults() }
         persist(remaining, remaining.first().id)
     }
 
     private fun persist(profiles: List<AiSettings>, activeId: String) {
+        // AI-094：写入前清掉网页源上残留的旧 Key，避免它被重新加密落盘。
+        val sanitized = LegacyKeyCleanup.plan(profiles).profiles
         val array = JSONArray()
-        profiles.forEach { s ->
+        sanitized.forEach { s ->
             array.put(
                 JSONObject()
                     .put("id", s.id)
@@ -164,6 +187,8 @@ class AiSettingsStore(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "AiSettingsStore"
+
         /**
          * 解码单个 profile，含旧数据迁移。抽成伴生函数以便单测直接覆盖迁移规则（无需 Context）。
          *
