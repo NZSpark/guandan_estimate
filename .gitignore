@@ -18,4 +18,6 @@ promp.md
 /*.png
 /*.jpg
 !AotearoaGuandanLogo.png
-long_loop.sh.long_loop_logs/
+long_loop.sh
+.long_loop_logs/
+env.local.sh
