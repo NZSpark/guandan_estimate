@@ -85,7 +85,22 @@
 - `WebViewHost` 删除裸 `var filePathCallback` 字段，改用 `private val fileChooser = FileChooserSlot<...>()`；孤儿释放、无 handler 释放、handler 返回 false / 抛异常释放、`destroy()` 释放全部统一走该槽位，不再存在「字段置空但回调没释放」的路径。
 - 新增 `FileChooserSlotTest`（5 例）：offer→take 移交、替换并释放旧回调、同实例重复 offer 不释放、null 被忽略、release 幂等。
 - `./gradlew testDebugUnitTest --tests 'nz.org.aotearoa.guandanscore.recognition.webview.*'` BUILD SUCCESSFUL（仅剩既有 `databaseEnabled` / `saveFormData` deprecated 警告）。
-- 未做：真机复跑上传（DeepSeek / Gemini）确认行为等价。
+
+### 已完成（AI-022 主线程修复 + AI-073 真机验证）
+
+真机 LIO-N29 / Android 10 / webview 114，DeepSeek 网页源，testcases/case14.jpg（1440×1920 → 1350×1800 q=85 254147 B）端到端跑通：
+
+- PREP 编码真实图 → TAPICON 原生触摸 (857,955) → FILECHOOSER: delivering probe_upload.jpg → E2E_VERIFY attached=true → E2E_SUBMIT ok=true → E2E_PARSE cards=27 warnings=[]。
+- 27/27 逐张核对一致：♥Q ♠Q ♠A ♠A ♦A ♥A ♦10 ♦9 ♠9 ♦K ♠K ♠K ♠4 ♦4 ♥K ♣K ♥2 ♣2 ♦2 ♠2 ♠J ♣10 ♣9 ♣8 ♠7 小王 大王。
+- 修复前后对照：修复前 worker 线程直调 host.destroy()/attach()/status() 抛 WebViewHost must be used on the main thread (M1/AI-022), current-pool-1-thread-1，识别必失败。
+
+AI-073 FileChooserSlot：连续多次重跑探针，每次 onShowFileChooser 都正常响应，未出现「上传一次后永久卡死」。
+
+踩坑备忘：
+1. EXTRA_TEST_IMAGE 不能指向 /sdcard/...（应用无存储权限，EACCES 后静默回退 70 字节占位图，模型会回答「纯色背景图」）。正确做法：adb push 到 /data/local/tmp → run-as <pkg> cp 进 cache/probe/ → 传应用私有绝对路径。
+2. 单条 logcat 消息上限约 4KB，E2E_ANSWER 的 take(600) 会截断长回答。已新增 E2E_CARDS（按 8 张一批 SUIT:RANK 输出）用于逐张核对。
+3. hif-dliq.deepseek.com -> ERR_NAME_NOT_RESOLVED 是 DeepSeek 页面自身的次要请求失败，不影响主流程（同一次运行仍拿到 27 张牌）。不要误判为网络阻断。
+4. 本机 am force-stop 不生效，必须 am force-stop + am kill 并用 pidof 确认 GONE 后再 logcat -c，否则会读不到 --es auto 的输出。
 - 新增 4 个单测；`./gradlew testDebugUnitTest` 176 项全绿。
 
 ### 进行中（AI-015 视口坐标换算修复 + 真机复测，2026-10-29 18:45）

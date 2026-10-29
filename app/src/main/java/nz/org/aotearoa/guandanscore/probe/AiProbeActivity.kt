@@ -471,6 +471,11 @@ open class AiProbeActivity : Activity() {
                     "cards=${outcome.cards.size} warnings=${outcome.warnings} " +
                         "first=${outcome.cards.take(5)}"
                 )
+                // 单条 logcat 消息上限约 4KB，全量卡片按 8 张一批输出便于核对。
+                outcome.cards.chunked(8).forEachIndexed { i, batch ->
+                    val compact = batch.joinToString(" ") { "${it.suit}:${it.rank}" }
+                    log("E2E_CARDS", "[$i] $compact")
+                }
                 return@runScript
             }
             webView.postDelayed({ pollAnswerForEndToEnd(attempt + 1) }, 3000)
