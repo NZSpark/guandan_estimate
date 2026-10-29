@@ -27,12 +27,15 @@ class CustomAdapter(private val userHomeUrl: String) :
 
     override val preferredUpload: UploadStrategy = UploadStrategy.FILE_CHOOSER
 
+    /** AI-124：自定义站点没有验收记录，不得从 DeepSeek 的委托里继承“两条都可用”。 */
+    override val supportedUploads: Set<UploadStrategy> = setOf(UploadStrategy.FILE_CHOOSER)
+
     override fun fillAndSubmitScript(
         prompt: String,
         fileName: String,
         mimeType: String,
         base64: String
-    ): String = DeepSeekScripts.fillAndSubmit(prompt)
+    ): String = DeepSeekScripts.fillAndSend(prompt)
 
     override fun pasteAttachmentScript(fileName: String, mimeType: String, base64: String): String =
         DeepSeekScripts.pasteImage(fileName, mimeType, base64)

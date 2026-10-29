@@ -34,12 +34,30 @@ open class DeepSeekAdapter : SiteAdapter, PasteCapableAdapter {
     /** 实测：paste 被接受且无需 user activation；file chooser 需要原生触摸。 */
     override val preferredUpload: UploadStrategy = UploadStrategy.PASTE
 
+    /** AI-124：两条路径均已真机验证（paste 预览出现 / 原生触摸触发 onShowFileChooser）。 */
+    override val supportedUploads: Set<UploadStrategy> =
+        setOf(UploadStrategy.PASTE, UploadStrategy.FILE_CHOOSER)
+
     override fun fillAndSubmitScript(
         prompt: String,
         fileName: String,
         mimeType: String,
         base64: String
-    ): String = DeepSeekScripts.fillAndSubmit(prompt)
+    ): String = DeepSeekScripts.fillAndSend(prompt)
+
+    /** AI-173：点击前轮询发送按钮可用性。 */
+    override fun sendStateScript(): String = DeepSeekScripts.sendState()
+
+    override fun parseSendState(json: JSONObject): SendState = SendState(
+        sendCount = json.optInt("sendCount", 0),
+        sendDisabled = json.optBoolean("sendDisabled", false),
+        sendClickable = json.optBoolean("sendClickable", false),
+        valueEmpty = json.optBoolean("valueEmpty", false)
+    )
+
+    /** AI-174：DeepSeek 会话页形态为 `/a/chat/s/<id>`。 */
+    override fun isSessionUrl(url: String): Boolean = url.contains("/a/chat/s/")
+
 
     /** 粘贴路径脚本。仅当驱动层决定尝试 PASTE 时调用。 */
     override fun pasteAttachmentScript(fileName: String, mimeType: String, base64: String): String =
@@ -72,20 +90,35 @@ open class DeepSeekAdapter : SiteAdapter, PasteCapableAdapter {
     /** 附件图标视口坐标，供原生触摸点击以触发 onShowFileChooser。 */
     override fun uploadIconScript(): String = DeepSeekScripts.locateUploadIcon()
 
+    /**
+     * AI-175：不再只认 `ok`。
+     *
+     * 必须同时具备「文本已填入」与「确实触发了发送动作」（Enter 或点击发送按钮）；
+     * 页面上只剩 disabled 按钮时即使脚本返回 `ok:true` 也判失败。
+     *
+     * `valueEmpty` 只作诊断：React 受控组件在同一个 turn 内通常尚未完成重渲染，
+     * 同步读到非空值并不代表没发出去；因此不以它作硬判据（等价判据见下方 `sent`）。
+     */
     override fun parseSubmitResult(json: JSONObject): SubmitOutcome {
-        val ok = json.optBoolean("ok", false)
-        if (ok) {
-            return SubmitOutcome(
-                ok = true,
-                why = null,
-                inputFilled = json.optBoolean("inputFilled", false),
-                attached = true
+        val scriptOk = json.optBoolean("ok", false)
+        val filled = json.optBoolean("inputFilled", false)
+        val sent = json.optBoolean("sentEnter", false) || json.optBoolean("sendClicked", false)
+        if (!scriptOk) {
+            return SubmitOutcome.fail(
+                why = JsonParse.why(json) ?: "submit-failed",
+                inputFilled = filled
             )
         }
-        return SubmitOutcome.fail(
-            why = JsonParse.why(json) ?: "submit-failed",
-            inputFilled = json.optBoolean("inputFilled", false)
-        )
+        if (!filled) return SubmitOutcome.fail("composer-not-filled", inputFilled = false)
+        if (!sent) {
+            val why = when {
+                json.optBoolean("sendDisabled", false) -> "send-disabled"
+                json.optBoolean("valueEmpty", false) -> "submit-not-dispatched"
+                else -> "submit-not-dispatched"
+            }
+            return SubmitOutcome.fail(why, inputFilled = true)
+        }
+        return SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
     }
 
     override fun parseSnapshot(json: JSONObject): AnswerSnapshot = AnswerSnapshot(

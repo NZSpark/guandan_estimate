@@ -50,7 +50,7 @@ class WebViewAiSourceTest {
         override fun pasteImage(fileName: String, mimeType: String, base64: String) = true
         override fun prepareFileChooserUpload(fileName: String, mimeType: String, bytes: ByteArray) = true
         override fun verifyAttachment() = true
-        override fun awaitSubmitStarted(baseline: AnswerSnapshot) = true
+        override fun awaitSubmitStarted(baseline: AnswerSnapshot) = SubmitStart.STARTED
         override fun diagnose() = null
     }
 
@@ -96,6 +96,37 @@ class WebViewAiSourceTest {
         val result = source(pages, adapter).recognize(request())
         assertEquals(2, result.size)
         assertEquals(1, verifyCount)
+    }
+
+    /** AI-124：未声明为已验证的策略不得被驱动层自行尝试。 */
+    @Test
+    fun onlyDeclaredUploadStrategiesAreTried() {
+        val pages = FakePageOps().apply {
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val adapter = FakeSiteAdapter(
+            preferredUpload = UploadStrategy.FILE_CHOOSER,
+            supportedUploads = setOf(UploadStrategy.FILE_CHOOSER)
+        )
+        source(pages, adapter).recognize(request())
+        assertEquals(0, pages.pasteCalls)
+    }
+
+    /** AI-037：临时上传文件在成功与失败路径都要清理。 */
+    @Test
+    fun uploadCacheCleanedUpOnSuccessAndFailure() {
+        val ok = FakePageOps().apply {
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        source(ok).recognize(request())
+        assertEquals(1, ok.cleanupCalls)
+
+        val failed = FakePageOps().apply {
+            attachmentVerified = false
+            pasteDispatched = false
+        }
+        assertThrows(AiSourceError.UploadFailed::class.java) { source(failed).recognize(request()) }
+        assertEquals(1, failed.cleanupCalls)
     }
 
     /** 未登录时不提交。 */
@@ -145,8 +176,74 @@ class WebViewAiSourceTest {
     /** 提交后未见新节点 → SubmitFailed，不是超时。 */
     @Test
     fun submitNotStartedThrows() {
-        val pages = FakePageOps().apply { submitStarted = false }
+        val pages = FakePageOps().apply { submitStart = SubmitStart.NOT_STARTED }
         assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+    }
+
+    /** AI-174：死文档只 reload 一次，重试后拿到回答。 */
+    @Test
+    fun stalePageReloadsOnceAndRetries() {
+        val pages = FakePageOps().apply {
+            submitStartSequence = listOf(SubmitStart.STALE_PAGE, SubmitStart.STARTED)
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val result = source(pages).recognize(request())
+        assertEquals(2, result.size)
+        assertEquals(1, pages.forcedReloadCalls)
+        assertEquals(2, pages.calls.count { it == "fillAndSubmit" })
+    }
+
+    /** AI-174：第二次仍无变化就失败，不得无限 reload。 */
+    @Test
+    fun stalePageRetriesOnlyOnce() {
+        val pages = FakePageOps().apply {
+            submitStartSequence = listOf(SubmitStart.STALE_PAGE, SubmitStart.STALE_PAGE)
+        }
+        val e = assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+        assertTrue(e.message!!.contains("已重载一次"))
+        assertEquals(1, pages.forcedReloadCalls)
+    }
+
+    /** AI-173：首次提交失败但文本已填入、发送按钮随后可用 → 重填一次并成功。 */
+    @Test
+    fun sendEnabledRetryResubmitsOnce() {
+        val pages = FakePageOps().apply {
+            submitOutcomeSequence = listOf(
+                SubmitOutcome.fail("send-disabled", inputFilled = true),
+                SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
+            )
+            sendEnabled = true
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val result = source(pages).recognize(request())
+        assertEquals(2, result.size)
+        assertEquals(2, pages.calls.count { it == "fillAndSubmit" })
+        assertTrue(pages.sendEnabledCalls >= 1)
+    }
+
+    /** AI-173：发送按钮始终不可用时不重填，直接失败。 */
+    @Test
+    fun disabledSendDoesNotRetryBlindly() {
+        val pages = FakePageOps().apply {
+            submitOutcome = SubmitOutcome.fail("send-disabled", inputFilled = true)
+            sendEnabled = false
+        }
+        assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+        assertEquals(1, pages.calls.count { it == "fillAndSubmit" })
+    }
+
+    /** AI-173：第二次仍失败 → SubmitFailed，不当作成功。 */
+    @Test
+    fun sendEnabledRetryStillFails() {
+        val pages = FakePageOps().apply {
+            submitOutcomeSequence = listOf(
+                SubmitOutcome.fail("send-disabled", inputFilled = true),
+                SubmitOutcome.fail("send-disabled", inputFilled = true)
+            )
+            sendEnabled = true
+        }
+        assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+        assertEquals(2, pages.calls.count { it == "fillAndSubmit" })
     }
 
     /** 回答无法解析 → ParseFailed。 */

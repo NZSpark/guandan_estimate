@@ -21,3 +21,4 @@ promp.md
 long_loop.sh
 .long_loop_logs/
 env.local.sh
+.freebuff/

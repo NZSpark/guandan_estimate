@@ -6,6 +6,7 @@ import nz.org.aotearoa.guandanscore.model.Card
 import nz.org.aotearoa.guandanscore.recognition.AiCardResponseParser
 import nz.org.aotearoa.guandanscore.recognition.GenerationWatcher
 import nz.org.aotearoa.guandanscore.recognition.site.SiteAdapter
+import nz.org.aotearoa.guandanscore.recognition.site.SubmitOutcome
 import nz.org.aotearoa.guandanscore.recognition.site.UploadStrategy
 import nz.org.aotearoa.guandanscore.recognition.source.AiSource
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceError
@@ -137,6 +138,8 @@ class WebViewAiSource(
             return runPipeline(request)
         } finally {
             pages.setReloadSuspended(false)
+            // AI-037：临时 JPEG 在成功、失败、取消后都不留残。
+            runCatching { pages.cleanupUploads() }
             generating = false
             running.set(false)
         }
@@ -158,45 +161,87 @@ class WebViewAiSource(
         if (!pages.isLoggedIn()) {
             throw AiSourceError.NotLoggedIn("请在页面中手动登录后重试")
         }
-        if (cancelled) throw AiSourceError.Cancelled()
-
-        val baseline = pages.captureBaseline()
-        val watcher = watcherFactory()
-        watcher.reset(
-            GenerationWatcher.Baseline(baseline.responseCount, baseline.lastAnswerText),
-            nowMillis()
-        )
-
         val base64 = base64Encoder(request.jpegBytes)
 
-        val uploadError = if (adapter.uploadsInsideSubmit) null else uploadWithFallback(request, base64)
-        if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
-        if (cancelled) throw AiSourceError.Cancelled()
+        // AI-174：死文档只允许重载一次，且不占用上层的重试次数。
+        var staleRetried = false
+        while (true) {
+            if (cancelled) throw AiSourceError.Cancelled()
 
-        val outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
+            val baseline = pages.captureBaseline()
+            val watcher = watcherFactory()
+            watcher.reset(
+                GenerationWatcher.Baseline(baseline.responseCount, baseline.lastAnswerText),
+                nowMillis()
+            )
+
+            val uploadError = if (adapter.uploadsInsideSubmit) null else uploadWithFallback(request, base64)
+            if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
+            if (cancelled) throw AiSourceError.Cancelled()
+
+            // AI-173：提交失败但文本已填入 → 等发送按钮可用后重填一次。
+            submitWithSendEnabledRetry(request, base64)
+
+            // 上传由提交脚本内联完成（`uploadsInsideSubmit`）：提交后仍要确认预览真的出现。
+            if (adapter.uploadsInsideSubmit && !pages.verifyAttachment()) {
+                throw AiSourceError.UploadFailed("提交后未确认附件预览")
+            }
+            if (cancelled) throw AiSourceError.Cancelled()
+
+            when (pages.awaitSubmitStarted(baseline)) {
+                SubmitStart.STARTED -> {
+                    val answer = awaitAnswer(watcher) ?: throw if (cancelled) {
+                        AiSourceError.Cancelled()
+                    } else {
+                        AiSourceError.Timeout(timeoutMillis)
+                    }
+                    val parsed = parser.parseDetailed(answer)
+                    if (parsed.cards.isEmpty()) {
+                        throw AiSourceError.ParseFailed(
+                            parsed.warnings.lastOrNull() ?: "未能解析出有效牌面"
+                        )
+                    }
+                    return parsed.cards
+                }
+
+                SubmitStart.NOT_STARTED ->
+                    throw AiSourceError.SubmitFailed("提交后未见新回答节点或文本变化")
+
+                SubmitStart.STALE_PAGE -> {
+                    if (staleRetried) {
+                        throw AiSourceError.SubmitFailed("页面无响应（已重载一次仍无变化）")
+                    }
+                    staleRetried = true
+                    Log.w(TAG, "submit stale: reloading home once and retrying")
+                    if (!pages.ensureLoaded(force = true)) {
+                        val why = pages.lastFailureReason()
+                        throw AiSourceError.NotReady(
+                            if (why.isNullOrBlank()) "页面无响应且重载后未就绪" else why
+                        )
+                    }
+                    pages.applyPageFix()
+                    if (!pages.isLoggedIn()) {
+                        throw AiSourceError.NotLoggedIn("请在页面中手动登录后重试")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * AI-173：提交一次；失败且文本已填入时，等发送按钮可用后重填一次。
+     *
+     * 第二次仍失败则抛 [AiSourceError.SubmitFailed]——绝不对 disabled 按钮
+     * 盲点后当成成功。
+     */
+    private fun submitWithSendEnabledRetry(request: RecognizeRequest, base64: String): SubmitOutcome {
+        var outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
+        if (!outcome.ok && outcome.inputFilled && pages.awaitSendEnabled()) {
+            Log.i(TAG, "send button became usable; retrying submit once")
+            outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
+        }
         if (!outcome.ok) throw AiSourceError.SubmitFailed(outcome.why ?: "未知原因")
-
-        // 上传由提交脚本内联完成（`uploadsInsideSubmit`）：提交后仍要确认预览真的出现。
-        if (adapter.uploadsInsideSubmit && !pages.verifyAttachment()) {
-            throw AiSourceError.UploadFailed("提交后未确认附件预览")
-        }
-
-        if (!pages.awaitSubmitStarted(baseline)) {
-            throw AiSourceError.SubmitFailed("提交后未见新回答节点或文本变化")
-        }
-        if (cancelled) throw AiSourceError.Cancelled()
-
-        val answer = awaitAnswer(watcher) ?: throw if (cancelled) {
-            AiSourceError.Cancelled()
-        } else {
-            AiSourceError.Timeout(timeoutMillis)
-        }
-
-        val parsed = parser.parseDetailed(answer)
-        if (parsed.cards.isEmpty()) {
-            throw AiSourceError.ParseFailed(parsed.warnings.lastOrNull() ?: "未能解析出有效牌面")
-        }
-        return parsed.cards
+        return outcome
     }
 
     /**
@@ -204,10 +249,12 @@ class WebViewAiSource(
      * @return null 表示成功；非 null 是包含两条策略原因的失败说明。
      */
     private fun uploadWithFallback(request: RecognizeRequest, base64: String): String? {
-        val first = adapter.preferredUpload
-        val second = if (first == UploadStrategy.PASTE) UploadStrategy.FILE_CHOOSER else UploadStrategy.PASTE
+        // AI-124：只尝试适配器声明「已验证」的策略；首选排在最前。
+        val candidates = adapter.supportedUploads
+            .sortedBy { if (it == adapter.preferredUpload) 0 else 1 }
+        if (candidates.isEmpty()) return "适配器未声明任何已验证的上传策略"
         val reasons = mutableListOf<String>()
-        for (strategy in listOf(first, second)) {
+        for (strategy in candidates) {
             if (tryUpload(strategy, request, base64)) return null
             reasons += "$strategy 未确认附件预览"
         }

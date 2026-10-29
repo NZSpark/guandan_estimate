@@ -40,12 +40,25 @@ override val siteKey: String = AiSourceId.CHATGPT_WEBVIEW.key
 
 override val preferredUpload: UploadStrategy = UploadStrategy.PASTE
 
+/** AI-124：ChatGPT 上传路径尚未真机验证，回退策略一律不启用。 */
+override val supportedUploads: Set<UploadStrategy> = setOf(UploadStrategy.PASTE)
+
 override fun fillAndSubmitScript(
 prompt: String,
 fileName: String,
 mimeType: String,
 base64: String
 ): String = ChatGPTScripts.fillAndSubmit(prompt)
+
+/** AI-176：点击前轮询发送按钮可用性。 */
+override fun sendStateScript(): String = ChatGPTScripts.sendState()
+
+override fun parseSendState(json: JSONObject): SendState = SendState(
+sendCount = json.optInt("sendCount", 0),
+sendDisabled = json.optBoolean("sendDisabled", false),
+sendClickable = json.optBoolean("sendClickable", false),
+valueEmpty = json.optBoolean("valueEmpty", false)
+)
 
 override fun pasteAttachmentScript(fileName: String, mimeType: String, base64: String): String =
 ChatGPTScripts.pasteImage(fileName, mimeType, base64)
@@ -61,20 +74,25 @@ override fun verifyAttachmentScript(): String = ChatGPTScripts.verifyAttachment(
 /** 与其它站点一致：JS 点击不满足 user activation，只保留诊断价值。 */
 override fun uploadTriggerScript(): String = ChatGPTScripts.uploadTrigger()
 
+/**
+ * AI-176：与 DeepSeek 同构的正面证据判据。未真机验证的源也不能先放宽：
+ * 必须已填入文本且确实触发了 Enter 或点击发送，否则返回失败。
+ */
 override fun parseSubmitResult(json: JSONObject): SubmitOutcome {
-val ok = json.optBoolean("ok", false)
-if (ok) {
-return SubmitOutcome(
-ok = true,
-why = null,
-inputFilled = json.optBoolean("inputFilled", false),
-attached = true
+val scriptOk = json.optBoolean("ok", false)
+val filled = json.optBoolean("inputFilled", false)
+val sent = json.optBoolean("sentEnter", false) || json.optBoolean("sendClicked", false)
+if (!scriptOk) {
+return SubmitOutcome.fail(JsonParse.why(json) ?: "submit-failed", inputFilled = filled)
+}
+if (!filled) return SubmitOutcome.fail("composer-not-filled", inputFilled = false)
+if (!sent) {
+return SubmitOutcome.fail(
+if (json.optBoolean("sendDisabled", false)) "send-disabled" else "submit-not-dispatched",
+inputFilled = true
 )
 }
-return SubmitOutcome.fail(
-why = JsonParse.why(json) ?: "submit-failed",
-inputFilled = json.optBoolean("inputFilled", false)
-)
+return SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
 }
 
 override fun parseSnapshot(json: JSONObject): AnswerSnapshot = AnswerSnapshot(

@@ -84,6 +84,9 @@ class PageDriver(
         const val READY_MAX_RELOADS = 1
         const val UPLOAD_TIMEOUT_MILLIS = 20_000L
         const val SUBMIT_CONFIRM_TIMEOUT_MILLIS = 15_000L
+
+        /** AI-173：等待发送按钮可用的轮询间隔。 */
+        const val SEND_STATE_POLL_MILLIS = 200L
     }
 
     /** 记录是否已经为当前会话导航过，避免每次识牌都 reload。 */
@@ -386,6 +389,8 @@ class PageDriver(
         val ctx = host.appContextForFiles() ?: return false
         return try {
             val dir = java.io.File(ctx.cacheDir, "ai-upload").apply { mkdirs() }
+            // AI-041：写新图前清掉上一轮残留，避免图片 A 的文件被图片 B 的请求复用。
+            dir.listFiles()?.forEach { if (!it.delete()) Log.w(TAG, "stale upload not deleted: ${it.name}") }
             val file = java.io.File(dir, fileName)
             file.writeBytes(bytes)
             val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -441,6 +446,13 @@ class PageDriver(
         return json.optBoolean("dispatched", false)
     }
 
+    /** AI-037：删除上传用的临时 JPEG（成功 / 失败 / 取消都调用）。 */
+    override fun cleanupUploads() {
+        val ctx = host.appContextForFiles() ?: return
+        val dir = java.io.File(ctx.cacheDir, "ai-upload")
+        dir.listFiles()?.forEach { if (!it.delete()) Log.w(TAG, "upload cleanup failed: ${it.name}") }
+    }
+
     /** 校验附件预览。不通过即视为上传失败（M11）。 */
     override fun verifyAttachment(): Boolean {
         val deadline = nowMillis() + UPLOAD_TIMEOUT_MILLIS
@@ -452,14 +464,58 @@ class PageDriver(
         return false
     }
 
-    /** 提交后确认本轮真的开始了：节点数增加或文本变化。 */
-    override fun awaitSubmitStarted(baseline: AnswerSnapshot): Boolean {
-        val deadline = nowMillis() + SUBMIT_CONFIRM_TIMEOUT_MILLIS
-        while (nowMillis() < deadline) {
+    /**
+     * 提交后确认本轮真的开始了（AI-174 三态）。
+     *
+     * - `STARTED`：新回答节点 / 文本变化 / 生成中 / 进入会话页，任一成立。
+     * - `STALE_PAGE`：[SubmitProgress.STALE_AFTER_MILLIS] 内 URL 与 DOM 都没动，
+     *   继续等只是白耗 120s；由业务层 reload 一次再重试。
+     * - `NOT_STARTED`：观察窗口拉满仍无正面证据，但页面并非完全无变化。
+     */
+    override fun awaitSubmitStarted(baseline: AnswerSnapshot): SubmitStart {
+        val startedAt = nowMillis()
+        val first = pollSnapshot()
+        val startUrl = first.pageUrl
+        var urlChanged = false
+        var domChanged = false
+        var lastCount = first.responseCount
+        var lastText = first.lastAnswerText
+
+        while (nowMillis() - startedAt < SUBMIT_CONFIRM_TIMEOUT_MILLIS) {
             val s = pollSnapshot()
-            if (s.responseCount > baseline.responseCount) return true
-            if (s.lastAnswerText.isNotBlank() && s.lastAnswerText != baseline.lastAnswerText) return true
+            if (s.pageUrl != startUrl) urlChanged = true
+            if (s.responseCount != lastCount || s.lastAnswerText != lastText) {
+                domChanged = true
+                lastCount = s.responseCount
+                lastText = s.lastAnswerText
+            }
+            val sessionReached = adapter.isSessionUrl(s.pageUrl) && !adapter.isSessionUrl(startUrl)
+            if (SubmitProgress.started(s, baseline, sessionReached)) return SubmitStart.STARTED
+            if (SubmitProgress.stale(nowMillis() - startedAt, urlChanged, domChanged)) {
+                return SubmitStart.STALE_PAGE
+            }
             sleepMillis(300)
+        }
+        return SubmitStart.NOT_STARTED
+    }
+
+    /**
+     * AI-173：点击前轮询发送按钮是否可用。
+     *
+     * 适配器未实现 [SiteAdapter.sendStateScript] 时直接返回 false——宁可走
+     * 「重新填文本」也不能对不可见的按钮盲点。
+     */
+    override fun awaitSendEnabled(timeoutMillis: Long): Boolean {
+        val script = adapter.sendStateScript()
+        if (script.isBlank()) return false
+        val deadline = nowMillis() + timeoutMillis
+        while (nowMillis() < deadline) {
+            val json = JsonParse.parse(runBlockingEvaluate(script))
+            if (json != null) {
+                val state = adapter.parseSendState(json)
+                if (state.sendCount > 0 && state.sendClickable && !state.sendDisabled) return true
+            }
+            sleepMillis(SEND_STATE_POLL_MILLIS)
         }
         return false
     }

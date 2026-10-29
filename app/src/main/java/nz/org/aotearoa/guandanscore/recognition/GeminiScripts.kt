@@ -244,6 +244,37 @@ object GeminiScripts {
      * 返回 `{ok, filled, pasted, submitted, ...}`；`pasted` 只代表事件已派发，
      * 调用方仍须用 [verifyAttachment] 确认附件预览出现。
      */
+    /**
+     * AI-176：只读发送按钮状态，供驱动层在点击前轮询。
+     *
+     * Gemini 的发送按钮由 Angular 异步渲染，因此 `sendCount=0` 是正常的中间态；
+     * 调用方必须轮询而不是同步一次就判失败。
+     */
+    fun sendState(): String = """
+        (function() {
+          var list = [];
+          try { list = Array.prototype.slice.call(document.querySelectorAll(${quote(GeminiSelectors.send())})); } catch (e) {}
+          var usable = null;
+          for (var i = 0; i < list.length; i++) {
+            var b = list[i];
+            var r = b.getBoundingClientRect();
+            var dis = b.disabled === true || b.getAttribute('aria-disabled') === 'true';
+            if (!dis && r.width > 0 && r.height > 0) { usable = b; break; }
+          }
+          var input = null;
+          try { input = document.querySelector(${quote(GeminiSelectors.input())}); } catch (e) {}
+          var value = input ? (input.value === undefined ? (input.textContent || '') : input.value) : '';
+          return JSON.stringify({
+            ok: true,
+            sendCount: list.length,
+            sendDisabled: list.length > 0 && !usable,
+            sendClickable: !!usable,
+            valueEmpty: String(value || '').trim().length === 0,
+            url: location.href
+          });
+        })()
+    """.trimIndent()
+
     fun fillPasteAndSubmit(
         prompt: String,
         fileName: String,

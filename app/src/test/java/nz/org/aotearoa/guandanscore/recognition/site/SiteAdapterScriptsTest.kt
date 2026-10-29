@@ -20,7 +20,8 @@ class SiteAdapterScriptsTest {
             DeepSeekScripts.loginCheck(),
             DeepSeekScripts.verifyAttachment(),
             DeepSeekScripts.pageFix(),
-            DeepSeekScripts.fillAndSubmit("hi"),
+            DeepSeekScripts.fillAndSend("hi"),
+            DeepSeekScripts.sendState(),
             DeepSeekScripts.pasteImage("a.jpg", "image/jpeg", "QUJD"),
             DeepSeekScripts.deepProbe(),
             DeepSeekScripts.fileInputProbe()
@@ -35,7 +36,7 @@ class SiteAdapterScriptsTest {
 
     @Test
     fun deepSeekPromptWithSpecialCharsDoesNotBreakScript() {
-        val script = DeepSeekScripts.fillAndSubmit(tricky)
+        val script = DeepSeekScripts.fillAndSend(tricky)
         // JSONObject.quote 会把换行/引号编码掉，脚本里不应出现裸换行
         assertFalse(script.contains("\n引号\n"))
         assertTrue("quote must be escaped", script.contains("\\\""))
@@ -117,9 +118,67 @@ class SiteAdapterScriptsTest {
 
     @Test
     fun deepSeekParseSubmitSuccess() {
-        val outcome = DeepSeekAdapter().parseSubmitResult(JSONObject("""{"ok":true,"inputFilled":true}"""))
+        val outcome = DeepSeekAdapter().parseSubmitResult(
+            JSONObject("""{"ok":true,"inputFilled":true,"sentEnter":true,"valueEmpty":false}""")
+        )
         assertTrue(outcome.ok)
         assertNull(outcome.why)
+    }
+
+    /** AI-175：只返回 ok 但没有发送动作时不得判成功。 */
+    @Test
+    fun deepSeekSubmitWithoutSendEvidenceFails() {
+        val a = DeepSeekAdapter()
+        val noSend = a.parseSubmitResult(
+            JSONObject("""{"ok":true,"inputFilled":true,"sentEnter":false,"sendClicked":false,"valueEmpty":false,"sendDisabled":true}""")
+        )
+        assertFalse(noSend.ok)
+        assertEquals("send-disabled", noSend.why)
+        assertTrue(noSend.inputFilled)
+
+        val notFilled = a.parseSubmitResult(
+            JSONObject("""{"ok":true,"inputFilled":false,"sentEnter":true}""")
+        )
+        assertFalse(notFilled.ok)
+        assertEquals("composer-not-filled", notFilled.why)
+    }
+
+    /** AI-172：填文本与发送必须在同一个 JS turn 内，并回报可核对诊断字段。 */
+    @Test
+    fun deepSeekFillAndSendIsSingleTurnWithDiagnostics() {
+        val script = DeepSeekScripts.fillAndSend("hi")
+        listOf("inputFilled", "valueEmpty", "sentEnter", "sendClicked", "sendClickable", "url")
+            .forEach { assertTrue("missing $it", script.contains(it)) }
+        // 反证：不得出现“点击后等待返回”的同步忙等（会卡死事件循环）。
+        assertFalse(script.contains("while ("))
+        assertTrue("Enter path stays the primary submit", script.contains("KeyboardEvent('keydown'"))
+    }
+
+    /** AI-173：sendState 区分 disabled 与可点，并带上 composer 是否为空。 */
+    @Test
+    fun deepSeekParseSendState() {
+        val a = DeepSeekAdapter()
+        val disabled = a.parseSendState(
+            JSONObject("""{"ok":true,"sendCount":1,"sendDisabled":true,"sendClickable":false,"valueEmpty":false}""")
+        )
+        assertTrue(disabled.sendDisabled)
+        assertFalse(disabled.sendClickable)
+        assertFalse(disabled.valueEmpty)
+
+        val ready = a.parseSendState(
+            JSONObject("""{"ok":true,"sendCount":1,"sendDisabled":false,"sendClickable":true,"valueEmpty":false}""")
+        )
+        assertTrue(ready.sendClickable)
+        assertFalse(ready.sendDisabled)
+    }
+
+    /** AI-174：会话页 URL 形态由适配器判断，不在驱动层写死。 */
+    @Test
+    fun deepSeekSessionUrlDetection() {
+        val a = DeepSeekAdapter()
+        assertTrue(a.isSessionUrl("https://chat.deepseek.com/a/chat/s/abc123"))
+        assertFalse(a.isSessionUrl("https://chat.deepseek.com/sign_in"))
+        assertFalse(a.isSessionUrl("https://chat.deepseek.com"))
     }
 
     @Test
@@ -301,6 +360,59 @@ class SiteAdapterScriptsTest {
         assertTrue(script.contains("composer-not-found"))
         assertTrue(script.contains("box.querySelectorAll"))
         assertTrue(script.contains("thumbCount"))
+    }
+
+    // ---- ChatGPT（AI-157：结构同构，但未真机验证）----
+
+    @Test
+    fun chatGptScriptsAreValidJsAndJsonReturning() {
+        val scripts = listOf(
+            ChatGPTScripts.diagnose(),
+            ChatGPTScripts.snapshot(),
+            ChatGPTScripts.loginCheck(),
+            ChatGPTScripts.verifyAttachment(),
+            ChatGPTScripts.fillAndSubmit("hi"),
+            ChatGPTScripts.sendState(),
+            ChatGPTScripts.pasteImage("a.jpg", "image/jpeg", "QUJD")
+        )
+        scripts.forEach {
+            assertTrue(it.contains("JSON.stringify"))
+            assertEquals(it.count { c -> c == '{' }, it.count { c -> c == '}' })
+        }
+    }
+
+    @Test
+    fun chatGptPromptWithSpecialCharsDoesNotBreakScript() {
+        val script = ChatGPTScripts.fillAndSubmit(tricky)
+        assertTrue(script.contains("\\\""))
+        assertFalse(script.contains("while ("))
+        assertTrue("send enabled is polled asynchronously", script.contains("setTimeout(waitClick"))
+    }
+
+    @Test
+    fun chatGptSubmitRequiresPositiveEvidence() {
+        val a = ChatGPTAdapter()
+        assertFalse(a.parseSubmitResult(JSONObject("""{"ok":true,"inputFilled":true}""")).ok)
+        assertTrue(
+            a.parseSubmitResult(
+                JSONObject("""{"ok":true,"inputFilled":true,"sentEnter":true}""")
+            ).ok
+        )
+        val disabled = a.parseSubmitResult(
+            JSONObject("""{"ok":true,"inputFilled":true,"sendDisabled":true}""")
+        )
+        assertFalse(disabled.ok)
+        assertEquals("send-disabled", disabled.why)
+    }
+
+    @Test
+    fun chatGptSendStateParses() {
+        val a = ChatGPTAdapter()
+        val s = a.parseSendState(
+            JSONObject("""{"ok":true,"sendCount":0,"sendDisabled":false,"sendClickable":false,"valueEmpty":true}""")
+        )
+        assertFalse(s.sendClickable)
+        assertTrue(s.valueEmpty)
     }
 
     // ---- Custom ----

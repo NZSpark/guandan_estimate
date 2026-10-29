@@ -10,7 +10,10 @@ import org.json.JSONObject
 /** 测试用站点适配器：不含任何真实选择器，也不含站点名。 */
 class FakeSiteAdapter(
     override val preferredUpload: UploadStrategy = UploadStrategy.FILE_CHOOSER,
-    override val homeUrl: String = "https://example.invalid/chat"
+    override val homeUrl: String = "https://example.invalid/chat",
+    /** 假适配器默认声明两条都可用，便于测试回退逻辑本身（AI-124）。 */
+    override val supportedUploads: Set<UploadStrategy> =
+        setOf(UploadStrategy.PASTE, UploadStrategy.FILE_CHOOSER)
 ) : SiteAdapter {
 
     override val siteKey: String = "fake_site"

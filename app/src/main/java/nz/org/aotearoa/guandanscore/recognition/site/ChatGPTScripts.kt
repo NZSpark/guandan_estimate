@@ -125,24 +125,80 @@ object ChatGPTScripts {
 
           // 主路径：Enter keydown。ProseMirror 依赖 keydown 提交。
           var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+          var enterSent = false;
           try {
             el.dispatchEvent(new KeyboardEvent('keydown', opts));
             el.dispatchEvent(new KeyboardEvent('keyup', opts));
+            enterSent = true;
           } catch (e) {}
 
-          // 兜底：点发送按钮。
-          var btn = null, clicked = false;
-          try { btn = document.querySelector(${q(ChatGPTSelectors.send())}); } catch (e) {}
-          if (btn && btn.disabled !== true) { try { btn.click(); clicked = true; } catch (e) {} }
+          // 兜底：点发送按钮。按钮可能在下一帧才可用，用 setTimeout 重试（禁止同步忙等）。
+          var sendCount = 0, clicked = false;
+          function findSend() {
+            var list = [];
+            try { list = document.querySelectorAll(${q(ChatGPTSelectors.send())}); } catch (e) { return null; }
+            sendCount = list.length;
+            for (var i = 0; i < list.length; i++) {
+              var b = list[i];
+              var r = b.getBoundingClientRect();
+              var dis = b.disabled === true || b.getAttribute('aria-disabled') === 'true';
+              if (!dis && r.width > 0 && r.height > 0) return b;
+            }
+            return null;
+          }
+          var btn = findSend();
+          if (btn) { try { btn.click(); clicked = true; } catch (e) {} }
+          if (!clicked) {
+            var attempts = 0;
+            var waitClick = function() {
+              attempts++;
+              var b = findSend();
+              if (b) { try { b.click(); clicked = true; return; } catch (e) {} }
+              if (attempts < 20) setTimeout(waitClick, 50);
+            };
+            setTimeout(waitClick, 50);
+          }
 
+          var valueNow = (el.value === undefined ? (el.textContent || '') : el.value);
           return JSON.stringify({
             ok: true,
             inputFilled: filled,
+            valueEmpty: String(valueNow || '').trim().length === 0,
             length: text.length,
-            sentEnter: true,
-            clickedSendFallback: clicked
+            sentEnter: enterSent,
+            sendClicked: clicked,
+            sendClickable: !!btn,
+            sendCount: sendCount,
+            sendDisabled: sendCount > 0 && !btn,
+            url: location.href
           });
         })(${q(prompt)})
+    """.trimIndent()
+
+    /** AI-176：只读发送按钮状态，点击前轮询可用性。 */
+    fun sendState(): String = """
+        (function() {
+          var list = [];
+          try { list = Array.prototype.slice.call(document.querySelectorAll(${q(ChatGPTSelectors.send())})); } catch (e) {}
+          var usable = null;
+          for (var i = 0; i < list.length; i++) {
+            var b = list[i];
+            var r = b.getBoundingClientRect();
+            var dis = b.disabled === true || b.getAttribute('aria-disabled') === 'true';
+            if (!dis && r.width > 0 && r.height > 0) { usable = b; break; }
+          }
+          var input = null;
+          try { input = document.querySelector(${q(ChatGPTSelectors.input())}); } catch (e) {}
+          var value = input ? (input.value === undefined ? (input.textContent || '') : input.value) : '';
+          return JSON.stringify({
+            ok: true,
+            sendCount: list.length,
+            sendDisabled: list.length > 0 && !usable,
+            sendClickable: !!usable,
+            valueEmpty: String(value || '').trim().length === 0,
+            url: location.href
+          });
+        })()
     """.trimIndent()
 
     /**

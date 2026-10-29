@@ -33,7 +33,7 @@ SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
 override fun pasteImage(fileName: String, mimeType: String, base64: String) = true
 override fun prepareFileChooserUpload(fileName: String, mimeType: String, bytes: ByteArray) = true
 override fun verifyAttachment() = true
-override fun awaitSubmitStarted(baseline: AnswerSnapshot) = true
+override fun awaitSubmitStarted(baseline: AnswerSnapshot) = SubmitStart.STARTED
 override fun diagnose() = null
 
 companion object {

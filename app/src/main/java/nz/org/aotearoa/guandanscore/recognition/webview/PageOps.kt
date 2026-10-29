@@ -14,6 +14,23 @@ import nz.org.aotearoa.guandanscore.recognition.site.SubmitOutcome
  * 任何 WebView API（`evaluateJavascript` / `loadUrl` / 视图增删 / 触摸派发）
  * 都切换到主线程执行；调用方不得自行在主线程上阻塞等待。
  */
+/**
+ * 提交是否已经开始（AI-174 三态）。
+ *
+ * 布尔值无法区分「还没开始」和「页面已经卡死」：前者可以继续等，后者继续等
+ * 只会在 120s 超时后报一句笼统的「没有新回答」。
+ */
+enum class SubmitStart {
+    /** 出现正面证据：新回答节点、文本变化、生成中标志或进入会话页。 */
+    STARTED,
+
+    /** 等了完整确认窗口仍无正面证据，但页面确实有变化（仍在处理中）。 */
+    NOT_STARTED,
+
+    /** 6s 内 URL 与 DOM 均无任何变化：文档已死，继续等无意义。 */
+    STALE_PAGE,
+}
+
 interface PageOps {
 
     @Throws(nz.org.aotearoa.guandanscore.recognition.source.AiSourceError::class)
@@ -60,7 +77,22 @@ interface PageOps {
 
     fun verifyAttachment(): Boolean
 
-    fun awaitSubmitStarted(baseline: AnswerSnapshot): Boolean
+    /**
+     * AI-037：清理上传用的临时文件。
+     *
+     * 必须在成功、失败、取消三种结束路径都被调用；默认无操作以保持既有实现零改动。
+     */
+    fun cleanupUploads() = Unit
+
+    fun awaitSubmitStarted(baseline: AnswerSnapshot): SubmitStart
+
+    /**
+     * AI-173：点击前轮询发送按钮是否可用。
+     *
+     * 返回 false 表示超时或实现方不支持；调用方据此重新填文本，
+     * **不得**对 disabled 按钮点击并当作提交成功。
+     */
+    fun awaitSendEnabled(timeoutMillis: Long = 3_000L): Boolean = false
 
     fun diagnose(): DiagnoseResult?
 }

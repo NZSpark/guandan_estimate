@@ -25,6 +25,12 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
     /** 附件在 [fillAndSubmitScript] 内随提交一起注入，因此不需要独立上传阶段。 */
     override val preferredUpload: UploadStrategy = UploadStrategy.PASTE
 
+    /**
+     * AI-124：Gemini 只验证过合成 paste；FILE_CHOOSER 尚无验收记录
+     * （上传图标只被证到「会弹网页菜单」），因此不纳入自动回退。
+     */
+    override val supportedUploads: Set<UploadStrategy> = setOf(UploadStrategy.PASTE)
+
     /** 填文本 → 合成 paste → 点发送，必须在同一次注入内完成。 */
     override val uploadsInsideSubmit: Boolean = true
 
@@ -59,6 +65,16 @@ class GeminiAdapter : SiteAdapter, PasteCapableAdapter {
     override fun loginCheckScript(): String = GeminiScripts.diagnose()
 
     override fun verifyAttachmentScript(): String = GeminiScripts.verifyAttachment()
+
+    /** AI-176：发送按钮由 Angular 异步渲染，点击前必须轮询可用性。 */
+    override fun sendStateScript(): String = GeminiScripts.sendState()
+
+    override fun parseSendState(json: JSONObject): SendState = SendState(
+        sendCount = json.optInt("sendCount", 0),
+        sendDisabled = json.optBoolean("sendDisabled", false),
+        sendClickable = json.optBoolean("sendClickable", false),
+        valueEmpty = json.optBoolean("valueEmpty", false)
+    )
 
     /**
      * AI-015：FILE_CHOOSER 回退路径。JS `.click()` 预期因缺 user activation 失败，

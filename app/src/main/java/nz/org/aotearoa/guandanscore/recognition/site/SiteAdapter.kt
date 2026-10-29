@@ -10,6 +10,9 @@ enum class UploadStrategy { PASTE, FILE_CHOOSER }
  * `fillAndSubmit` 注入脚本的结构化结果。
  *
  * [ok] 为 false 时必须带 [why]；[attached] 为 false 不得被当成上传成功。
+ *
+ * AI-175：[ok] 是**正面证据**的结论，不只是脚本没报错。适配器必须先确认
+ * 「文本已填入」且「确实触发了发送动作」，否则一律返回 [fail]。
  */
 data class SubmitOutcome(
     val ok: Boolean,
@@ -20,6 +23,24 @@ data class SubmitOutcome(
     companion object {
         fun fail(why: String, inputFilled: Boolean = false, attached: Boolean = false) =
             SubmitOutcome(ok = false, why = why, inputFilled = inputFilled, attached = attached)
+    }
+}
+
+/**
+ * 发送按钮的只读状态（AI-173）。
+ *
+ * [sendClickable] 必须同时满足「存在按钮」「未 disabled」「有可见尺寸」；
+ * 仅看 `disabled` 会在按钮被隐藏或被重渲染移除时误判为可点。
+ */
+data class SendState(
+    val sendCount: Int,
+    val sendDisabled: Boolean,
+    val sendClickable: Boolean,
+    val valueEmpty: Boolean
+) {
+    companion object {
+        /** 适配器未实现 [SiteAdapter.sendStateScript] 时的保守值：不可点。 */
+        val UNKNOWN = SendState(sendCount = 0, sendDisabled = true, sendClickable = false, valueEmpty = true)
     }
 }
 
@@ -78,6 +99,15 @@ interface SiteAdapter {
     val preferredUpload: UploadStrategy
 
     /**
+     * AI-124：**已完成验证**、允许尝试的上传策略集合。
+     *
+     * 默认只有 [preferredUpload]——驱动层不得因为「另一条理论上存在」就自行回退。
+     * 只有该路径在本项目的目标 WebView 上实际验证过，才可加入此集合；
+     * 未验证的回退会伪装成「试过了」，把真因（页面结构变化）拖成超时。
+     */
+    val supportedUploads: Set<UploadStrategy> get() = setOf(preferredUpload)
+
+    /**
      * 附件是否在 [fillAndSubmitScript] 内部完成（填文本 → 粘贴 → 提交一次注入）。
      *
      * Gemini 的 `contenteditable` 必须在本条消息文本已填入后收到合成 paste，
@@ -134,6 +164,22 @@ interface SiteAdapter {
         /** 登录页路径段白名单。只匹配整段，避免 /authority 这类误判。 */
         val LOGIN_PATH_SEGMENTS = setOf("sign_in", "signin", "login", "auth")
     }
+
+    /**
+     * AI-173：只读发送按钮状态。返回空串表示该站点不支持，驱动层不得假设可点。
+     */
+    fun sendStateScript(): String = ""
+
+    /** 解析 [sendStateScript] 的结果；默认返回不可点的 [SendState.UNKNOWN]。 */
+    fun parseSendState(json: JSONObject): SendState = SendState.UNKNOWN
+
+    /**
+     * AI-174：URL 是否已进入会话页（提交开始的正面证据之一）。
+     *
+     * 只有站点自己知道会话 URL 形态（如 `/a/chat/s/<id>`），因此放在适配器里；
+     * 默认 false 表示「不能靠 URL 判定」，驱动层会退回 DOM 判据。
+     */
+    fun isSessionUrl(url: String): Boolean = false
 
     /** 校验图片附件是否真的出现。 */
     fun verifyAttachmentScript(): String

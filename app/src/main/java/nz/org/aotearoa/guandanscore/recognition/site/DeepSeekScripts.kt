@@ -274,7 +274,7 @@ object DeepSeekScripts {
     """.trimIndent()
 
     /**
-     * 填 prompt + 提交，一次注入完成。
+     * 填 prompt + 提交，**同一个 JS turn 内**完成（AI-172）。
      *
      * 与 Gemini 的关键差异：
      * 1. `textarea.value = text` 不会通知 React（受控组件），必须走 prototype setter
@@ -282,9 +282,13 @@ object DeepSeekScripts {
      * 2. 主提交路径是 **Enter keydown**；点发送按钮只跳新会话 URL、不发请求。
      * 3. Enter 之后再兜底点一次发送按钮（若仍启用）。
      *
-     * 返回 `ok` 只代表“已尽力提交”，真实成功由调用方用快照确认新回答。
+     * 为什么必须单 turn：`input` 事件后 DeepSeek 会重渲染 composer 并重新禁用发送按钮，
+     * 拆成「填文本」和「点发送」两次往返，第二次必撞 disabled（`all_disabled`）。
+     *
+     * 返回的是**诊断字段**，不是成败结论：真实成功仍需 `awaitSubmitStarted` 用快照确认。
+     * `sendDisabled=true` 表示页面上只有禁用的发送按钮，此时不得判为已提交。
      */
-    fun fillAndSubmit(prompt: String): String = """
+    fun fillAndSend(prompt: String): String = """
         (function(text) {
           var el;
           try { el = document.querySelector(${q(DeepSeekSelectors.input())}); }
@@ -316,16 +320,21 @@ object DeepSeekScripts {
 
           // 主路径：Enter keydown（实测可提交）。
           var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+          var enterSent = false;
           try {
             el.dispatchEvent(new KeyboardEvent('keydown', opts));
             el.dispatchEvent(new KeyboardEvent('keyup', opts));
+            enterSent = true;
           } catch (e) {}
 
           // 兜底：若输入框仍保留文本，再点一次启用的发送按钮。
+          // sendDisabled 记录“页面上只有禁用按钮”这一事实，供适配器拒绝虚假成功。
+          var sendCount = 0;
           function findSend() {
             var list;
             try { list = document.querySelectorAll(${q(DeepSeekSelectors.send())}); }
             catch (e) { return null; }
+            sendCount = list.length;
             for (var i = 0; i < list.length; i++) {
               var b = list[i];
               var cls = (b.className || '').toString();
@@ -340,15 +349,57 @@ object DeepSeekScripts {
           var clicked = false;
           if (btn) { try { btn.click(); clicked = true; } catch (e) {} }
 
+          var valueNow = (el.value === undefined ? (el.textContent || '') : el.value);
           return JSON.stringify({
             ok: true,
             inputFilled: filled,
+            valueEmpty: String(valueNow || '').trim().length === 0,
             length: text.length,
-            sentEnter: true,
-            clickedSendFallback: clicked
+            sentEnter: enterSent,
+            sendClicked: clicked,
+            sendClickable: !!btn,
+            sendCount: sendCount,
+            sendDisabled: sendCount > 0 && !btn,
+            url: location.href
           });
         })(${q(prompt)})
     """.trimIndent()
+
+    /**
+     * AI-173：只读发送按钮状态。
+     *
+     * 点击前用它轮询，避免对 disabled 按钮点击并当成成功。
+     */
+    fun sendState(): String = """
+        (function() {
+          var list = [];
+          try { list = Array.prototype.slice.call(document.querySelectorAll(${q(DeepSeekSelectors.send())})); } catch (e) {}
+          var usable = null;
+          for (var i = 0; i < list.length; i++) {
+            var b = list[i];
+            var r = b.getBoundingClientRect();
+            var dis = b.disabled === true ||
+                      b.getAttribute('aria-disabled') === 'true' ||
+                      (b.className || '').toString().indexOf('ds-button--disabled') >= 0;
+            if (!dis && r.width > 0 && r.height > 0) { usable = b; break; }
+          }
+          var input = null;
+          try { input = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
+          var value = input ? (input.value === undefined ? (input.textContent || '') : input.value) : '';
+          return JSON.stringify({
+            ok: true,
+            sendCount: list.length,
+            sendDisabled: list.length > 0 && !usable,
+            sendClickable: !!usable,
+            valueEmpty: String(value || '').trim().length === 0,
+            url: location.href
+          });
+        })()
+    """.trimIndent()
+
+    /** @deprecated 用 [fillAndSend]（AI-172 命名）；保留旧名以兼容既有调用点。 */
+    @Deprecated("use fillAndSend", ReplaceWith("fillAndSend(prompt)"))
+    fun fillAndSubmit(prompt: String): String = fillAndSend(prompt)
 
     /**
      * 合成 paste 注入图片。

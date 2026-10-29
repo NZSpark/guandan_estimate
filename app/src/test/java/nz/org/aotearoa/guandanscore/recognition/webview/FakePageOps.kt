@@ -17,7 +17,14 @@ class FakePageOps : PageOps {
     var attachmentVerified = true
     var pasteDispatched = true
     var fileChooserPrepared = true
-    var submitStarted = true
+    var submitStart: SubmitStart = SubmitStart.STARTED
+    var sendEnabled = false
+
+    // 连续调用的返回值序列（用于死文档重试、发送按钮重试等场景）。
+    var submitStartSequence: List<SubmitStart> = emptyList()
+    var submitOutcomeSequence: List<SubmitOutcome> = emptyList()
+    private var submitStartIndex = 0
+    private var submitOutcomeIndex = 0
 
     // 回答序列：每次 pollSnapshot 依次返回，最后一个持续返回。
     var answerSequence: List<AnswerSnapshot> = listOf(AnswerSnapshot(1, "", false, false, ""))
@@ -31,13 +38,17 @@ class FakePageOps : PageOps {
     var lastPrompt: String? = null
     var lastBase64: String? = null
     var ensureLoadedCalls = 0
+    var forcedReloadCalls = 0
     var pasteCalls = 0
     var verifyCalls = 0
+    var sendEnabledCalls = 0
+    var cleanupCalls = 0
 
     private var pollIndex = 0
 
     override fun ensureLoaded(force: Boolean): Boolean {
         ensureLoadedCalls++
+        if (force) forcedReloadCalls++
         calls += "ensureLoaded"
         return loaded
     }
@@ -72,7 +83,10 @@ class FakePageOps : PageOps {
         calls += "fillAndSubmit"
         lastPrompt = prompt
         lastBase64 = base64
-        return submitOutcome
+        if (submitOutcomeSequence.isEmpty()) return submitOutcome
+        val outcome = submitOutcomeSequence.getOrElse(submitOutcomeIndex) { submitOutcomeSequence.last() }
+        if (submitOutcomeIndex < submitOutcomeSequence.size - 1) submitOutcomeIndex++
+        return outcome
     }
 
     override fun pasteImage(fileName: String, mimeType: String, base64: String): Boolean {
@@ -92,9 +106,23 @@ class FakePageOps : PageOps {
         return attachmentVerified
     }
 
-    override fun awaitSubmitStarted(baseline: AnswerSnapshot): Boolean {
+    override fun cleanupUploads() {
+        cleanupCalls++
+        calls += "cleanupUploads"
+    }
+
+    override fun awaitSubmitStarted(baseline: AnswerSnapshot): SubmitStart {
         calls += "awaitSubmitStarted"
-        return submitStarted
+        if (submitStartSequence.isEmpty()) return submitStart
+        val state = submitStartSequence.getOrElse(submitStartIndex) { submitStartSequence.last() }
+        if (submitStartIndex < submitStartSequence.size - 1) submitStartIndex++
+        return state
+    }
+
+    override fun awaitSendEnabled(timeoutMillis: Long): Boolean {
+        calls += "awaitSendEnabled"
+        sendEnabledCalls++
+        return sendEnabled
     }
 
     override fun diagnose(): DiagnoseResult? = DiagnoseResult(
