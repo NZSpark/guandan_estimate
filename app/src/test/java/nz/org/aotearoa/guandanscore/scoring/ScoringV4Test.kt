@@ -7,7 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** V4.0 单牌型评分与综合牌力评估的关键校验（对齐两份 2026-09 文档）。 */
+/** V4.1 单牌型评分与综合牌力评估的关键校验（对齐两份评分文档）。 */
 class ScoringV4Test {
     private fun cards(vararg ranks: Rank): List<Card> = ranks.mapIndexed { index, rank ->
         Card(index, rank, if (rank.value > 14) Suit.JOKER else Suit.entries[index % 4])
@@ -68,11 +68,24 @@ class ScoringV4Test {
     }
 
     @Test fun sixCardBombMatchesLogScaleFormula() {
-        // 6张2：Sum=12, Sum+5V=22 => 510+floor(100*log2(1.22)) = 538
+        // 6张2：Sum=12, Sum+5V=22 => 523+floor(55*log2(1.22)) = 538
         val result = HandScorer(Rank.THREE).score(repeats(Rank.TWO, 6))
         assertEquals(1, result.rounds)
         assertEquals(538, result.total)
         assertTrue(result.melds.any { it.type == MeldType.BOMB && it.score == 538 })
+    }
+
+    @Test fun sixCardKingBombMatchesV41Example() {
+        // 文档 §六 示例4：Sum=78, Sum+5V=143 => 523+floor(55*log2(2.43)) = 593
+        val result = HandScorer(Rank.THREE).score(repeats(Rank.KING, 6))
+        assertEquals(1, result.rounds)
+        assertEquals(593, result.total)
+    }
+
+    @Test fun sevenAndEightCardBombsMatchV41Formulas() {
+        // 7张2：577+floor(73*log2(1.26)) = 601；8张2：672+floor(75*log2(1.30)) = 700
+        assertEquals(601, HandScorer(Rank.THREE).score(repeats(Rank.TWO, 7)).total)
+        assertEquals(700, HandScorer(Rank.THREE).score(repeats(Rank.TWO, 8)).total)
     }
 
     @Test fun wildSubstitutedBombUsesSameLogScaleFormula() {
@@ -83,10 +96,10 @@ class ScoringV4Test {
     }
 
     @Test fun nineCardBombWithOneWildMatchesFormula() {
-        // 8张2 + ♥7（级牌逢人配）：Sum=18, Sum+7V=32 => 800+floor(70*log2(1.32)) = 828
+        // 8张2 + ♥7（级牌逢人配）：Sum=18, Sum+7V=32 => 784+floor(66*log2(1.32)) = 810
         val result = HandScorer(Rank.SEVEN).score(repeats(Rank.TWO, 8) + Card(8, Rank.SEVEN, Suit.HEART))
         assertEquals(1, result.rounds)
-        assertEquals(828, result.total)
+        assertEquals(810, result.total)
     }
 
     @Test fun tenCardBombWithTwoWildsMatchesFormula() {
@@ -95,6 +108,28 @@ class ScoringV4Test {
         val result = HandScorer(Rank.SEVEN).score(hand)
         assertEquals(1, result.rounds)
         assertEquals(912, result.total)
+    }
+
+    @Test fun bombTiersMatchV41RangesAndStayStrictlyIncreasing() {
+        // 9/10 炸不存在 V=15 的级牌炸弹，可实现上限取 8 张 A + 配。
+        val ranges = mapOf(
+            4 to 192..270, 5 to 298..415, 6 to 538..600, 7 to 601..690,
+            8 to 700..799, 9 to 810..895, 10 to 912..987,
+        )
+        val mins = mutableMapOf<Int, Int>()
+        val maxs = mutableMapOf<Int, Int>()
+        for (n in 4..10) {
+            val values = if (n <= 8) 2..15 else 2..14
+            val scores = values.map { bombScore(n, it) }
+            assertEquals("${n}炸下限", ranges.getValue(n).first, scores.min())
+            assertEquals("${n}炸上限", ranges.getValue(n).last, scores.max())
+            mins[n] = scores.min()
+            maxs[n] = scores.max()
+        }
+        for (n in 4..9) {
+            assertTrue("${n}炸上限 ${maxs.getValue(n)} 必须低于 ${n + 1}炸下限 ${mins.getValue(n + 1)}", maxs.getValue(n) < mins.getValue(n + 1))
+        }
+        assertTrue("10炸上限 ${maxs.getValue(10)} 必须低于火箭 1000", maxs.getValue(10) < 1000)
     }
 
     @Test fun wildSubstitutedBombScoresAsItsRepresentedRank() {
@@ -170,6 +205,26 @@ class ScoringV4Test {
         val aceTriple = HandScorer(Rank.TWO).score(repeats(Rank.ACE, 3) + repeats(Rank.THREE, 2)).total
         assertEquals(155, levelTriple)
         assertEquals(147, aceTriple)
+    }
+
+    @Test fun levelPairAndTripleCandidatesUseFifteen() {
+        // 级牌 2：对子 3×15=45 → 168；三张 5×15=75 → 191。
+        // 非级牌 A：对子 3×14=42 → 157；三张 5×14=70 → 179。
+        val scorer = HandScorer(Rank.TWO)
+        assertEquals(168, scorer.pairScore(Rank.TWO.value))
+        assertEquals(157, scorer.pairScore(Rank.ACE.value))
+        assertEquals(191, scorer.tripleScore(Rank.TWO.value))
+        assertEquals(179, scorer.tripleScore(Rank.ACE.value))
+    }
+
+    @Test fun levelTripleStaysOptimalWhenBombsCarryTheHand() {
+        // 4张2 + 4张3 + 4张7（级牌，其中♥7为逢人配）。最优：4张3+配的5炸(307)
+        // + 4张2炸(192) + 三张自然7(191)；若三张7被按 5×7 计，整体会改选别的拆法。
+        val hand = repeats(Rank.TWO, 4) + repeats(Rank.THREE, 4) + repeats(Rank.SEVEN, 4)
+        val result = HandScorer(Rank.SEVEN).score(hand)
+        assertEquals(3, result.rounds)
+        assertEquals(764.85, result.numerator, 0.001)
+        assertTrue(result.melds.any { it.type == MeldType.TRIPLE && it.score == 191 })
     }
 
     @Test fun fullHouseCountsLevelPairAsFifteen() {

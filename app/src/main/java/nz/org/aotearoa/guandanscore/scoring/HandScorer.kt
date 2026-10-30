@@ -14,7 +14,7 @@ data class HandResult(
     val rounds: Int,
     val melds: List<Meld>,
     val cardCount: Int,
-    /** V4.0 SPI 分子 = Σ(Fᵢ×αᵢ) − P（残局 N<10 张时 P=0）。 */
+    /** V4.1 SPI 分子 = Σ(Fᵢ×αᵢ) − P（残局 N<10 张时 P=0）。 */
     val numerator: Double = spi * rounds,
     /** 散牌惩罚涉及的点数<10孤立单张/小对子数量 N_waste（残局 N<10 时恒为 0）。 */
     val waste: Int = 0,
@@ -23,7 +23,7 @@ data class HandResult(
     val tMax get() = theoreticalMaxRounds(cardCount)
     val nspi get() = spi / tMax * 100.0
 
-    /** V4.0（2026-09）动态分级：残局1~12张 60/120/180；中局13~18张 70/130/200；开局(≥19张，含19~26过渡) 80/140/220。 */
+    /** V4.1 动态分级：残局1~12张 60/120/180；中局13~18张 70/130/200；开局(≥19张，含19~26过渡) 80/140/220。 */
     val grade get() = when {
         cardCount <= 12 -> graded(60.0, 120.0, 180.0)
         cardCount <= 18 -> graded(70.0, 130.0, 200.0)
@@ -48,15 +48,34 @@ data class HandResult(
     }
 }
 
-/** V4.0 普通牌型线性映射：原始分从 rawMin..rawMax 线性映射到 finalMin..191（普通牌型最高 191）。 */
+/** V4.1 普通牌型线性映射：原始分从 rawMin..rawMax 线性映射到 finalMin..191（普通牌型最高 191）。 */
 internal fun ordinaryMappedScore(raw: Int, rawMin: Int, finalMin: Int, rawMax: Int): Int =
     (finalMin + (raw - rawMin).toDouble() * (191 - finalMin) / (rawMax - rawMin))
         .roundToInt()
 
-/** V4.0 高阶炸弹对数平滑项：floor(multiplier × log₂(1 + delta/100))。 */
+/** V4.1 高阶炸弹对数平滑项：floor(multiplier × log₂(1 + delta/100))。 */
 private const val LN_2 = 0.6931471805599453
 private fun logScale(multiplier: Int, delta: Int): Int =
     (multiplier * ln(1.0 + delta / 100.0) / LN_2).toInt()
+
+/**
+ * V4.1 炸弹分值，严格按评分方案 §四：
+ * 4/5 炸为线性式，6~10 炸为 offset + floor(系数 × log₂(1 + delta/100))。
+ * [value] 为炸弹点数（级牌为 15）；[count] 为总张数（逢人配已并入）。
+ */
+internal fun bombScore(count: Int, value: Int): Int {
+    val sum = count * value
+    return when (count) {
+        4 -> sum + 180 + 2 * value
+        5 -> sum + 280 + 4 * value
+        6 -> 523 + logScale(55, sum + 5 * value)
+        7 -> 577 + logScale(73, sum + 6 * value)
+        8 -> 672 + logScale(75, sum + 7 * value)
+        9 -> 784 + logScale(66, sum + 7 * value)
+        10 -> 890 + logScale(60, sum + 5 * value)
+        else -> throw IllegalArgumentException("炸弹张数必须为 4 至 10：$count")
+    }
+}
 
 /** Exact-cover optimizer for a partial or complete hand, including heart-level-card substitutions. */
 class HandScorer(
@@ -180,7 +199,7 @@ class HandScorer(
         )
     }
 
-    // ---- V4.0 牌权控制力系数 α 与散牌惩罚 P ----
+    // ---- V4.1 牌权控制力系数 α 与散牌惩罚 P ----
 
     /** α 的百分数形式：控制型牌型（炸弹、同花顺、火箭、单张大王、单张级牌）115，其余 100。 */
     private fun controlPercent(m: Meld): Int = when (m.type) {
@@ -204,7 +223,7 @@ class HandScorer(
         return point < 10
     }
 
-    /** V4.0 该拆牌单元对 SPI 分子的贡献（百分位整数）：F×α，孤立散牌另扣 15（残局 N<10 张不扣）。 */
+    /** V4.1 该拆牌单元对 SPI 分子的贡献（百分位整数）：F×α，孤立散牌另扣 15（残局 N<10 张不扣）。 */
     private fun netValue100(m: Meld, handSize: Int): Int =
         m.score * controlPercent(m) - if (handSize >= 10 && m.isLowWaste()) 1500 else 0
 
@@ -239,12 +258,13 @@ class HandScorer(
         }
 
         cards.indices.groupBy { cards[it].rank }.forEach { (rank, ids) ->
-            combinations(ids, 2).forEach { add(it, MeldType.PAIR, ordinaryMappedScore(3 * base(rank), 6, 20, 51)) }
-            combinations(ids, 3).forEach { add(it, MeldType.TRIPLE, ordinaryMappedScore(5 * base(rank), 10, 30, 75)) }
+            combinations(ids, 2).forEach { add(it, MeldType.PAIR, pairScore(rank.value)) }
+            combinations(ids, 3).forEach { add(it, MeldType.TRIPLE, tripleScore(rank.value)) }
         }
         (2..14).forEach { v ->
-            assignments(listOf(v to 2)) { add(it, MeldType.PAIR, ordinaryMappedScore(3*v, 6, 20, 51)) }
-            assignments(listOf(v to 3)) { add(it, MeldType.TRIPLE, ordinaryMappedScore(5*v, 10, 30, 75)) }
+            // 级牌对子/三张（含用于级牌自身的逢人配）按 15 计，不能走 3v/5v。
+            assignments(listOf(v to 2)) { add(it, MeldType.PAIR, pairScore(v)) }
+            assignments(listOf(v to 3)) { add(it, MeldType.TRIPLE, tripleScore(v)) }
         }
         // Bombs: natural cards plus zero or more wild hearts, never double-counting the level's wild cards.
         normalRanks.forEach { (rank, ids) ->
@@ -253,20 +273,8 @@ class HandScorer(
                 if (n < 4) continue
                 combinations(ids, naturalCount).forEach { ns -> combinations(wild, wc).forEach { ws ->
                     // 逢人配按替代点数计入 Sum：三张5+配与四张5同分，不得越过四张6。
-                    val v = base(rank)
-                    val sum = n * v
-                    // V4.0：6 张及以上炸弹改走对数平滑公式，避免高阶炸弹分值膨胀。
-                    val value = when (n) {
-                        4 -> sum + 180 + 2*v
-                        5 -> sum + 280 + 4*v
-                        6 -> 510 + logScale(100, sum + 5*v)
-                        7 -> 610 + logScale(90, sum + 6*v)
-                        8 -> 710 + logScale(80, sum + 7*v)
-                        9 -> 800 + logScale(70, sum + 7*v)
-                        10 -> 890 + logScale(60, sum + 5*v)
-                        else -> 0
-                    }
-                    add(ns + ws, MeldType.BOMB, value)
+                    // V4.1：6~9 炸常数按方案 B 重标定，4/5/10 炸不变。
+                    add(ns + ws, MeldType.BOMB, bombScore(n, base(rank)))
                 } }
             }
         }
@@ -275,6 +283,7 @@ class HandScorer(
         if (jokers.size == 4 && jokers.count { cards[it].rank == Rank.SMALL_JOKER } == 2) add(jokers, MeldType.ROCKET, 1000)
 
         // Straights and straight flushes, including A2345.
+        // V_max 按顺子中的实际点数计（A2345 的 A 记 1；逢人配按填补点），不按级牌的 15。
         val windows = listOf(listOf(14,2,3,4,5)) + (2..10).map { s -> (s until s+5).toList() }
         windows.forEach { values ->
             val pools = values.map { v -> cards.indices.filter { cards[it].rank.value == v && !cards[it].isWild(level) } }
@@ -327,6 +336,14 @@ class HandScorer(
     }
 
     private fun base(rank: Rank) = if (rank == level) 15 else rank.value
+
+    /** 对子候选分：级牌（含用于级牌自身的逢人配）按 15 计，其余按所代表点数。 */
+    internal fun pairScore(value: Int): Int =
+        ordinaryMappedScore(3 * baseValue(value), 6, 20, 51)
+
+    /** 三张候选分：级牌（含用于级牌自身的逢人配）按 15 计，其余按所代表点数。 */
+    internal fun tripleScore(value: Int): Int =
+        ordinaryMappedScore(5 * baseValue(value), 10, 30, 75)
 
     /** 三带二候选分：级牌（含用于级牌自身的逢人配）为 15，其余为所代表点数。 */
     internal fun fullHouseScore(triple: Int, pair: Int): Int =

@@ -37,7 +37,7 @@ Android 原生掼蛋手牌评估 App：照片 → 识别牌角 → 人工校正 
 
 | 路径 | 说明 |
 | --- | --- |
-| `doc/掼蛋牌型量化评分方案.md` | 单牌型分值权威文档（V4.0） |
+| `doc/掼蛋牌型量化评分方案.md` | 单牌型分值权威文档（V4.1） |
 | `doc/手牌综合牌力评估方法.md` | SPI/NSPI/评级权威文档 |
 | `card_picture/card_png/` | App 实际使用的 54 张牌面 + 背景 |
 | `card_picture/card_gif/` | 同套牌面 GIF 版（备用） |
@@ -51,4 +51,4 @@ Android 原生掼蛋手牌评估 App：照片 → 识别牌角 → 人工校正 
 2. `card_picture` 的素材名必须与 `CardAssetNames` 严格一致，改名会让渲染与回读同时失效。
 3. `VisualCardCodec` 的校验码只用于**本 App 生成**的图片；对真实照片必须走 OCR/AI 路径。
 4. 级牌是 `HandScorer` 构造参数，不是 `Card` 的属性；忘记传级牌是最常见的算错原因。
-5. `statistic.py` 仍写着 V3.0，与 App 的 V4.0 规则可能不一致，参考其统计结论前先核对版本。
+5. `statistic.py` 仍写着 V3.0，与 App 的 V4.1 规则可能不一致，参考其统计结论前先核对版本。
