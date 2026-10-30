@@ -9,9 +9,10 @@ import org.junit.Test
 import kotlin.random.Random
 
 /**
- * 搜索层回归：预算退路、确定性与分区完整性。
+ * 搜索层回归：always-valid 退路、预算单调性、确定性与分区完整性。
  *
- * 优化前这些行为没有测试锁定，导致「3 秒上限」下的结果只能靠手工对比。
+ * 旧实现在状态上限后把剩余牌按单张收尾；现在即使预算为 0 也返回完整贪心方案，
+ * 困难手牌用 anytime 近似并在结果上标记 `exhaustive=false`。
  */
 class HandScorerSearchTest {
 
@@ -40,23 +41,25 @@ class HandScorerSearchTest {
     }
 
     @Test
-    fun `budget zero falls back to one single per card`() {
+    fun `zero budget still returns a legal greedy partition`() {
         val cards = hand(Rank.TWO to 3, Rank.THREE to 4, Rank.FOUR to 2)
         val result = HandScorer(Rank.TWO, budgetNanos = 0L).score(cards)
 
-        assertEquals(cards.size, result.rounds)
-        assertEquals(cards.size, result.melds.size)
-        assertTrue(result.melds.all { it.type == MeldType.SINGLE })
-        assertEquals(cards.sumOf { it.id }, result.melds.flatMap(Meld::cards).sumOf { it.id })
+        // 新契约：预算为 0 也不再把整手牌拆成单张，贪心保底必须给出完整合法方案。
+        assertEquals(result.melds.size, result.rounds)
+        assertEquals(cards.map(Card::id).sorted(), result.melds.flatMap(Meld::cards).map(Card::id).sorted())
+        assertTrue("rounds=${result.rounds} melds=${result.melds.map { it.type }}", result.rounds < cards.size)
+        assertTrue("melds=${result.melds.map { it.type }}", result.melds.any { it.type == MeldType.BOMB })
+        assertTrue("exhaustive=${result.exhaustive}", !result.exhaustive)
     }
 
     @Test
-    fun `state cap also falls back to singles`() {
+    fun `zero state cap still returns a legal greedy partition`() {
         val cards = hand(Rank.TWO to 3, Rank.THREE to 4, Rank.FOUR to 2)
-        val result = HandScorer(Rank.TWO, maxStates = 0).score(cards)
+        val result = HandScorer(Rank.TWO, budgetNanos = 0L, maxStates = 0).score(cards)
 
-        assertEquals(cards.size, result.rounds)
-        assertTrue(result.melds.all { it.type == MeldType.SINGLE })
+        assertEquals(result.melds.size, result.rounds)
+        assertEquals(cards.map(Card::id).sorted(), result.melds.flatMap(Meld::cards).map(Card::id).sorted())
     }
 
     @Test
@@ -97,6 +100,37 @@ class HandScorerSearchTest {
         assertEquals(139.4, result.spi, 1e-9)
         assertEquals(0, result.waste)
         assertTrue(result.melds.any { it.type == MeldType.BOMB })
+    }
+
+    @Test
+    fun `dense hand finds bomb-heavy plan instead of flush-heavy fallback`() {
+        // 旧实现在 12 万状态上限后把剩余牌按单张收尾，这手牌只能拿到 403.5（5 个同花顺 + 2 单张）。
+        // 新搜索保留“炸弹导向”分支后，5 个炸弹覆盖 27 张，SPI 507.38。
+        val cards = hand(Rank.SIX to 5, Rank.SEVEN to 6, Rank.EIGHT to 6, Rank.NINE to 5, Rank.TEN to 5)
+        val result = HandScorer(Rank.TWO).score(cards)
+
+        assertEquals(5, result.rounds)
+        assertEquals(5, result.melds.count { it.type == MeldType.BOMB })
+        assertEquals(507.38, result.spi, 0.01)
+        assertTrue("exhaustive=${result.exhaustive}", !result.exhaustive)
+        assertEquals(cards.map(Card::id).sorted(), result.melds.flatMap(Meld::cards).map(Card::id).sorted())
+    }
+
+    @Test
+    fun `longer budget never lowers the achieved spi`() {
+        // 这手 8/8/8/3 在 1 秒内只到 456.54，3 秒能拿到 678.21；更长预算不应回退。
+        val cards = hand(Rank.TWO to 8, Rank.THREE to 8, Rank.FOUR to 8, Rank.FIVE to 3)
+        val short = HandScorer(Rank.TWO, budgetNanos = 1_000_000_000L).score(cards)
+        val long = HandScorer(Rank.TWO, budgetNanos = 3_000_000_000L).score(cards)
+
+        // 搜索只接受更优方案；增加预算只会追加束搜索阶梯，不应把结果改差。
+        assertTrue("long=${long.spi} short=${short.spi}", long.spi + 1e-9 >= short.spi)
+    }
+
+    @Test
+    fun `small hand is solved exhaustively`() {
+        val result = HandScorer(Rank.TWO, budgetNanos = 15_000_000_000L).score(hand(Rank.TWO to 3, Rank.THREE to 4, Rank.FOUR to 2))
+        assertTrue(result.exhaustive)
     }
 
     @Test

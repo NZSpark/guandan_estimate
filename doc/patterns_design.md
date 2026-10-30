@@ -190,7 +190,7 @@
 - 差值文案（`delta = 当前 SPI − 系统最优 SPI`）：
   - `delta < -0.005`：`较系统最优 -8.02 · 多 1 轮`（轮数相同则省略后半句）
   - `|delta| ≤ 0.005`：`与系统最优相同`
-  - `delta > 0.005`：`优于系统方案 +3.10`（优化器受 3 秒 / 12 万状态上限约束，手动方案**可能**更高，这不是 bug）
+  - `delta > 0.005`：`优于系统方案 +3.10`（优化器默认 15 秒 / 15 万状态，未穷举时结果标注「近似最优」，手动方案**可能**更高，这不是 bug）
 - 「应用结果」在分区未变化时禁用，文案「尚未修改」。
 - 应用后主界面：
   - 结果卡片显示调整后的全部指标；
@@ -255,10 +255,10 @@ object PartitionEvaluator {
 
 约束：
 
-- `HandScorer.score()` 改为「搜索得到 `List<Meld>` → `summarize(...)`」，行为与数值必须与改造前逐位相同（用现有 379 项测试与新增等价性测试锁定）。
+- `HandScorer.score()` 改为「搜索得到 `List<Meld>` → `summarize(...)`」，行为与数值必须与改造前逐位相同（用现有 395 项测试与新增等价性测试锁定）。
 - `HandScorer.candidates()` 对外仍返回**按 mask 取最高分**的列表（与今天一致）；多牌型解释只在 `interpretations` 里额外保留，避免改变优化器搜索规模与结果。
 - `controlPercent`（α 的百分数）/ `isLowWaste` / `netValue100`（分子按 0.01 累计）从 `HandScorer` 抽成 `scoring/MeldScoring.kt` 的 `internal` 顶层函数（带 `level` / `handSize` 参数），优化器与 `PartitionEvaluator.summarize` 共用，不得重写。
-- 手动路径不调用优化器，复杂度 O(组数 × 单组牌数)，无 3 秒预算问题。
+- 手动路径不调用优化器，复杂度 O(组数 × 单组牌数)，无 15 秒 anytime 搜索预算问题。
 - `HandResult` 结构不变；`origin` 只存在于 UI 状态（§6.1），不进评分模型。
 
 ### 5.3 与系统最优的关系
@@ -459,14 +459,14 @@ data class MeldAdjustState(
 
 ### 10.3 回归
 
-- 改造 `HandScorer` 后，现有 39 个测试类 / 379 项必须全绿，且随机样例的 `HandResult` 逐字段（`spi`、`numerator`、`rounds`、`waste`、各组 `score`）与改造前一致。
+- 改造 `HandScorer` 后，现有 39 个测试类 / 395 项必须全绿，且随机样例的 `HandResult` 逐字段（`spi`、`numerator`、`rounds`、`waste`、各组 `score`）与改造前一致。
 - 主界面未进入调整页时的渲染与非调整路径不得变化。
 
 ## 11. 实施顺序
 
 | 阶段 | 内容 | 验收 |
 | --- | --- | --- |
-| P0 | 抽出 `MeldEvaluator` / `summarize`，`HandScorer` 委托；补等价性测试 | 379 项全绿 + 新增等价性测试通过 |
+| P0 | 抽出 `MeldEvaluator` / `summarize`，`HandScorer` 委托；补等价性测试 | 395 项全绿 + 新增等价性测试通过 |
 | P1 | `MeldGroup` / `PartitionEvaluator` / `PartitionCodec` + 单测 | 分区解析、评分、编解码测试通过 |
 | P2 | `MeldAdjustEditor` 纯逻辑 + 单测 | 拆分/合并/改判/撤销/重置全通过 |
 | P3 | `MeldAdjustActivity`、布局、Manifest、入口按钮与 `ScoreOrigin` | 真机可进入、可调整、可应用 |
@@ -478,7 +478,7 @@ data class MeldAdjustState(
 | 风险 | 取舍 |
 | --- | --- |
 | 手动方案通常更差，用户可能误以为应用算错 | 始终显示与系统最优的差值；不自动应用；`恢复最优` 一键回退 |
-| 优化器有 3 秒 / 12 万状态上限，手动分区可能更高 | 允许 `delta > 0` 并如实显示「优于系统方案」，不强行钳制为 0 |
+| 优化器有 15 秒 / 15 万状态上限，手动分区可能更高 | 允许 `delta > 0` 并如实显示「优于系统方案」，不强行钳制为 0 |
 | 自由拖拽单牌表达力最强，但会产生大量非法中间态 | 本轮只做「拆分 / 合并 / 改判」，每步都落在合法分区上；拖拽留作后续（需引入非法态预览与自动修复） |
 | 级牌「逢人配」让同一组牌有多种解释 | 用 `interpretations` 枚举，提示用户选择；同键取最高分，避免 UI 自造分 |
 | 调整结果引用手牌下标，手牌一变即失效 | 统一走 `invalidate()`；解码时校验张数与级牌，失败保留原结果 |

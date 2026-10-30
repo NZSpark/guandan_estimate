@@ -337,6 +337,7 @@ class MainActivity : AppCompatActivity() {
             append("%.2f".format(result.numerator))
             append(" · 计划出牌轮数 ${result.rounds}")
             append(" · T_max ${result.tMax}")
+            append(if (result.exhaustive) " · 已穷举最优" else " · 近似最优")
         }
         if (result.waste > 0) {
             ui.penaltyNote.visibility = View.VISIBLE

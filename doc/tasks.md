@@ -51,7 +51,7 @@
 | Android | 10 |
 | WebView | com.huawei.webview 114.0.5.302 |
 | 构建 | `JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew testDebugUnitTest assembleDebug` |
-| 单元测试 | 39 个测试类 / 379 项全绿 |
+| 单元测试 | 39 个测试类 / 395 项全绿 |
 
 ## 硬约束（易踩坑）
 
