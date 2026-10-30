@@ -23,7 +23,14 @@
         <!-- 阶段 0 验证入口，Gemini WebView 迁移完成后移除 -->
         <activity android:name=".probe.AiProbeActivity" android:exported="true" android:label="AI Probe" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".probe.GeminiProbeActivity" android:exported="true" android:label="Gemini Probe" />
-        <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true">
+        <!-- 主界面必须 singleTask：桌面图标 / 快捷方式 / 深链再次进入时复用同一实例（onNewIntent），
+             否则 standard 模式会按不同 Intent 在任务栈里堆出第二个主窗口。
+             进程级 WebView 宿主也只有一个挂接目标，多实例会互相抢挂接。 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

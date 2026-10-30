@@ -1,7 +1,7 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-10-30（撤销解析不完整即失败，保留新图标）；旧版全文归档于 `harness/archive/state-2026-10-30.md`。
+> 最后更新：2026-10-31（炸弹逢人配修正 + V4.1 文档重标定）；旧版全文归档于 `harness/archive/state-2026-10-30.md`。
 
 ## 当前分支
 
@@ -12,37 +12,42 @@
 执行 `doc/ai_tasks.md`：多 AI 源 WebView 迁移 + 阶段 7 UI + 阶段 8 宿主/提交协议。
 清单共 235 项，**217 项已勾选**；剩余 18 项集中在 ChatGPT 额度恢复后的验收、Gemini 会话过期、横向验收。
 
-**本轮（2026-10-30）**：按 `doc/ai_configure.md` 完成 AI 源管理独立页面（UI-023，P0–P4）。
-旧 `ui/AiSettingsScreen.kt` / `AiSettingsDialog.kt` 已删除；主界面入口改为 `AiSettingsActivity`。
-真机 LIO-N29 已跑通入口/返回、五源显隐、dirty 确认、保存并选用+重启保留、非激活「未选用」、API 错误聚焦、删除激活配置回退、登录页往返重查；剩余完整 API 配置态、最后一份删除禁用、字体/TalkBack、重建草稿与冷启动并发。
+近期重心：AI 源管理独立页面（UI-023）、登录入口与登录态（见下两节）。
 
-## 本轮完成（2026-10-30，撤销解析收紧 + 新图标）
+## 本轮完成（2026-10-31，炸弹逢人配修正 + V4.1 文档重标定）
 
-- **撤销**：`WebViewAiSource` 恢复为「`parsed.cards` 为空才抛 `ParseFailed`」，`warnings` 非空不再判失败，删除 `partiallyParsedAnswerWithCountMismatchThrows`。理由：AI 识别无法 100% 准确，部分解析结果仍有价值，不得因不完整而丢弃。
-- **保留**：五档 `mipmap-*/ic_launcher.png` 新图标（91f0ddc）。
-- **验证**：`./gradlew testDebugUnitTest` BUILD SUCCESSFUL（38 个测试类 / **373 项，0 失败**）。
-- **真机**：`91f0ddc` 版本已于 LIO-N29 安装并冷启动成功；本次撤销未重新安装。
+- **炸弹逢人配**：`HandScorer` 的炸弹 `Sum` 改为 `n×V`，逢人配按替代点数计、与同点数自然炸同分。三张5+配 220→**210**（< 四张6 的 216）；5张2+配 553→**538**；8张2+1配 837→**828**（V4.1 再调为 810）；8张2+2配 928→**912**。自然炸及 4 炸 192 / 5 炸 298 下限不变。
+- **测试**：`ScoringV4Test` 更新两项含配炸弹断言，新增 10 张炸弹公式与 `wildSubstitutedBombScoresAsItsRepresentedRank`；全量 `./gradlew testDebugUnitTest` 39 类 / **387 项 0 失败**。
+- **文档**：§二 级牌规则、CRITICAL、scoring-rules、README 语义列表；ADR-0022。`doc/conflict.md` §7 记录旧公式族的张数层级倒挂（后由 V4.1 处理）。
+- **V4.1 文档重标定**：采纳 `doc/conflict.md` §8 方案 B；评分方案升 V4.1（6 炸 `523+55·log`、7 炸 `577+73·log`、8 炸 `672+75·log`、9 炸 `784+66·log`、10 炸不变；层级 538/600、601/690、700/799、810/895、912/987），`手牌综合牌力评估方法` 的 F_i 区间与 README 同步，评级阈值保留 V4.0 并加注。**代码与测试未改**（`HandScorer` 仍 V4.0），待按 conflict §8.4 落地。
 
-## 同日更早完成（2026-10-30，AI 源管理独立页面）
+## 同日上一轮完成（2026-10-31，级牌三带二修正 + 6 炸文档冲突）
 
-- **页面**：`ui/AiSettingsActivity` 全屏承载当前使用卡、五源单选、配置档下拉、新建/删除、按源显隐表单、真实健康态、固定底部「保存并选用」。`AndroidManifest` 注册为 `exported=false`、竖屏、`adjustResize`。
-- **纯逻辑**：`ui/AiSettingsEditor`（源/配置档切换、draft/dirty、删除回退、重建草稿恢复）、`ui/AiSettingsValidation`（网页只校验 homeUrl，API 校验 endpoint/model/key，HTTPS + host）、`recognition/source/HealthCheckGate`（主界面与本页健康检查串行化，避免并发 `ensureLoaded()` 重挂共享 WebView）。
-- **交互**：有未保存修改时切换源/配置档/返回均确认；校验错误落在 `TextInputLayout` 并滚动到首个错误（含嵌套 `apiSection` 的坐标累加）；删除当前激活配置按「同源第一份 → 全库第一份」回退；仅激活网页配置可登录并自动重查，非激活配置显示「保存并选用后可打开网页登录」。
-- **验证**：`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL（38 个测试类 / **373 项，0 失败**，当时的计数）；新增 28 项纯 JVM 测试覆盖编辑器、校验与串行化。APK 清单确认 Activity 导出/方向/输入模式。
-- **真机（LIO-N29 / Android 10 / 1176×2400）**：页面完全替代弹窗；五源顺序与字段显隐正确；dirty 切换/返回确认，取消后输入保留；新建并保存临时 profile 后主界面立即刷新，force-stop 重启仍保留；非激活 API profile 显示「未选用」；API Key 缺失在字段下方报错并聚焦；删除激活 profile 的确认框写出回退名称，删除后回退 DeepSeek 且健康态刷新为「网页可用」；Ready 下登录入口仍可见，点击进入无诊断控件的全屏登录页，返回后自动重查并保持「网页可用」；全程无 FATAL EXCEPTION。临时 profile 已删除，prefs 结构与操作前一致。
-- **兼容性**：`MainActivity` 图片解码为 `ImageDecoder` 增加 API 28 守卫，API 26–27 回退 `BitmapFactory` + `inSampleSize`；`lintDebug` 从 8 个 `NewApi` 错误变为通过。
+- **级牌三带二修正**：`HandScorer.fullHouseScore()` 统一自然牌/逢人配两条路径；自然级牌（含用于级牌自身的逢人配）按 15，逢人配替代非级牌按替代点数；映射区间由 `16–96` 扩到 `16–103`。级牌 2 时 `222+33` 50→**155**，`AAA+33` 156→**147**，最大值 `222+AA` **191 < 192**。
+- **测试**：`ScoringV4Test` 新增 6 项（级牌三张/对子、最大值、无级牌映射、逢人配替代）；全量 `./gradlew testDebugUnitTest` 39 类 / **385 项 0 失败**；`assembleDebug` BUILD SUCCESSFUL。
+- **文档**：新增 [`doc/conflict.md`](../doc/conflict.md)（6 炸表值 531/595 与公式 538/650 的矛盾仍未决）；同步 `doc/掼蛋牌型量化评分方案.md` §三/级牌规则、`harness/CRITICAL.md`、`harness/memory/scoring-rules.md`；规则变更记入 ADR-0021。
 
-## 同日上一轮完成（AI-184 宿主自动挂接）
+## 同日上一轮完成（2026-10-30，最优拆牌性能优化）
 
-- `WebViewAiSource.healthCheck()` 遇 `HOST_NOT_ATTACHED` 时在后台复用就绪链路（创建 → 离屏挂接 → 首页导航 → 等待可操作），再重新只读诊断；已有页面保持只读。
-- `MainActivity` 首次检查改由 `onResume` post 触发，避免 decorView 尚未挂窗口时误报宿主故障。
-- 真机冷启动日志：`pageState: webView is null` → `warm-up finished state=READY`，主界面直接显示「状态：网页可用」。
+- **问题**：旧搜索给每个状态新建 `State` 并拷贝 melds 列表，GC 压力大；9 组三张、4 炸、8 张同点等结构化 27 张手牌稳定跑满 3 秒上限，只能靠「剩余单张」收尾。
+- **改动**：分子改百分位整数（`IntArray`）；每个 mask 只存 `num[r]` + `pick[r]`，方案按 pick 重建、不再拷贝列表；静态「候选最少优先」替代每状态重扫；预计算候选净值；预算退路同样可重建。新增 `HandScorerSearchTest`（6 项）。
+- **实测**（同机中位数）：9 组三张 3024→642ms，4 炸 899→123ms，8 张同点 3046→717ms，wild 密集 3035→1044ms，随机 27 张 239→71ms；密堆手仍触 3 秒上限，但 SPI 由 329.45 升到 375.73（30 秒参考 376.69）。
+- **验证**：`./gradlew testDebugUnitTest` 39 类 / **379 项 0 失败**。
 
-## 更早完成（2026-10-30，图片上传收口）
+## 同日上一轮完成（拆牌调整设计 + singleTask）
 
-- 上传与提交拆分：填文本 → 上传并确认附件 → 点发送；附件未确认绝不提交，发送延迟时只重试点击。
-- Gemini 改走原生文件选择（`Upload and tools` → `Files`）；DeepSeek paste + FILE_CHOOSER；ChatGPT PASTE。
-- 真机闭环：Gemini 单图 9 张、连续两图 10/27 张；DeepSeek 27 张。详见 `doc/ai_tasks.md` AI-182。
+- **设计**：新增 [`doc/patterns_design.md`](../doc/patterns_design.md)（`MeldAdjustActivity`、`MeldGroup`、共享 `MeldEvaluator`、`ScoreOrigin`）；待实施 P0–P5。
+- **singleTask**：`MainActivity` 加 `launchMode="singleTask"` + `onNewIntent` 刷新；真机修复前 `sz` 1→2→3，修复后恒为 1 个实例。见 ADR-0019。
+
+## 同日更早完成（2026-10-30，解析撤销 + 新图标 + AI 源管理页）
+
+- **撤销**：`WebViewAiSource` 恢复「`parsed.cards` 为空才抛 `ParseFailed`」，保留五档新 `mipmap-*/ic_launcher.png`（91f0ddc）。
+- **AI 源管理页**：`AiSettingsActivity` 全屏承载源/配置档/表单/健康态；`AiSettingsEditor`、`AiSettingsValidation`、`HealthCheckGate` 均为纯逻辑（新增 28 项 JVM 测试）；真机主路径通过，剩余完整 API 配置态、字体/TalkBack、重建草稿、冷启动并发。
+- **兼容**：图片解码在 API 26–27 回退 `BitmapFactory`；`lintDebug` 不再报 `NewApi`。
+
+## 更早完成（2026-10-30）
+
+- AI-184 宿主自动挂接；图片上传收口（Gemini 原生文件选择、DeepSeek paste + FILE_CHOOSER、ChatGPT PASTE，详见 AI-182）。
 
 ## 验证基线
 

@@ -399,6 +399,8 @@
 
 排序继续使用现有的 `result.melds.sortedByDescending { it.score }` 语义。UI 不重新搜索最优拆牌、不重新计分，也不改变原结果对象。
 
+需要手动调整拆牌时，从结果卡进入独立的拆牌调整页；交互、分区模型与评分复用规则见 [`doc/patterns_design.md`](patterns_design.md)。主界面只负责展示调整后的 `HandResult` 与来源标记。
+
 ### 5.5 最优拆牌图
 
 当且仅当当前有 27 张手牌且存在有效计算结果时启用 `生成并保存最优拆牌图`。

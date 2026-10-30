@@ -25,7 +25,7 @@ class ScoringV4Test {
             intArrayOf(6, 20, 51),
             intArrayOf(10, 30, 75),
             intArrayOf(20, 40, 74),
-            intArrayOf(16, 50, 96),
+            intArrayOf(16, 50, 103),
             intArrayOf(18, 50, 106),
             intArrayOf(15, 60, 123)
         )
@@ -76,17 +76,37 @@ class ScoringV4Test {
     }
 
     @Test fun wildSubstitutedBombUsesSameLogScaleFormula() {
-        // 5张2 + ♥7（级牌逢人配）：Sum=25, Sum+5V=35 => 510+floor(100*log2(1.35)) = 553
+        // 5张2 + ♥7（级牌逢人配）：逢人配按替代点数 2 计，Sum=12，与6张2完全同分 538
         val result = HandScorer(Rank.SEVEN).score(repeats(Rank.TWO, 5) + Card(5, Rank.SEVEN, Suit.HEART))
         assertEquals(1, result.rounds)
-        assertEquals(553, result.total)
+        assertEquals(538, result.total)
     }
 
     @Test fun nineCardBombWithOneWildMatchesFormula() {
-        // 8张2 + ♥7（级牌逢人配）：Sum=31, Sum+7V=45 => 800+floor(70*log2(1.45)) = 837
+        // 8张2 + ♥7（级牌逢人配）：Sum=18, Sum+7V=32 => 800+floor(70*log2(1.32)) = 828
         val result = HandScorer(Rank.SEVEN).score(repeats(Rank.TWO, 8) + Card(8, Rank.SEVEN, Suit.HEART))
         assertEquals(1, result.rounds)
-        assertEquals(837, result.total)
+        assertEquals(828, result.total)
+    }
+
+    @Test fun tenCardBombWithTwoWildsMatchesFormula() {
+        // 8张2 + 2张♥7（级牌逢人配）：Sum=20, Sum+5V=30 => 890+floor(60*log2(1.30)) = 912
+        val hand = repeats(Rank.TWO, 8) + List(2) { Card(8 + it, Rank.SEVEN, Suit.HEART) }
+        val result = HandScorer(Rank.SEVEN).score(hand)
+        assertEquals(1, result.rounds)
+        assertEquals(912, result.total)
+    }
+
+    @Test fun wildSubstitutedBombScoresAsItsRepresentedRank() {
+        // 级牌 2：三张5 + ♥2 就是四张5（210）。旧实现把逢人配按 15 计，得到 220，
+        // 反而压过四张6（216），与牌理矛盾。
+        val scorer = HandScorer(Rank.TWO)
+        val wildBomb = scorer.score(repeats(Rank.FIVE, 3) + Card(3, Rank.TWO, Suit.HEART))
+        assertEquals(MeldType.BOMB, wildBomb.melds.single().type)
+        assertEquals(210, wildBomb.total)
+        assertEquals(210, scorer.score(repeats(Rank.FIVE, 4)).total)
+        assertEquals(216, scorer.score(repeats(Rank.SIX, 4)).total)
+        assertTrue(wildBomb.total < 216)
     }
 
     @Test fun residualBombPlusLowSingleIgnoresWastePenalty() {
@@ -134,5 +154,61 @@ class ScoringV4Test {
         assertEquals("均衡", result(80.0, 27).grade)
         assertEquals("强势", result(140.0, 27).grade)
         assertEquals("碾压级", result(220.0, 27).grade)
+    }
+
+    @Test fun fullHouseCountsNaturalLevelCardsAsFifteen() {
+        // 级牌 2：222+33 raw = (3×15 + 2×3) + 2×15 = 81 → 155（旧实现是 16 → 50）
+        val result = HandScorer(Rank.TWO).score(repeats(Rank.TWO, 3) + repeats(Rank.THREE, 2))
+        assertEquals(1, result.rounds)
+        assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
+        assertEquals(155, result.total)
+    }
+
+    @Test fun fullHouseLevelTripleOutranksAceTriple() {
+        // 222+33 = 155 必须高于 AAA+33 = 147；旧实现是 50 < 156。
+        val levelTriple = HandScorer(Rank.TWO).score(repeats(Rank.TWO, 3) + repeats(Rank.THREE, 2)).total
+        val aceTriple = HandScorer(Rank.TWO).score(repeats(Rank.ACE, 3) + repeats(Rank.THREE, 2)).total
+        assertEquals(155, levelTriple)
+        assertEquals(147, aceTriple)
+    }
+
+    @Test fun fullHouseCountsLevelPairAsFifteen() {
+        // 级牌 2 作对子（候选分，直接校验公式）：
+        // KKK+22 raw = 5×13 + 2×15 = 95 → 178；AAA+22 raw = 5×14 + 2×15 = 100 → 186。
+        // 注：整手评分会拆成三张 K + 两张级牌单张（单张级牌 α=1.15），
+        // 这里的候选分用于确认级牌对子不再按面值 2 计。
+        val scorer = HandScorer(Rank.TWO)
+        assertEquals(178, scorer.fullHouseScore(13, 2))
+        assertEquals(186, scorer.fullHouseScore(14, 2))
+    }
+
+    @Test fun fullHouseMaximumStaysBelowSmallestBomb() {
+        // 级牌 2 的最大三带二：222+AA raw = 103 → 191，仍小于最小 4 炸 192。
+        val result = HandScorer(Rank.TWO).score(repeats(Rank.TWO, 3) + repeats(Rank.ACE, 2))
+        assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
+        assertEquals(191, result.total)
+        assertTrue(result.total < 192)
+    }
+
+    @Test fun fullHouseWithoutLevelCardsUsesExtendedMapping() {
+        // AAAKK raw = 96 在新映射 16..103 下为 180；旧映射会得到 191。
+        val result = HandScorer(Rank.SEVEN).score(repeats(Rank.ACE, 3) + repeats(Rank.KING, 2))
+        assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
+        assertEquals(180, result.total)
+    }
+
+    @Test fun fullHouseWildSubstitutionUsesRepresentedRank() {
+        // 级牌 2：10,10,♥2(代10),5,5 raw = 5×10 + 2×5 = 60 → 121
+        val hand = listOf(
+            Card(0, Rank.TEN, Suit.SPADE),
+            Card(1, Rank.TEN, Suit.CLUB),
+            Card(2, Rank.TWO, Suit.HEART),
+            Card(3, Rank.FIVE, Suit.SPADE),
+            Card(4, Rank.FIVE, Suit.CLUB),
+        )
+        val result = HandScorer(Rank.TWO).score(hand)
+        assertEquals(1, result.rounds)
+        assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
+        assertEquals(121, result.total)
     }
 }

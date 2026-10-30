@@ -771,6 +771,16 @@ class MainActivity : AppCompatActivity() {
         ui.root.post { refreshSourceState() }
     }
 
+    /**
+     * singleTask：桌面图标 / 快捷方式 / 深链再次进入时回到本实例，不会新建第二个主窗口。
+     * 此刻 Activity 可能已 resumed（没有 onResume 回调），所以在这里补一次源状态刷新。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        ui.root.post { refreshSourceState() }
+    }
+
     override fun onDestroy() {
         worker.shutdownNow()
         // AI-169：宿主是**进程级**的，不能由主界面销毁。
