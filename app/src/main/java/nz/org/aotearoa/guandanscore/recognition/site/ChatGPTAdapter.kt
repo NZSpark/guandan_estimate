@@ -43,6 +43,19 @@ override val preferredUpload: UploadStrategy = UploadStrategy.PASTE
 /** AI-124：ChatGPT 上传路径尚未真机验证，回退策略一律不启用。 */
 override val supportedUploads: Set<UploadStrategy> = setOf(UploadStrategy.PASTE)
 
+/**
+ * AI-182：按 ChatGPTBridge 文档的不变量拆成三段：
+ * 填文本 → 合成 paste 并确认附件 → 点发送。提交前必须看到真实附件预览。
+ */
+override val uploadsAfterFill: Boolean = true
+
+override fun fillComposerScript(prompt: String): String = ChatGPTScripts.fillComposer(prompt)
+
+override fun submitComposerScript(): String = ChatGPTScripts.submitComposer()
+
+override fun parseFillResult(json: JSONObject): Boolean =
+json.optBoolean("inputFilled", false) || json.optBoolean("ok", false)
+
 override fun fillAndSubmitScript(
 prompt: String,
 fileName: String,
@@ -64,6 +77,9 @@ override fun pasteAttachmentScript(fileName: String, mimeType: String, base64: S
 ChatGPTScripts.pasteImage(fileName, mimeType, base64)
 
 override fun snapshotScript(): String = ChatGPTScripts.snapshot()
+
+    /** AI-158：站点会恢复未发送草稿，驱动层需要显式清空。 */
+    override fun clearComposerScript(): String = ChatGPTScripts.clearComposer()
 
 override fun diagnoseScript(): String = ChatGPTScripts.diagnose()
 

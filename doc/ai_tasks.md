@@ -4,7 +4,7 @@
 >
 > **目标：** ① 将在线识牌扩展为 Android WebView 网页源与 HTTP API 两种传输路径；② 把 AI 源做成配置可选，**DeepSeek 网页版为首发源**，同时支持 ChatGPT 网页版、Gemini 网页版、自定义网页源与 HTTP API。网页源复用网页登录态，不要求官方 API Key；HTTP API 保留现有配置与调用能力。同时保留本地 OCR、模板匹配、`VisualCardCodec`、现有 `Card` 领域模型和牌力评分功能。
 >
-> **当前状态（2026-10-30）：** 多源基础抽象层（`AiSource` / `SiteAdapter` / `PageDriver` / `WebViewAiSource`）、DeepSeek/Gemini/ChatGPT/自定义适配器及源选择配置均已落地；DeepSeek 网页源已在真机完成单图、连续两图、追问与离屏/可见三态切换闭环（`source_e2e` / `source_e2e_twice`），Gemini 保留既有真机闭环作为回归基线。**ChatGPT 网页源仅有代码与单测，尚无真机图片上传证据**，故 G-22~G-25 保持未勾选。所有任务以本清单执行记录和可核对的测试或设备证据为准，不因设计文档存在就勾选。
+> **当前状态（2026-10-30）：** 多源基础抽象层（`AiSource` / `SiteAdapter` / `PageDriver` / `WebViewAiSource`）、DeepSeek/Gemini/ChatGPT/自定义适配器及源选择配置均已落地；DeepSeek 网页源已在真机完成单图、连续两图、追问与离屏/可见三态切换闭环（`source_e2e` / `source_e2e_twice`）；Gemini 改用原生触摸文件选择后，离屏单图（9 张）与连续两图（10/27 张）均已跑通（AI-182）。ChatGPT 已真机登录，12:36 曾跑通一次 27 张带图识牌；随后测试账号**附件额度已用尽**（约 2026-10-31 12:36 恢复），无法再取附件成功证据，G-23~G-25 保持未勾选。所有任务以本清单执行记录和可核对的测试或设备证据为准，不因设计文档存在就勾选。
 >
 > **执行原则：** 严格按阶段推进。图片真实上传是核心准入条件；未验证成功前，不进入完整业务集成。GeminiBridge 与 DeepseekBridge 的网页自动化经验只作参考，不能把其他项目的选择器或上传行为视作目标 Android WebView 的既定事实。
 >
@@ -210,9 +210,9 @@
 
 > ChatGPT 是新增的网页源，不改变 DeepSeek 首发的实施优先级。任何候选选择器、合成 paste 事件或测试桥接项目的历史结论均不能代替目标 Android WebView 的实际验收。
 
-- [ ] **AI-158** 在目标 Android 设备打开 `https://chatgpt.com/` 并手动登录；记录日期、设备、Android 与 WebView 版本、页面 URL、`readyState`、输入框/发送按钮/回答节点/文件输入/附件预览的诊断命中数。验证登录判据能区分未登录与已登录页面，且不得记录密码、Cookie、令牌或私人对话内容。 → 现状（2026-10-30）：ChatGPT 未在目标设备登录，选择器命中数未核对；不得据公开页面结构宣称已验证。
-- [ ] **AI-159** 验证 `PASTE` 路径：使用 `RecognizeRequest.jpegBytes` 构造真实 `File`，通过 `DataTransfer` 与合成 `ClipboardEvent('paste')` 附加图片；之后独立确认当前待发送消息的真实附件预览出现。事件派发、`dispatchEvent` 返回值或输入框存在都不能替代附件验收。若该路径失败，再独立评估 `FILE_CHOOSER`；不得假定其他站点的上传策略对 ChatGPT 有效。 → 现状（2026-10-30）：依赖 AI-158 的登录态与真实页面；PASTE 是否被接受尚无设备证据。
-- [ ] **AI-160** 完成 ChatGPT 单次识牌闭环：先填 prompt 和图片，再验证附件，最后才提交；确认用户消息进入页面、取得本轮新回答、由 `GenerationWatcher` 判定结束，并由 `AiCardResponseParser` 解析出合法 `List<Card>`。上传或附件验证失败时返回 `UploadFailed`，不得继续提交纯文本。 → 现状（2026-10-30）：依赖 AI-158/159；当前只有脚本与 Fake 单测，未跑真实附件→提交→解析闭环。
+- [ ] **AI-158** 在目标 Android 设备打开 `https://chatgpt.com/` 并手动登录；记录日期、设备、Android 与 WebView 版本、页面 URL、`readyState`、输入框/发送按钮/回答节点/文件输入/附件预览的诊断命中数。验证登录判据能区分未登录与已登录页面，且不得记录密码、Cookie、令牌或私人对话内容。 → 现状（2026-10-30）：已真机登录并记录：LIO-N29 / Android 10 / WebView 114.0.5.302，`input=1`（`div.ProseMirror[contenteditable]`，新 DOM 已无 `#prompt-textarea`）、`send=1`、`fileInput=4`、`password=0`、`loginIndicator=0`；未登录侧仍未复现（不退出用户账号，G-24 缺一半证据），故不整体勾选。
+- [ ] **AI-159** 验证 `PASTE` 路径：使用 `RecognizeRequest.jpegBytes` 构造真实 `File`，通过 `DataTransfer` 与合成 `ClipboardEvent('paste')` 附加图片；之后独立确认当前待发送消息的真实附件预览出现。事件派发、`dispatchEvent` 返回值或输入框存在都不能替代附件验收。若该路径失败，再独立评估 `FILE_CHOOSER`；不得假定其他站点的上传策略对 ChatGPT 有效。 → 现状（2026-10-30）：已按文档把顺序改为「填文本 → paste → 提交前确认 → 发送」；真机 paste 被站点静默丢弃，页面提示附件额度用尽（`Get Plus for more uploads` / 约 10-31 12:36 恢复）。额度恢复前**无法**区分“代码问题”与“账号限制”，故不勾选。
+- [ ] **AI-160** 完成 ChatGPT 单次识牌闭环：先填 prompt 和图片，再验证附件，最后才提交；确认用户消息进入页面、取得本轮新回答、由 `GenerationWatcher` 判定结束，并由 `AiCardResponseParser` 解析出合法 `List<Card>`。上传或附件验证失败时返回 `UploadFailed`，不得继续提交纯文本。 → 现状（2026-10-30）：流程已改为提交前确认附件，并真机验证“额度用尽 → `UploadFailed`，不提交”；带图闭环仍被账号额度阻塞，未通过。
 - [ ] **AI-161** 对同一测试图片进行带图/不带图对照，要求模型复述可人工核验的具体牌面细节，确认答案确实使用图片像素；记录输出、耗时与失败原因。 → 现状（2026-10-30）：依赖 AI-160；带图/不带图对照尚未执行。
 - [ ] **AI-162** 连续识别两张不同图片，并在已有回答的对话中追问一次；验证旧附件未残留、当前回答不串线、页面生成暂停不会造成过早结束，上传失败后可安全重试。 → 现状（2026-10-30）：依赖 AI-160；连续两图与追问的附件残留验证尚未执行。
 - [ ] **AI-163** 将 ChatGPT 真机结果及已知限制回写 `doc/multi_ai_update.md` §5.5，包含实测日期、设备、WebView 版本、附件预览判据、失败路径与未验证事项。 → 现状（2026-10-30）：依赖 AI-158~162 的实测数据，尚无内容可回写 §5.5。
@@ -303,7 +303,7 @@
 - [x] **AI-086** 为 `GenerationWatcher` 编写单元测试：文本增长、生成停顿、稳定结束、无新回答、旧回答、空容器、prompt 回显、页面错误及超时。
 - [x] **AI-087** 为页面脚本及上传逻辑编写可行的单元/集成测试：参数安全编码、脚本异常、事件已派发但预览未出现、文件选择取消、超时和回调重复触发。
 - [x] **AI-088** 为上游接口、忙碌状态、任务取消、页面状态转换及设置迁移编写回归测试；需要时使用 Fake 上游或 Fake JS 桥隔离页面依赖。
-- [ ] **AI-089** 在目标 Android 设备上手动登录 Gemini，完成单张图片、连续不同图片、会话过期及恢复的真实网页端验收。 → 现状（2026-10-30）：需 Gemini 手动登录后跑单图、连续图、会话过期恢复；当前设备登录态已掉。
+- [ ] **AI-089** 在目标 Android 设备上手动登录 Gemini，完成单张图片、连续不同图片、会话过期及恢复的真实网页端验收。 → 现状（2026-10-30 下午）：已登录并完成单图（9 张）与连续两图（10/27 张），附件均在提交前确认；**会话过期及恢复未取证**，故仍不勾选。
 - [ ] **AI-090** 比较迁移前后本地 `VisualCardCodec`、`CardRecognizer`、手动编辑、`HandScorer` 和 API Provider 的回归结果。 → 现状（2026-10-30）：需迁移前后真机对照；本地链路代码未改且单测全绿，但缺少设备前后记录。
 
 **阶段 4 验收：** UI 不永久卡住，失败与取消后可以重试；回答不会混用旧任务结果；WebView 宿主和临时资源生命周期正确；真实设备测试符合预期。
@@ -435,9 +435,12 @@
 - [x] **AI-173** 驱动层新增 `awaitSendEnabled`：点击前轮询发送按钮可用（排除 `disabled`、`aria-disabled=true`、`ds-button--disabled`），超时返回 false 由调用方重新填文本，禁止对 disabled 按钮点击并当作成功。 → 结果（2026-10-30）：`PageOps.awaitSendEnabled` 轮询 `sendStateScript`（尺寸 > 0 且无 disabled/aria-disabled 类）；超时由 `submitWithSendEnabledRetry` 重填一次，仍失败即 `SubmitFailed`。 真机 `source_e2e` 暴露旧脚本先派发 Enter 再找按钮，冷启动时会假报 submitted；现改为无可用发送按钮就不发送，由 `awaitSendEnabled` 重试一次。
 - [x] **AI-174** 把 `awaitSubmitStarted` 升级为三态（STARTED / NOT_STARTED / STALE_PAGE）：URL 变为会话页（`/a/chat/s/`）即判 STARTED；stop 按钮出现或 reply 节点有文本即判 STARTED；6s 内 URL 与 DOM 均无变化判 STALE_PAGE 并 reload 首页重试一次（不消耗重试次数），避免在死文档上白等 120s。 → 结果（2026-10-30）：`awaitSubmitStarted` 三态：会话 URL / stop / 回答文本或节点变化 → STARTED；6s 无变化 → STALE_PAGE；超时 → NOT_STARTED。STALE_PAGE 只 reload 一次且不占重试次数。
 - [x] **AI-175** `DeepSeekAdapter.parseSubmitResult` 不再只认 `ok`：必须同时具备填文本成功与提交正面证据（`inputFilled && (sentEnter || sendClicked) && valueEmpty`，或等价判据），否则返回 `SubmitOutcome.fail`，杜绝“未提交报成功”。 → 结果（2026-10-30）：`DeepSeekAdapter.parseSubmitResult` 要求 `ok && inputFilled && (sentEnter || sendClicked)`；仅脚本不报错、仅 `valueEmpty` 都不算成功。 同一修复：`sendDisabled=true` 时 `parseSubmitResult` 返回失败，驱动层等按钮可用后重填一次。
-- [x] **AI-176** 其它网页源（Gemini / ChatGPT）同步复核：`uploadsInsideSubmit` 路径的“提交后确认附件预览”保持不变；对各自发送按钮的可用性判据补同样的“先轮询再点击”，不得沿用“派发成功即成功”。 → 结果（2026-10-30）：Gemini / ChatGPT 均实现 `sendStateScript` 并在点击前轮询；`uploadsInsideSubmit` 路径仍在提交后 `verifyAttachment`，失败即 `UploadFailed`。
+- [x] **AI-176** 其它网页源（Gemini / ChatGPT）同步复核：`uploadsInsideSubmit` 路径的“提交后确认附件预览”保持不变；对各自发送按钮的可用性判据补同样的“先轮询再点击”，不得沿用“派发成功即成功”。 → 结果（2026-10-30）：Gemini / ChatGPT 均实现 `sendStateScript` 并在点击前轮询。同日稍后 AI-182 将两源改为 `uploadsAfterFill`（提交前确认附件），旧的「提交后验证」路径不再用于这两个源。
 - [x] **AI-177** 单测：发送按钮 disabled 时不得判提交成功；`STALE_PAGE` 只触发一次 reload 且不占重试次数；`valueEmpty=false` 时返回 `SubmitOutcome.fail`；`fillAndSend` 单 turn 内完成填与点（脚本快照断言）。 → 结果（2026-10-30）：`SiteAdapterScriptsTest` / `WebViewAiSourceTest` / `SubmitProgressTest` 覆盖：disabled 不判成功、STALE_PAGE 只 reload 一次、`valueEmpty=false` 失败、`fillAndSend` 单 turn 完成填与点。
 - [x] **AI-178** 真机复测：先修 AI-165~171 消除遮挡，再跑 DeepSeek 带图识牌端到端，确认“图片进输入框 → 自动提交 → 新回答 → 解析出 `cards`”全程无需人工点击；记录修复前后 `sendClickable`、`innerHeight`、`SubmitOutcome.why` 对照。 → 现状（2026-10-30）：需在正式主界面跑离屏端到端；探针 `offscreen_e2e` 只验证了附件回填，未覆盖完整识牌与解析。 → 结果（2026-10-30）：生产驱动 `source_e2e` 真机通过（2026-10-30 11:43）：可见容器 `1176x1801` → 离屏挂接（`OFFSCREEN_ATTACH attached=true status=Offscreen layout=1176x2328`）→ PASTE → 附件确认 → 提交（发送按钮就绪后重试一次）→ `SOURCE_E2E_OK cards=27 status=Offscreen`；同时修掉“发送按钮未渲染就派发 Enter、假报 submitted”的缺陷。
+
+- [x] **AI-182** 按网页图片直传文档拆分上传与提交：`uploadsAfterFill` + `fillComposerScript` + `submitComposerScript`，驱动层固定「填文本 → 上传并确认 → 点发送」；修复 `FILE_CHOOSER` 分支从未调用 `prepareFileChooserUpload` 的缺陷；Gemini 改走原生触摸 `Upload and tools → Files` 文件选择；修正 Gemini 附件判据误命中上传工具栏的问题。 → 结果（2026-10-30）：真机离屏 `source_e2e`（Gemini）`cards=9`，`verifyAttachment confirmed` 在 `submitComposer` 之前；`source_e2e_twice` 第一轮 10 张、第二轮 27 张，`SOURCE_E2E_TWICE_OK first=10 second=27 status=Offscreen`；DeepSeek 回归 27 张；新增拆分流程、FILE_CHOOSER 准备与附件判据单测。
+- [x] **AI-183** 上传失败原因透传：页面返回 `quotaBlocked` / `documentNotFocused` 时映射为可执行文案，不再只报「未确认附件预览」；额度用尽时立即失败，不空等 20s，也不提交纯文本。 → 结果（2026-10-30）：ChatGPT 真机额度用尽场景返回 `UploadFailed: … 站点上传额度已用尽，需等待额度恢复或升级账号`，在首次 `verifyAttachment` 采样即失败返回；`PageDriver.verifyAttachment` 成功/被阻塞均留日志。
 
 **阶段 8 验收：** 主界面不存在可见 WebView，网页仅在独立 AI 页面可见；离屏挂接的 WebView 仍有真实全屏视口（`innerHeight` 等于屏高）；DeepSeek 带图识牌在无人工点击的情况下完成提交并取得新回答；提交失败与未提交不得被报成成功；所有改动有单测与真机记录，且未破坏 `AiSourceError` 分类与 M11（上传未确认不提交）。
 
@@ -462,8 +465,8 @@
 - [ ] **G-15** ChatGPT、DeepSeek 与 Gemini 各自会话隔离得到验证：Cookie、历史、附件及当前回答互不串线；若实现方式不支持独立会话，须明确列为限制，不能虚假勾选。 → 现状（2026-10-30）：三源会话隔离未验证；当前共用单例 WebView 与 Cookie，若确认不支持独立会话，应列为限制。
 - [x] **G-16** 所有网页源的失败文案经 `AiSourceError` 分类映射，用户能区分“未登录 / 页面未就绪 / 上传失败 / 提交失败 / 超时 / 解析失败 / 页面结构变化”。 → 结果（2026-10-30）：`AiSourceError` 九类 + `MainActivity.toKind()` + 失败文案，用户可区分未登录/未就绪/上传/提交/超时/解析/结构变化。
 - [x] **G-22** `chatgpt_web` 已注册到 `AiSourceId`、`AiSourceRegistry`、预设、设置 UI 与 profile 迁移/保存测试；选用 ChatGPT 网页版时无需 OpenAI API Key，HTTP API 路径不受影响。 → 结果（2026-10-30）：`chatgpt_web` 已注册到 ID / Registry / 预设 / 设置 UI / store 测试；网页源免 OpenAI Key，HTTP API 路径不受影响（AI-164）。
-- [ ] **G-23** ChatGPT 图片上传已在目标 Android WebView 实测：只有确认当前消息出现真实附件预览后才允许提交；paste 派发成功、输入框已填或脚本返回成功均不能代替上传成功。 → 现状（2026-10-30）：ChatGPT 图片上传未在目标 WebView 实测，不能勾选。
-- [ ] **G-24** ChatGPT 登录判据、附件预览选择器及新回答提取已有真实设备证据；未验证项仍明确标记待测，上传失败不得降级为纯文本识牌。 → 现状（2026-10-30）：ChatGPT 无真实设备证据，不能勾选。
+- [ ] **G-23** ChatGPT 图片上传已在目标 Android WebView 实测：只有确认当前消息出现真实附件预览后才允许提交；paste 派发成功、输入框已填或脚本返回成功均不能代替上传成功。 → 现状（2026-10-30）：已实测到账号附件额度用尽，paste 不产生预览，应用正确 `UploadFailed` 且未提交；真实附件成功路径仍无证据，不能勾选。
+- [ ] **G-24** ChatGPT 登录判据、附件预览选择器及新回答提取已有真实设备证据；未验证项仍明确标记待测，上传失败不得降级为纯文本识牌。 → 现状（2026-10-30）：登录判据、回答提取与“上传失败不提交”已有真机证据；附件预览成功路径被额度阻塞，未验证侧仍未复现，不能勾选。
 - [ ] **G-25** ChatGPT / DeepSeek / Gemini 三个网页源均有独立的带图识牌闭环与跨源切换测试记录，包含实测日期、设备、WebView 版本和已知限制。 → 现状（2026-10-30）：缺 ChatGPT 闭环与三源切换记录，不能勾选。
 
 - [x] **G-17** `doc/ui_design.md` 所规定的主工作台、手牌编辑、评分结果、图片输出、AI 源管理和独立网页登录/诊断均已完成阶段 7 验收。 → 结果（2026-10-30）：UI-001~UI-022 全部完成并记录证据；独立网页登录/诊断（UI-018/UI-019）随 AI-169 共享宿主修复在真机闭环（进入登录页 → 返回 → 健康态刷新）。横屏/字体缩放/TalkBack 仍单列在 G-21。
@@ -476,6 +479,7 @@
 
 | 日期 | 任务编号/阶段 | 结果 | 证据或问题 | 后续动作 |
 |---|---|---|---|---|
+| 2026-10-30 | AI-182/183、AI-089 复测 | Gemini 图片上传闭环打通 | 根因：离屏 WebView `document.hasFocus()=false`，Gemini 静默丢弃合成 paste；改走原生触摸 `Upload and tools → Files` 两段点击 + 原生 `onShowFileChooser`，并修正 `[data-test-id*=upload]` 误命中上传工具栏导致的附件假阳性。离屏 `source_e2e` 9 张、`source_e2e_twice` 10→27 张，附件均在提交前确认；DeepSeek 回归 27 张；ChatGPT 真机附件额度用尽，明确报错且不提交。单测与 `assembleDebug` 全绿 | 额度恢复（约 10-31 12:36）后复测 ChatGPT PASTE 与连续两图；补 Gemini 会话过期恢复；三源横向验收 |
 | 2026-10-30 | AI-077/078/095、G-07/G-21 复核 | 生命周期与设置迁移真机通过 | 旋转触发重建但复用同一 WebView（`created` 无重复）；识牌中切后台 8 秒返回仍完成 27 张；旧格式 prefs 迁移后登录态保留；窄屏/1.3× 字体/48dp 触控实测通过；G-07 因上传超时无直接证据、G-21 因 TalkBack 未安装与竖屏锁定保持未勾选 | 剩余 ChatGPT 真机（AI-158~163、G-15/G-23~25）、Gemini 设备回归（AI-089/090）、三源横向与 API（AI-148/149/154/155）、G-10 |
 | 2026-10-30 | 阶段 8 / AI-133/134/168/169/170/178、G-17/G-20 | DeepSeek 离屏端到端与共享宿主三态真机通过 | LIO-N29：`source_e2e` 27 张；`source_e2e_twice` 27→22 张互不串线；可见 1176x1801 → 离屏 1176x2328（innerHeight 776）；冷启动「未挂接」→ 打开 AI 页面 → 返回「网页可用」（同 pid 15623）；单测 321 项全绿 | 继续 ChatGPT 真机（AI-158~163）、旋转/重建（AI-077/078）、三源横向（AI-148/149/154）、G-21 人工取证 |
 | 2026-10-29 | 多源任务清单同步 | 已更新任务定义，待实施/验证 | 根据 `doc/multi_ai_update.md` 纳入 ChatGPT 网页源：新增适配器与单测、真机图片闭环、第五个源预设与设置回归、三网页源横向验收及 G-22~G-25。未将设计要求视为实现或真机验收证据 | 按 AI-156~164 完成适配器、配置与测试；随后执行 AI-158~163 真机闭环并更新多源设计记录 |

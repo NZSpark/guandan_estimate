@@ -57,6 +57,8 @@ object ChatGPTScripts {
           catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
           var last = nodes && nodes.length > 0 ? nodes[nodes.length - 1] : null;
           var text = last ? (last.textContent || '').trim() : '';
+          // 新版助手单元带 "ChatGPT said:" 前缀，只保留正文。
+          text = text.replace(/^ChatGPT said:\s*/i, '').trim();
           var generating = 0, password = 0, loginUi = 0, attach = 0;
           try { generating = document.querySelectorAll(${q(ChatGPTSelectors.generating())}).length; } catch (e) {}
           try { password = document.querySelectorAll(${q(ChatGPTSelectors.password())}).length; } catch (e) {}
@@ -119,53 +121,89 @@ object ChatGPTScripts {
           try { n = box.querySelectorAll(${q(ChatGPTSelectors.attachment())}).length; } catch (e) {
             return JSON.stringify({ ok: false, why: 'selector-error' });
           }
-          return JSON.stringify({ ok: true, attachmentCount: n, attached: n > 0, scoped: true });
+          // AI-183：额度用尽时明确上报，别让 20s 轮询后只剩「无预览」。
+          var quota = false;
+          try {
+            var bodyText = document.body ? (document.body.innerText || '') : '';
+            quota = /reached the limit for file attachments|Get Plus for more uploads|Or wait .* to upload again/i.test(bodyText);
+          } catch (e) {}
+          return JSON.stringify({
+            ok: true, attachmentCount: n, attached: n > 0, scoped: true,
+            quotaBlocked: quota && n === 0,
+            why: quota && n === 0 ? 'upload-quota-exhausted' : null
+          });
         })()
     """.trimIndent()
 
     /**
-     * 填 prompt 并提交。
+     * AI-182：只填文本，不提交。
      *
-     * ProseMirror 不接受直接写 `textContent`：必须派发 `beforeinput` / `input`，
-     * 否则编辑器内部状态不会同步，发送按钮保持禁用。
+     * 顺序依据 ChatGPTBridge `doc/image_upload.md` §5.4：文本先进 composer，
+     * 附件随后附加，最后提交，三者必须属于同一条消息。这里绝不能顺手点发送，
+     * 也不能在附件已经挂上后执行 `selectAll` / 整段覆盖。
      */
-    fun fillAndSubmit(prompt: String): String = """
+    fun fillComposer(prompt: String): String = """
         (function(text) {
           var el;
           try { el = document.querySelector(${q(ChatGPTSelectors.input())}); }
           catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
           if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+
+          function valueOf() {
+            return String(el.value === undefined ? (el.textContent || '') : el.value);
+          }
           try {
             el.focus();
-            if (el.isContentEditable) {
-              el.textContent = text;
-              el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
-            } else {
-              el.value = text;
-              el.dispatchEvent(new Event('input', { bubbles: true }));
-              el.dispatchEvent(new Event('change', { bubbles: true }));
+            if (valueOf().trim() !== text.trim()) {
+              // 先走 ProseMirror 的 paste 处理器；它会把文本写进编辑器 state。
+              try {
+                var dt = new DataTransfer();
+                dt.setData('text/plain', text);
+                el.dispatchEvent(new ClipboardEvent('paste', {
+                  clipboardData: dt, bubbles: true, cancelable: true
+                }));
+              } catch (e) {}
+              if (valueOf().trim() !== text.trim()) {
+                document.execCommand('selectAll', false, null);
+                try { document.execCommand('insertText', false, text); } catch (e) {}
+              }
+              if (valueOf().trim() !== text.trim()) {
+                if (el.isContentEditable) {
+                  el.textContent = text;
+                  el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+                } else {
+                  el.value = text;
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }
             }
           } catch (e) {
             return JSON.stringify({ ok: false, why: 'fill-failed' });
           }
+          var now = valueOf();
+          var filled = now.trim() === text.trim();
+          return JSON.stringify({
+            ok: filled,
+            inputFilled: filled,
+            why: filled ? null : 'fill-not-applied',
+            valueEmpty: String(now || '').trim().length === 0,
+            length: text.length
+          });
+        })(${q(prompt)})
+    """.trimIndent()
 
-          var filled = (el.value === undefined ? el.textContent : el.value) === text;
-
-          // 主路径：Enter keydown。ProseMirror 依赖 keydown 提交。
-          var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
-          var enterSent = false;
-          try {
-            el.dispatchEvent(new KeyboardEvent('keydown', opts));
-            el.dispatchEvent(new KeyboardEvent('keyup', opts));
-            enterSent = true;
-          } catch (e) {}
-
-          // 兜底：点发送按钮。按钮可能在下一帧才可用，用 setTimeout 重试（禁止同步忙等）。
-          var sendCount = 0, clicked = false;
+    /**
+     * AI-182：只点发送。
+     *
+     * 附件已在提交前确认；这里不再重填文本，避免覆盖附件。发送按钮尚未渲染时
+     * 返回 `ok:false, inputFilled:true`，由驱动层轮询后重试。
+     */
+    fun submitComposer(): String = """
+        (function() {
           function findSend() {
             var list = [];
             try { list = document.querySelectorAll(${q(ChatGPTSelectors.send())}); } catch (e) { return null; }
-            sendCount = list.length;
             for (var i = 0; i < list.length; i++) {
               var b = list[i];
               var r = b.getBoundingClientRect();
@@ -174,33 +212,141 @@ object ChatGPTScripts {
             }
             return null;
           }
+          var input = null;
+          try { input = document.querySelector(${q(ChatGPTSelectors.input())}); } catch (e) {}
+          var value = input ? (input.value === undefined ? (input.textContent || '') : input.value) : '';
           var btn = findSend();
+          var clicked = false;
           if (btn) { try { btn.click(); clicked = true; } catch (e) {} }
-          if (!clicked) {
-            var attempts = 0;
-            var waitClick = function() {
-              attempts++;
-              var b = findSend();
-              if (b) { try { b.click(); clicked = true; return; } catch (e) {} }
-              if (attempts < 20) setTimeout(waitClick, 50);
-            };
-            setTimeout(waitClick, 50);
+          return JSON.stringify({
+            ok: clicked,
+            why: clicked ? null : (btn ? 'click-failed' : 'send-not-ready'),
+            inputFilled: true,
+            sendClicked: clicked,
+            sendClickable: !!btn,
+            sendDisabled: !btn,
+            valueEmpty: String(value || '').trim().length === 0,
+            url: location.href
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * 填 prompt 并提交。
+     *
+     * ProseMirror 不接受直接写 `textContent`：必须派发 `beforeinput` / `input`，
+     * 否则编辑器内部状态不会同步，发送按钮保持禁用。
+     *
+     * AI-182：生产流程已改用 [fillComposer] + 上传 + [submitComposer]；
+     * 本函数保留给探针/兼容测试，主流程不再使用。
+     */
+    fun fillAndSubmit(prompt: String): String = """
+        (function(text) {
+          var el;
+          try { el = document.querySelector(${q(ChatGPTSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+
+          function valueOf() {
+            return String(el.value === undefined ? (el.textContent || '') : el.value);
+          }
+          // AI-158：ProseMirror 只认真实的输入事件；写 textContent 不会更新编辑器状态，
+          // 发送按钮因此一直是 disabled（真机实测）。insertText 会走 beforeinput/input。
+          try {
+            el.focus();
+            if (valueOf().trim() !== text.trim()) {
+              // ProseMirror 的粘贴处理器会把文本写进编辑器 state；只改 DOM 不算数。
+              try {
+                var dt = new DataTransfer();
+                dt.setData('text/plain', text);
+                el.dispatchEvent(new ClipboardEvent('paste', {
+                  clipboardData: dt, bubbles: true, cancelable: true
+                }));
+              } catch (e) {}
+              if (valueOf().trim() !== text.trim()) {
+                document.execCommand('selectAll', false, null);
+                try { document.execCommand('insertText', false, text); } catch (e) {}
+              }
+              if (valueOf().trim() !== text.trim()) {
+                if (el.isContentEditable) {
+                  el.textContent = text;
+                  el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+                } else {
+                  el.value = text;
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }
+            }
+          } catch (e) {
+            return JSON.stringify({ ok: false, why: 'fill-failed' });
           }
 
-          var valueNow = (el.value === undefined ? (el.textContent || '') : el.value);
+          var filled = valueOf().trim() === text.trim();
+
+          function findSend() {
+            var list = [];
+            try { list = document.querySelectorAll(${q(ChatGPTSelectors.send())}); } catch (e) { return null; }
+            for (var i = 0; i < list.length; i++) {
+              var b = list[i];
+              var r = b.getBoundingClientRect();
+              var dis = b.disabled === true || b.getAttribute('aria-disabled') === 'true';
+              if (!dis && r.width > 0 && r.height > 0) return b;
+            }
+            return null;
+          }
+
+          // 只认「真的点到了可用按钮」。按钮尚未渲染/仍 disabled 时明确返回失败，
+          // 由驱动层 awaitSendEnabled 轮询后重试一次（此时文本已在，脚本只补点击）。
+          var btn = findSend();
+          var clicked = false;
+          if (btn) { try { btn.click(); clicked = true; } catch (e) {} }
+
+          var valueNow = valueOf();
           return JSON.stringify({
-            ok: true,
+            ok: clicked,
+            why: clicked ? null : (btn ? 'click-failed' : 'send-not-ready'),
             inputFilled: filled,
             valueEmpty: String(valueNow || '').trim().length === 0,
             length: text.length,
-            sentEnter: enterSent,
+            sentEnter: false,
             sendClicked: clicked,
             sendClickable: !!btn,
-            sendCount: sendCount,
-            sendDisabled: sendCount > 0 && !btn,
+            sendCount: btn ? 1 : 0,
+            sendDisabled: !btn,
             url: location.href
           });
         })(${q(prompt)})
+    """.trimIndent()
+
+    /**
+     * AI-158：清空未发送的文本草稿。
+     *
+     * ChatGPT 会把未发送文本持久化为草稿，进程重启或回到首页都会被恢复；
+     * 驱动层快照因此一直判「输入区脏」。这里只清文本，不读内容、不碰附件。
+     */
+    fun clearComposer(): String = """
+        (function() {
+          var el = null;
+          try {
+            el = document.querySelector(
+              "#prompt-textarea, div.ProseMirror[contenteditable='true'], div[contenteditable='true'][data-placeholder]"
+            );
+          } catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          try {
+            el.focus();
+            if (el.isContentEditable) {
+              el.textContent = '';
+              el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+            } else {
+              el.value = '';
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          } catch (e) { return JSON.stringify({ ok: false, why: 'clear-failed' }); }
+          var left = (el.value === undefined ? (el.textContent || '') : el.value);
+          return JSON.stringify({ ok: true, remainingLength: String(left).trim().length });
+        })()
     """.trimIndent()
 
     /** AI-176：只读发送按钮状态，点击前轮询可用性。 */
@@ -241,6 +387,26 @@ object ChatGPTScripts {
           try { el = document.querySelector(${q(ChatGPTSelectors.input())}); }
           catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
           if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          // AI-183：先区分「页面本身收不了」与「事件没派发成功」。
+          // 真机实测：免费账号附件额度用尽时，paste 被静默丢弃，页面上只有额度提示。
+          try {
+            var bodyText = document.body ? (document.body.innerText || '') : '';
+            if (/reached the limit for file attachments|Get Plus for more uploads|Or wait .* to upload again/i.test(bodyText)) {
+              return JSON.stringify({
+                ok: false, dispatched: false, quotaBlocked: true,
+                why: 'upload-quota-exhausted'
+              });
+            }
+          } catch (e) {}
+          // Gemini 同源现象：没有文档焦点时站点会 preventDefault 但丢弃文件。
+          try {
+            if (!document.hasFocus()) {
+              return JSON.stringify({
+                ok: false, dispatched: false, documentNotFocused: true,
+                why: 'document-not-focused'
+              });
+            }
+          } catch (e) {}
           var bytes;
           try {
             var binary = atob(b64);

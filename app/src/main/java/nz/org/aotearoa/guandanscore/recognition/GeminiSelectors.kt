@@ -68,9 +68,13 @@ object GeminiSelectors {
     /**
      * 输入区附件预览。与 `GeminiScripts.verifyAttachment()` 的 previews 判据保持一致；
      * 快照脚本用它回答“发送前是否已有待发送图片”（AI-042）。
+     *
+     * AI-182：**不要**匹配 `[data-test-id*='upload']`——上传工具栏按钮也带该字段，
+     * 真机实测会恒判 attached=true，使上传确认形同虚设。
      */
     const val ATTACHMENT =
-        "[data-test-id*='attachment'], [data-test-id*='upload'], .attachment-preview, .file-preview"
+        "uploader-file-preview, .file-preview-chip, gem-media-attachment, " +
+            ".attachment-preview-wrapper img, [data-test-id*='attachment']"
 
     /** 生成中/停止控件，仅作辅助信号。 */
     val GENERATING_CANDIDATES = listOf(

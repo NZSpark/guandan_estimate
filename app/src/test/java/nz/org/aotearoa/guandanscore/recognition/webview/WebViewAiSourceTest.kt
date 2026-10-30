@@ -67,6 +67,67 @@ class WebViewAiSourceTest {
         assertTrue(pages.calls.indexOf("verifyAttachment") < pages.calls.indexOf("fillAndSubmit"))
     }
 
+    /**
+     * AI-182：填文本 → 上传并在**提交前**确认附件 → 点发送。
+     * 顺序来自 GeminiBridge / ChatGPTBridge 的图片直传文档。
+     */
+    @Test
+    fun splitFlowVerifiesAttachmentBeforeSubmit() {
+        val pages = FakePageOps().apply {
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val result = source(pages, FakeSiteAdapter(uploadsAfterFill = true)).recognize(request())
+        assertEquals(2, result.size)
+        assertEquals(1, pages.calls.count { it == "fillComposer" })
+        assertEquals(1, pages.calls.count { it == "submitComposer" })
+        assertFalse(pages.calls.contains("fillAndSubmit"))
+        assertTrue(pages.calls.indexOf("fillComposer") < pages.calls.indexOf("verifyAttachment"))
+        assertTrue(pages.calls.indexOf("verifyAttachment") < pages.calls.indexOf("submitComposer"))
+    }
+
+    /** AI-182：附件确认失败时绝不允许提交。 */
+    @Test
+    fun splitFlowUploadFailureNeverSubmits() {
+        val pages = FakePageOps().apply {
+            attachmentVerified = false
+            pasteDispatched = false
+        }
+        assertThrows(AiSourceError.UploadFailed::class.java) {
+            source(pages, FakeSiteAdapter(uploadsAfterFill = true)).recognize(request())
+        }
+        assertFalse(pages.calls.contains("submitComposer"))
+    }
+
+    /** AI-182：发送按钮延迟可用时只重试点击，不重填文本（重填会覆盖附件）。 */
+    @Test
+    fun splitSubmitRetriesWithoutRefilling() {
+        val pages = FakePageOps().apply {
+            submitComposerOutcomeSequence = listOf(
+                SubmitOutcome.fail("send-not-ready", inputFilled = true),
+                SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
+            )
+            sendEnabled = true
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        source(pages, FakeSiteAdapter(uploadsAfterFill = true)).recognize(request())
+        assertEquals(1, pages.calls.count { it == "fillComposer" })
+        assertEquals(2, pages.calls.count { it == "submitComposer" })
+    }
+
+    /** AI-183：页面给出的上传拒绝原因（额度用尽等）要带进错误文案。 */
+    @Test
+    fun uploadFailureCarriesPageReason() {
+        val pages = FakePageOps().apply {
+            attachmentVerified = false
+            pasteDispatched = false
+            uploadFailure = "站点上传额度已用尽，需等待额度恢复或升级账号"
+        }
+        val e = assertThrows(AiSourceError.UploadFailed::class.java) {
+            source(pages).recognize(request())
+        }
+        assertTrue(e.message!!.contains("额度"))
+    }
+
     /** 上传未被确认时不得提交（AI-123）。 */
     @Test
     fun uploadRejectedNeverSubmits() {
@@ -96,6 +157,36 @@ class WebViewAiSourceTest {
         val result = source(pages, adapter).recognize(request())
         assertEquals(2, result.size)
         assertEquals(1, verifyCount)
+    }
+
+    /** AI-182：PASTE 路径不得顺手走 FILE_CHOOSER 的准备/原生触摸。 */
+    @Test
+    fun pasteStrategyDoesNotPrepareFileChooser() {
+        val pages = FakePageOps().apply {
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val adapter = FakeSiteAdapter(
+            preferredUpload = UploadStrategy.PASTE,
+            supportedUploads = setOf(UploadStrategy.PASTE)
+        )
+        source(pages, adapter).recognize(request())
+        assertEquals(1, pages.pasteCalls)
+        assertFalse(pages.calls.contains("prepareFileChooserUpload"))
+    }
+
+    /** AI-182：FILE_CHOOSER 必须先准备上传，再验证预览（曾漏调导致必然失败）。 */
+    @Test
+    fun fileChooserStrategyPreparesUploadBeforeVerifying() {
+        val pages = FakePageOps().apply {
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val adapter = FakeSiteAdapter(
+            preferredUpload = UploadStrategy.FILE_CHOOSER,
+            supportedUploads = setOf(UploadStrategy.FILE_CHOOSER)
+        )
+        source(pages, adapter).recognize(request())
+        assertTrue(pages.calls.contains("prepareFileChooserUpload"))
+        assertTrue(pages.calls.indexOf("prepareFileChooserUpload") < pages.calls.indexOf("verifyAttachment"))
     }
 
     /** AI-124：未声明为已验证的策略不得被驱动层自行尝试。 */
@@ -338,6 +429,37 @@ class WebViewAiSourceTest {
         assertTrue(e.message!!.contains("残留"))
         assertFalse(pages.calls.contains("fillAndSubmit"))
         assertFalse(pages.calls.contains("verifyAttachment"))
+    }
+
+    /** AI-158：站点恢复草稿、新会话确认失败时，只清纯文本残留并用快照复验。 */
+    @Test
+    fun restoredTextDraftIsClearedWhenNewConversationFails() {
+        val pages = FakePageOps().apply {
+            baselineSequence = listOf(
+                AnswerSnapshot(0, "", false, false, "", inputText = "恢复的草稿"),
+                AnswerSnapshot(0, "", false, false, "")
+            )
+            startNewConversationResult = false
+            clearComposerResult = true
+            answerSequence = listOf(AnswerSnapshot(1, cardsJson, false, false, ""))
+        }
+        val result = source(pages).recognize(request())
+        assertEquals(2, result.size)
+        assertEquals(1, pages.clearComposerCalls)
+        assertTrue(pages.calls.indexOf("clearComposer") < pages.calls.indexOf("fillAndSubmit"))
+    }
+
+    /** 附件残留不允许用清文本兜底：必须新建会话，否则可能把旧图带进去。 */
+    @Test
+    fun attachmentResidueNeverClearsComposer() {
+        val pages = FakePageOps().apply {
+            baselineSnapshot = AnswerSnapshot(0, "", false, false, "", attached = true)
+            startNewConversationResult = false
+            clearComposerResult = true
+        }
+        assertThrows(AiSourceError.SubmitFailed::class.java) { source(pages).recognize(request()) }
+        assertEquals(0, pages.clearComposerCalls)
+        assertFalse(pages.calls.contains("fillAndSubmit"))
     }
 
     /** 新会话建立后输入区仍脏（页面未真正重置）→ 仍然失败，不赌运气。 */

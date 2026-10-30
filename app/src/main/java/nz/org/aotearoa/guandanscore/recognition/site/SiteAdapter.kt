@@ -134,6 +134,26 @@ interface SiteAdapter {
      */
     val uploadsInsideSubmit: Boolean get() = false
 
+    /**
+     * 附件必须在文本填入之后、提交之前挂上（GeminiBridge / ChatGPTBridge
+     * `doc/image_upload.md` 的共同不变量）。
+     *
+     * 为 true 时驱动层按 `fillComposer → 上传并确认 → submitComposer` 三段执行，
+     * 不再调用 [fillAndSubmitScript]。这样附件确认发生在提交之前，
+     * 提交后输入区已被清空也不会影响判定；同时避免填文本的 selectAll
+     * 把刚挂上的附件一并覆盖。
+     */
+    val uploadsAfterFill: Boolean get() = false
+
+    /** 只把 prompt 写进输入区，不提交；[uploadsAfterFill] 为 true 时使用。 */
+    fun fillComposerScript(prompt: String): String = ""
+
+    /** 只点击发送；[uploadsAfterFill] 为 true 时使用。 */
+    fun submitComposerScript(): String = ""
+
+    /** 解析 [fillComposerScript] 的结果；默认以 `ok` 为准。 */
+    fun parseFillResult(json: JSONObject): Boolean = json.optBoolean("ok", false)
+
     /** 一次注入完成“填 prompt + 挂附件 + 点发送”。 */
     fun fillAndSubmitScript(prompt: String, fileName: String, mimeType: String, base64: String): String
 
@@ -206,6 +226,15 @@ interface SiteAdapter {
     fun pageFixScript(): String = ""
 
     /**
+     * AI-158：清空 composer 里**未发送的文本草稿**（不碰附件、不点击发送）。
+     *
+     * 只用于「站点会把上次未发送文本恢复成草稿」的情况：此时新建会话也无法得到
+     * 干净输入区，驱动层会在快照确认只剩文本残留时调用它，并重新读快照验收。
+     * 返回空串表示站点不支持，驱动层不得假定清空成功。
+     */
+    fun clearComposerScript(): String = ""
+
+    /**
      * 点击页面自身的上传入口（打开文件选择器）。
      * 返回空串表示该站点不支持 FILE_CHOOSER 路径。
      *
@@ -220,6 +249,15 @@ interface SiteAdapter {
      * 返回空串表示该站点不需要原生触摸路径。
      */
     fun uploadIconScript(): String = ""
+
+    /**
+     * 有些站点的上传入口是一个菜单：原生触摸 [uploadIconScript] 只是打开菜单，
+     * 还要再点一次「Files / 相册」才会触发 `onShowFileChooser`。
+     *
+     * 返回第二次点击点的视口坐标（与 [uploadIconScript] 同格式）；
+     * 返回空串表示一次点击即可（默认）。
+     */
+    fun uploadMenuIconScript(): String = ""
 
     fun parseSubmitResult(json: JSONObject): SubmitOutcome
 

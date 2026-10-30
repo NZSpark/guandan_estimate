@@ -172,3 +172,22 @@
 **约束**：任何新页面/诊断入口都必须经 `WebViewHost.get(context)`，不得 `WebView(context)` 自建；父容器变更必须集中实现，页面代码不得直接 `addView` / `removeView`。附件与提交的判据只能来自 DOM 读数；新增站点适配器若 DOM 层级不同，须在 `verifyAttachmentScript()` 中显式限定作用域，不能退回全局计数。
 
 **状态**：Active
+
+---
+
+## ADR-0016 · 2026-10-30 · 附件必须在填文本之后、提交之前确认；上传只走已验证路径
+
+**决策**：
+
+1. `SiteAdapter` 新增 `uploadsAfterFill`、`fillComposerScript()`、`submitComposerScript()`、`uploadMenuIconScript()`；生产流程固定为「填文本 → 上传并确认附件 → 点发送」。`fillAndSubmitScript()` 仅保留给探针与兼容路径，ChatGPT / Gemini 的生产识牌不再使用。
+2. 上传成功后只重试点击发送，**禁止重填文本**；重填可能覆盖已挂附件，也违背「附件与文本属于同一条消息」。
+3. 上传策略只允许适配器 `supportedUploads` 声明且真机验证过的路径。Gemini 使用 `FILE_CHOOSER`（原生触摸 `Upload and tools → Files`），ChatGPT 暂用 `PASTE`；合成 paste 在离屏宿主没有 `document` 焦点时会被站点丢弃，不能作为默认路径。
+4. `FILE_CHOOSER` 必须先调用 `prepareFileChooserUpload()` 写缓存文件、设置 pending URI、原生触摸入口，再轮询附件预览；只验证预览而不准备上传视为缺陷。
+5. 附件判据必须只匹配真实预览（如 `uploader-file-preview`、`gem-media-attachment`），禁止使用 `[data-test-id*="upload"]` 之类会命中工具栏按钮的宽选择器。
+6. 页面给出的上传拒绝原因（额度用尽、未获得焦点）必须透传到 `UploadFailed`，不得统一报「未确认附件预览」；额度用尽时立即失败，不空等轮询超时。
+
+**理由**：两份网页图片直传文档的共同不变量是「文本先进入 composer，附件随后附加，最后提交」，且附件成功必须由页面预览独立确认。Android 离屏宿主的 `document.hasFocus()` 为 false，Gemini 会对合成 paste `preventDefault` 却不挂附件；同时旧附件选择器命中了 6 个上传工具栏按钮，令 `verifyAttachment` 恒为 true。两者叠加会让流水线在“没有图片”的情况下提交纯文本，模型输出无法对应输入图。
+
+**约束**：新增网页源若上传入口是二级菜单，必须提供第二次点击坐标并等菜单动画完成；附件坐标会随输入/布局变化，取坐标前必须等布局稳定，菜单打不开要重新定位而不是盲点。附件确认、提交动作与失败分类的证据必须来自 DOM 读数，不得用脚本 `dispatchEvent` 返回值或“已点击”冒充成功。
+
+**状态**：Active

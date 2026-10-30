@@ -13,7 +13,9 @@ class FakeSiteAdapter(
     override val homeUrl: String = "https://example.invalid/chat",
     /** 假适配器默认声明两条都可用，便于测试回退逻辑本身（AI-124）。 */
     override val supportedUploads: Set<UploadStrategy> =
-        setOf(UploadStrategy.PASTE, UploadStrategy.FILE_CHOOSER)
+        setOf(UploadStrategy.PASTE, UploadStrategy.FILE_CHOOSER),
+    /** AI-182：模拟「填文本 → 上传并确认 → 提交」的站点。 */
+    override val uploadsAfterFill: Boolean = false
 ) : SiteAdapter {
 
     override val siteKey: String = "fake_site"
@@ -24,6 +26,12 @@ class FakeSiteAdapter(
         mimeType: String,
         base64: String
     ): String = "fake"
+
+    override fun fillComposerScript(prompt: String): String = "fake"
+
+    override fun submitComposerScript(): String = "fake"
+
+    override fun parseFillResult(json: JSONObject): Boolean = true
 
     override fun snapshotScript(): String = "fake"
 

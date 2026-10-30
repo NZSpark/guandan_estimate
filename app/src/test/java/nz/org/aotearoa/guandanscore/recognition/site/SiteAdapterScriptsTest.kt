@@ -1,6 +1,7 @@
 package nz.org.aotearoa.guandanscore.recognition.site
 
 import nz.org.aotearoa.guandanscore.recognition.GeminiScripts
+import nz.org.aotearoa.guandanscore.recognition.GeminiSelectors
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -292,7 +293,10 @@ class SiteAdapterScriptsTest {
             GeminiAdapter().diagnoseScript(),
             GeminiAdapter().snapshotScript(),
             GeminiAdapter().verifyAttachmentScript(),
-            GeminiAdapter().fillAndSubmitScript("hi", "a.jpg", "image/jpeg", "QUJD")
+            GeminiAdapter().fillAndSubmitScript("hi", "a.jpg", "image/jpeg", "QUJD"),
+            GeminiAdapter().fillComposerScript("hi"),
+            GeminiAdapter().submitComposerScript(),
+            GeminiAdapter().uploadMenuIconScript()
         )
         scripts.forEach {
             assertTrue(it.contains("JSON.stringify"))
@@ -317,11 +321,32 @@ class SiteAdapterScriptsTest {
 
     // ---- Gemini 图片上传 ----
 
+    /**
+     * AI-182 真机结论：离屏宿主没有 document 焦点，Gemini 会丢弃合成 paste；
+     * 生产路径改为原生文件选择，并且填文本、上传、提交三段拆开。
+     */
     @Test
-    fun geminiUploadsInsideSubmitWithPasteStrategy() {
+    fun geminiUsesFileChooserAfterFill() {
         val a = GeminiAdapter()
-        assertTrue(a.uploadsInsideSubmit)
-        assertEquals(UploadStrategy.PASTE, a.preferredUpload)
+        assertTrue(a.uploadsAfterFill)
+        assertFalse(a.uploadsInsideSubmit)
+        assertEquals(UploadStrategy.FILE_CHOOSER, a.preferredUpload)
+        assertEquals(setOf(UploadStrategy.FILE_CHOOSER), a.supportedUploads)
+        assertTrue(a.uploadMenuIconScript().isNotEmpty())
+    }
+
+    /** AI-182：拆开的两个脚本各自给出可解析的完成证据。 */
+    @Test
+    fun geminiSplitScriptsCarryPositiveEvidence() {
+        val fill = GeminiScripts.fillComposer("hi")
+        assertTrue(fill.contains("inputFilled"))
+        assertTrue(fill.contains("execCommand('insertText'"))
+
+        val submit = GeminiScripts.submit()
+        assertTrue(submit.contains("sendClicked"))
+        assertTrue(submit.contains("send-button-disabled"))
+        assertTrue(submit.contains("btn.click()"))
+        assertFalse("submit must not rewrite the composer", submit.contains("textContent ="))
     }
 
     @Test
@@ -401,6 +426,17 @@ class SiteAdapterScriptsTest {
         assertTrue(script.contains("composer-not-found"))
         assertTrue(script.contains("box.querySelectorAll"))
         assertTrue(script.contains("thumbCount"))
+        assertTrue(script.contains("data-node-type"))
+    }
+
+    /** AI-182：上传工具栏按钮也带 uploader- 前缀，绝不能算附件。 */
+    @Test
+    fun geminiAttachmentCheckIgnoresUploaderToolbar() {
+        assertFalse(GeminiSelectors.ATTACHMENT.contains("data-test-id*='upload'"))
+        val script = GeminiScripts.verifyAttachment()
+        assertFalse(script.contains("[data-test-id*=\"upload\"]"))
+        assertTrue(script.contains("uploader-file-preview"))
+        assertTrue(script.contains("gem-media-attachment"))
     }
 
     // ---- ChatGPT（AI-157：结构同构，但未真机验证）----
@@ -413,7 +449,10 @@ class SiteAdapterScriptsTest {
             ChatGPTScripts.loginCheck(),
             ChatGPTScripts.verifyAttachment(),
             ChatGPTScripts.fillAndSubmit("hi"),
+            ChatGPTScripts.fillComposer("hi"),
+            ChatGPTScripts.submitComposer(),
             ChatGPTScripts.sendState(),
+            ChatGPTScripts.clearComposer(),
             ChatGPTScripts.pasteImage("a.jpg", "image/jpeg", "QUJD")
         )
         scripts.forEach {
@@ -422,12 +461,38 @@ class SiteAdapterScriptsTest {
         }
     }
 
+    /** AI-182：ChatGPT 也按「填文本 → 粘贴并确认 → 提交」拆分。 */
+    @Test
+    fun chatGptUsesSplitFillAndSubmit() {
+        val a = ChatGPTAdapter()
+        assertTrue(a.uploadsAfterFill)
+        val fill = ChatGPTScripts.fillComposer("hi")
+        assertTrue(fill.contains("inputFilled"))
+        assertFalse("fill must not click send", fill.contains("btn.click()"))
+        val submit = ChatGPTScripts.submitComposer()
+        assertTrue(submit.contains("sendClicked"))
+        assertTrue(submit.contains("inputFilled: true"))
+    }
+
+    /** AI-183：额度用尽必须能识别，而不是干等 20s 后报「无预览」。 */
+    @Test
+    fun chatGptReportsQuotaExhaustion() {
+        val paste = ChatGPTScripts.pasteImage("a.jpg", "image/jpeg", "QUJD")
+        assertTrue(paste.contains("quotaBlocked"))
+        assertTrue(paste.contains("upload-quota-exhausted"))
+        val verify = ChatGPTScripts.verifyAttachment()
+        assertTrue(verify.contains("quotaBlocked"))
+    }
+
     @Test
     fun chatGptPromptWithSpecialCharsDoesNotBreakScript() {
         val script = ChatGPTScripts.fillAndSubmit(tricky)
         assertTrue(script.contains("\\\""))
         assertFalse(script.contains("while ("))
-        assertTrue("send enabled is polled asynchronously", script.contains("setTimeout(waitClick"))
+        // AI-158：ProseMirror 只认真正的输入事件，必须走 insertText 而不是写 textContent。
+        assertTrue("uses real input events", script.contains("execCommand('insertText'"))
+        // 按钮未就绪时明确失败，由驱动层轮询后重试，不在脚本里盲点 disabled 按钮。
+        assertTrue("reports not-ready instead of faking submit", script.contains("send-not-ready"))
     }
 
     @Test

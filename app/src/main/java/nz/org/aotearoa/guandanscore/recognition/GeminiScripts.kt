@@ -40,17 +40,81 @@ object GeminiScripts {
      * 坐标是 CSS 像素。若按钮尚未渲染（Angular 异步），返回 `ok:false, why:'upload-tools-not-found'`，
      * 由驱动层重试；绝不在此处同步忙等。
      */
+    /**
+     * AI-182：上传菜单里的「Files」项。
+     *
+     * 真机实测：`Upload and tools` 只打开工具箱，原生触摸「Files」才触发
+     * `onShowFileChooser`；「Photos」走系统相册，不作为文件回填入口。
+     * 只返回视口内可见的项，避免点到动画中的离屏副本。
+     */
+    fun locateUploadMenuIcon(): String = """
+        (function() {
+          var all;
+          try { all = document.querySelectorAll('button, [role="button"], a, [role="menuitem"]'); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          function labelOf(el) {
+            return ((el.getAttribute('aria-label') || '') + ' ' + (el.innerText || '')).toLowerCase();
+          }
+          var best = null;
+          for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            var label = labelOf(el);
+            var text = (el.innerText || '').trim().toLowerCase();
+            // 只点「Files / 文件」。Photos 走系统相册，不保证触发 onShowFileChooser。
+            var isFiles = text === 'files' || text === '文件' ||
+              label.indexOf('files') >= 0 || label.indexOf('文件') >= 0;
+            if (!isFiles) continue;
+            var r = el.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            if (r.left < 0 || r.top < 0) continue;
+            if (r.left + r.width > window.innerWidth || r.top + r.height > window.innerHeight) continue;
+            var score = 1;
+            if (!best || score > best.score) best = { el: el, r: r, score: score, label: label };
+          }
+          if (!best) return JSON.stringify({ ok: false, why: 'upload-menu-item-not-found' });
+          return JSON.stringify({
+            ok: true,
+            x: Math.round(best.r.left + best.r.width / 2),
+            y: Math.round(best.r.top + best.r.height / 2),
+            w: Math.round(best.r.width),
+            h: Math.round(best.r.height),
+            innerHeight: window.innerHeight,
+            innerWidth: window.innerWidth,
+            dpr: window.devicePixelRatio || 1
+          });
+        })()
+    """.trimIndent()
+
     fun locateUploadIcon(): String = """
         (function() {
           function center(r) {
             return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
                      w: Math.round(r.width), h: Math.round(r.height), left: r.left, top: r.top };
           }
+          // AI-182：必须先锁定输入区，再找上传入口。会话页面上还有别的
+          // aria-label 含 Upload 的按钮（真机曾点到 y=148 的错误目标）。
+          var input = null;
+          try { input = document.querySelector(${quote(GeminiSelectors.input())}); } catch (e) {}
+          var area = null;
+          if (input) {
+            try { area = input.closest('[data-node-type="input-area"]'); } catch (e) {}
+          }
+          var scopes = area ? [area, document] : [document];
           var el = null;
-          try { el = document.querySelector(${quote(GeminiSelectors.uploadTools())}); } catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          for (var s = 0; s < scopes.length && !el; s++) {
+            try { el = scopes[s].querySelector('button[aria-label="Upload and tools"], button[aria-label*="Upload and tools" i]'); }
+            catch (e) { el = null; }
+            if (!el) {
+              try { el = scopes[s].querySelector(${quote(GeminiSelectors.uploadTools())}); }
+              catch (e) { el = null; }
+            }
+          }
           if (!el) return JSON.stringify({ ok: false, why: 'upload-tools-not-found' });
           var r = el.getBoundingClientRect();
           if (r.width <= 0 || r.height <= 0) return JSON.stringify({ ok: false, why: 'upload-tools-hidden' });
+          if (r.left < 0 || r.top < 0 || r.top + r.height > window.innerHeight) {
+            return JSON.stringify({ ok: false, why: 'upload-tools-offscreen' });
+          }
           var c = center(r);
           c.ok = true;
           c.innerHeight = window.innerHeight;
@@ -204,16 +268,87 @@ object GeminiScripts {
     """.trimIndent()
 
 
-    /** 点击发送按钮。 */
+    /**
+     * AI-182：只填文本，不提交。
+     *
+     * 与 [fillPasteAndSubmit] 的写入段一致：Quill / Angular 只认真实输入事件，
+     * 直接写 textContent 不会让发送按钮渲染。这里先把选区覆盖到整个编辑器，
+     * 用 `insertText` 产生 beforeinput/input；失败才退回直接赋值。
+     * 必须在附件粘贴**之前**调用，避免把附件节点一起覆盖。
+     */
+    fun fillComposer(prompt: String): String = """
+        (function(text) {
+          var el;
+          try { el = document.querySelector(${quote(GeminiSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          try {
+            el.focus();
+            if (el.isContentEditable) {
+              var sel = window.getSelection();
+              var range = document.createRange();
+              range.selectNodeContents(el);
+              sel.removeAllRanges();
+              sel.addRange(range);
+              var inserted = false;
+              try { inserted = document.execCommand('insertText', false, text); } catch (e) {}
+              if (!inserted) {
+                el.textContent = text;
+                el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+              }
+            } else if (el.tagName && el.tagName.toLowerCase() === 'textarea') {
+              var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+              setter.call(el, text);
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+            } else {
+              return JSON.stringify({ ok: false, why: 'unsupported-input-type' });
+            }
+          } catch (e) {
+            return JSON.stringify({ ok: false, why: 'fill-failed' });
+          }
+          var now = String(el.value === undefined ? (el.textContent || '') : el.value);
+          var filled = now.trim() === text.trim();
+          return JSON.stringify({
+            ok: filled,
+            inputFilled: filled,
+            why: filled ? null : 'fill-not-applied',
+            valueEmpty: now.trim().length === 0
+          });
+        })(${quote(prompt)})
+    """.trimIndent()
+
+    /**
+     * AI-182：只点发送。
+     *
+     * 返回与 `fillAndSubmit` 同构的提交证据；按钮尚未渲染时 `ok:false` +
+     * `inputFilled:true`，由驱动层等发送按钮可用后重试，绝不对 disabled 按钮盲点。
+     */
     fun submit(): String = """
         (function() {
           var btn;
           try { btn = document.querySelector(${quote(GeminiSelectors.send())}); }
-          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
-          if (!btn) return JSON.stringify({ ok: false, why: 'send-button-not-found' });
-          if (btn.disabled) return JSON.stringify({ ok: false, why: 'send-button-disabled' });
-          btn.click();
-          return JSON.stringify({ ok: true });
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error', inputFilled: true }); }
+          if (!btn) {
+            return JSON.stringify({
+              ok: false, why: 'send-button-not-found', inputFilled: true,
+              sendClickable: false, sendDisabled: true
+            });
+          }
+          if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') {
+            return JSON.stringify({
+              ok: false, why: 'send-button-disabled', inputFilled: true,
+              sendClickable: false, sendDisabled: true
+            });
+          }
+          var clicked = false;
+          try { btn.click(); clicked = true; } catch (e) {
+            return JSON.stringify({ ok: false, why: 'click-failed', inputFilled: true });
+          }
+          return JSON.stringify({
+            ok: clicked, why: clicked ? null : 'send-not-dispatched',
+            inputFilled: true, sendClicked: clicked,
+            sendClickable: true, sendDisabled: false
+          });
         })()
     """.trimIndent()
 
@@ -439,14 +574,22 @@ object GeminiScripts {
           catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
           if (!input) return JSON.stringify({ ok: false, why: 'composer-not-found' });
 
-          var box = input;
-          for (var i = 0; i < 6 && box && box.parentElement; i++) { box = box.parentElement; }
+          // AI-182：优先用 Gemini 的输入区根节点，避免把工具栏按钮算成附件。
+          var box = null;
+          try { box = input.closest('[data-node-type="input-area"]'); } catch (e) {}
+          if (!box) {
+            box = input;
+            for (var i = 0; i < 6 && box && box.parentElement; i++) { box = box.parentElement; }
+          }
           if (!box) return JSON.stringify({ ok: false, why: 'no-container' });
 
           var previews = 0, thumbs = 0;
           try {
+            // 只认真实附件预览。上传工具栏按钮的 data-test-id 也含 upload，
+            // 用它做判据会恒判 attached=true（真机实测，AI-182）。
             previews = box.querySelectorAll(
-              '[data-test-id*="attachment"], [data-test-id*="upload"], .attachment-preview, .file-preview'
+              'uploader-file-preview, .file-preview-chip, gem-media-attachment, ' +
+              '.attachment-preview-wrapper img, [data-test-id*="attachment"]'
             ).length;
           } catch (e) {}
           try {

@@ -389,17 +389,45 @@ ChatGPTBridge 的图片流程为“解析图片 → 获取图片字节 → 创�
 | 连续两图 / 追问 | `--es auto source_e2e_twice`（case3.png → case14.jpg，同一 `WebViewAiSource`）：第一轮 27 张、第二轮 22 张，两轮牌面列表不同，未串上一轮回答，第二轮也未带上一轮附件 |
 | 首轮耗时 | 离屏冷启动到解析完成约 10 秒（11:43:00 提交 → 11:43:11 `cards=27`）；两轮合计约 19 秒，均在默认超时内 |
 
-#### 5.6.2 Gemini（回归基线）
+#### 5.6.2 Gemini（2026-10-30 二次真机，上传已闭环）
 
-- 真机可登录；`rich-textarea [contenteditable]` + `Send message` + 合成 paste 闭环历史通过。
-- `Upload and tools` 点击只弹网页自渲染面板（Photos / Files / Drive），**不是**系统文件选择器；`FILE_CHOOSER` 需再点面板二级入口，尚未实现自动化。
-- Gemini 的 `supportedUploads` 仍只有 `PASTE`（AI-124）。
+- 真机可登录；`rich-textarea [contenteditable]` + `Send message`。
+- **合成 paste 在离屏宿主不可用**：页面会 `preventDefault` 但不挂附件。用 CDP 对比确认根因是
+  `document.hasFocus() === false`；真实触摸后同一脚本能把 1×1 PNG 挂上，说明不是 `DataTransfer`/
+  `File` 构造问题。生产识牌跑在 1×1 离屏锚点，不能依赖 paste。
+- **上传改走原生文件选择**：原生触摸 `Upload and tools`（约 `56,725`）→ 工具箱展开 → 再点
+  `Files`（约 `87,456`）→ 真实触发 `onShowFileChooser`，回填 FileProvider URI 后输入区出现
+  `uploader-file-preview` 缩略图（约 112×48，blob src）。工具箱展开约 1.5s，驱动层轮询坐标。
+- **附件判据修正**：旧 `[data-test-id*="upload"]` 会命中 6 个上传工具栏按钮，导致 `verifyAttachment`
+  恒为 true（上传未成功也继续提交）。现在只认 `uploader-file-preview` / `.file-preview-chip` /
+  `gem-media-attachment` / 预览缩略图；上传前 sample 为 `previewCount=0`，回填后为
+  `previewCount=3, thumbCount=1, attached=true`，确认发生在提交之前。
+- **提交顺序**：`fillComposer → 上传并确认 → submitComposer` 三段拆分（`uploadsAfterFill`）。
+  填入文本后工具栏会重排（图标从 y=652 移到 725），驱动层等 400ms 再取坐标，菜单没打开时重新定位重试。
+- **单图闭环**（2026-10-30 13:35，离屏）：`SOURCE_E2E_OK cards=9 status=Offscreen`，附件确认在提交前。
+- **连续两图**（2026-10-30 13:43，同一 `WebViewAiSource`）：第一轮 10 张、第二轮 27 张，
+  `SOURCE_E2E_TWICE_OK first=10 second=27 status=Offscreen`；第二轮基线 `inputChars=0 attached=false`，
+  未残留第一张附件，也未串上一轮回答。
+- `supportedUploads = {FILE_CHOOSER}`（AI-124/182）。
 
-#### 5.6.3 ChatGPT（未真机验证）
+#### 5.6.3 ChatGPT（2026-10-30 首次真机）
 
-- `ChatGPTAdapter` / `ChatGPTScripts` / `ChatGPTSelectors` 与五源注册已落地，单测覆盖脚本编码、提交证据判据、附件判据与发送状态解析。
-- **尚未**在目标设备登录并核对选择器命中数，也未验证 PASTE 附件预览；因此 README 与配置页均不得写成“已验证可用”。
-- `supportedUploads = {PASTE}`，不启用 `FILE_CHOOSER` 回退，避免把别的站点路径当既成事实。
+- **已登录**（`chatgpt.com`）：diagnose 命中 `input=1`（`#prompt-textarea`，contenteditable div）、`send=1`、`fileInput=4`、`readyState=complete`；`password=0`、`loginIndicator=0`。未登录侧未复现（不能退出用户账号核对）。
+- **DOM 结构已变**：消息不再有 `article` / `data-message-author-role`；助手消息为
+  `div[data-content-search-unit-key$=":assistant"]`（key 形如 `fallback-turn-0:1:assistant`），
+  文本以 `ChatGPT said:` 开头。发送按钮为 `<button type="submit" aria-label="Send">`（无 `data-testid`）。
+- **草稿会恢复**：未发送文本被站点持久化，进程重启/回首页都会回到 composer；新建会话也清不掉，
+  驱动层必须显式清空文本（附件仍只能靠新会话）。
+- **ProseMirror 输入**：只写 `textContent` 不更新编辑器状态，发送按钮保持不可用；需要真实输入事件
+  （粘贴 `text/plain` + `execCommand insertText` 兜底）。
+- **单次闭环通过**：`SOURCE_E2E_OK cards=27 status=Offscreen`（12:36）。
+- **2026-10-30 下午定位到真实阻塞**：页面提示 `You've reached the limit for file attachments.`，
+  `Get Plus for more uploads` / `Or wait ... to upload again`（约 2026-10-31 12:36 恢复）。额度用尽时
+  paste 被静默丢弃，外形与“选择器失效”完全相同；这不是代码路径问题，换账号或等额度恢复才能验收。
+- **上传顺序已按文档拆分**：填文本 → 合成 paste → 提交前确认附件 → 点发送（`uploadsAfterFill`）；
+  额度用尽在 `verifyAttachment` 首次采样即识别并立即失败，不再等满 20s，也不会提交纯文本。
+- `supportedUploads = {PASTE}`；`FILE_CHOOSER` 尚未验证，不启用回退。附件闭环仍**未**通过，
+  不得标为“已验证可用”。
 
 #### 5.6.5 共享宿主、三态切换与离屏提交（2026-10-30 真机）
 
@@ -415,6 +443,16 @@ ChatGPTBridge 的图片流程为“解析图片 → 获取图片字节 → 创�
 | 切后台中识牌 | 提交后 5 秒按 Home（宿主 `detached`），8 秒后返回重新 `Attached 1176x1801`，任务继续并完成 `cards=27`；健康结论必须以回答更新为准 |
 | 进程重启 | `force-stop` + `kill` 后新 pid 首启 `WebView created`，DeepSeek 登录态保留；主界面先报「未挂接」，打开 AI 页面后恢复「网页可用」 |
 | 设置迁移 | 旧格式 prefs（仅 provider/endpoint/model/api_key）启动后迁移到 DeepSeek 默认 profile，随后健康检查仍为「网页可用」；代码无 Cookie / WebStorage 清理调用 |
+
+#### 5.6.6 AI-182/183：拆分提交与上传失败原因（2026-10-30）
+
+| 项目 | 结果 |
+|---|---|
+| 三段流程 | `SiteAdapter.uploadsAfterFill` + `fillComposerScript` + `submitComposerScript`；驱动层按「填文本 → 上传并确认 → 点发送」执行，附件确认严格发生在提交前 |
+| 重试边界 | 发送按钮未就绪只重试点击，不重填文本，避免覆盖已挂附件 |
+| FILE_CHOOSER 缺陷 | `WebViewAiSource.tryUpload` 之前直接 `verifyAttachment`，从未调用 `prepareFileChooserUpload`；Gemini 改走该路径后立刻暴露，已修复并加单测 |
+| 失败原因透传 | 页面返回 `quotaBlocked` / `documentNotFocused` 时，`UploadFailed` 带出「额度已用尽」「页面未获得焦点」，不再只报「未确认附件预览」 |
+| 实测 | Gemini 离屏单图 9 张、连续两图 10/27 张均通过；DeepSeek 27 张回归通过；ChatGPT 因额度停在 `UploadFailed`，未提交 |
 
 #### 5.6.4 与 §5.3 的差异
 

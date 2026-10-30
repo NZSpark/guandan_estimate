@@ -37,9 +37,22 @@ class FakePageOps : PageOps {
     // AI-046：新会话是否经页面确认成功。
     var startNewConversationResult = true
     var startNewConversationCalls = 0
+    // AI-158：纯文本草稿是否可被显式清空（站点支持时）。
+    var clearComposerResult = false
+    var clearComposerCalls = 0
 
     // 提交结果
     var submitOutcome: SubmitOutcome = SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
+
+    // AI-182：拆分流程（填文本 → 上传 → 提交）。
+    var fillComposerResult = true
+    var submitComposerOutcome: SubmitOutcome =
+        SubmitOutcome(ok = true, why = null, inputFilled = true, attached = true)
+    var submitComposerOutcomeSequence: List<SubmitOutcome> = emptyList()
+    private var submitComposerIndex = 0
+
+    /** AI-183：页面侧上传失败原因。 */
+    var uploadFailure: String? = null
 
     // 记录
     val calls = mutableListOf<String>()
@@ -84,6 +97,12 @@ class FakePageOps : PageOps {
         return startNewConversationResult
     }
 
+    override fun clearComposer(): Boolean {
+        calls += "clearComposer"
+        clearComposerCalls++
+        return clearComposerResult
+    }
+
     override fun pollSnapshot(): AnswerSnapshot {
         calls += "pollSnapshot"
         val s = answerSequence.getOrElse(pollIndex) { answerSequence.last() }
@@ -105,6 +124,24 @@ class FakePageOps : PageOps {
         if (submitOutcomeIndex < submitOutcomeSequence.size - 1) submitOutcomeIndex++
         return outcome
     }
+
+    override fun fillComposer(prompt: String): Boolean {
+        calls += "fillComposer"
+        lastPrompt = prompt
+        return fillComposerResult
+    }
+
+    override fun submitComposer(): SubmitOutcome {
+        calls += "submitComposer"
+        if (submitComposerOutcomeSequence.isEmpty()) return submitComposerOutcome
+        val outcome = submitComposerOutcomeSequence.getOrElse(submitComposerIndex) {
+            submitComposerOutcomeSequence.last()
+        }
+        if (submitComposerIndex < submitComposerOutcomeSequence.size - 1) submitComposerIndex++
+        return outcome
+    }
+
+    override fun lastUploadFailure(): String? = uploadFailure
 
     override fun pasteImage(fileName: String, mimeType: String, base64: String): Boolean {
         pasteCalls++

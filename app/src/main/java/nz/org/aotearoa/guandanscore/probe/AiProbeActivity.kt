@@ -15,6 +15,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import nz.org.aotearoa.guandanscore.recognition.AiRecognitionClient
+import nz.org.aotearoa.guandanscore.recognition.site.ChatGPTAdapter
+import nz.org.aotearoa.guandanscore.recognition.site.CustomAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.GeminiAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.DeepSeekAdapter
 import nz.org.aotearoa.guandanscore.recognition.site.JsonParse
@@ -77,6 +79,190 @@ open class AiProbeActivity : Activity() {
         const val EXTRA_TEST_IMAGE2 = "test_image2"
 
         const val DEFAULT_SITE = "gemini_web"
+
+        /**
+         * 仅测试用：清空 composer 残留草稿。
+         *
+         * ChatGPT 会把未发送的文本保存为草稿，进程重启/回首页都会恢复；
+         * 驱动层把「输入区有残留」视为必须先确认新会话，而草稿让新会话永远不干净。
+         * 这里只清空输入区，不点击发送、不读任何内容。
+         */
+        /**
+         * 只读 DOM 结构采样：候选选择器命中数 + 消息角色列表。
+         * 用于回填新站点选择器；只截取 300 字页面文本，不读 Cookie/Storage。
+         */
+        private val DOM_DUMP = """
+            (function() {
+              function c(s) { try { return document.querySelectorAll(s).length; } catch (e) { return -1; } }
+              var roles = [];
+              try {
+                document.querySelectorAll('[data-message-author-role]').forEach(function(n) {
+                  roles.push(n.getAttribute('data-message-author-role'));
+                });
+              } catch (e) {}
+              var main = document.querySelector('main');
+              return JSON.stringify({
+                ok: true,
+                url: location.href,
+                roles: roles.slice(0, 8),
+                roleCount: c('[data-message-author-role]'),
+                assistant: c("div[data-message-author-role='assistant']"),
+                articles: c('article'),
+                markdown: c('div.markdown'),
+                messageId: c('[data-message-id]'),
+                turns: c('[data-testid^=conversation-turn]'),
+                buttons: (function() {
+                  var out = [];
+                  try {
+                    document.querySelectorAll('button').forEach(function(b) {
+                      var r = b.getBoundingClientRect();
+                      if (r.width > 0 && r.height > 0) {
+                        out.push({
+                          t: b.getAttribute('data-testid'),
+                          a: b.getAttribute('aria-label'),
+                          x: String(b.innerText || '').slice(0, 12),
+                          d: b.disabled === true,
+                          w: Math.round(r.width),
+                          h: Math.round(r.height),
+                          scoped: !!b.closest('[data-composer-body]'),
+                          html: String(b.outerHTML || '').slice(0, 150)
+                        });
+                      }
+                    });
+                  } catch (e) {}
+                  return out.slice(0, 12);
+                })(),
+                divCount: c('div'),
+                assistantHtml: (function() {
+                  try {
+                    var u = document.querySelector("div[data-content-search-unit-key$=':assistant']");
+                    return u ? String(u.innerHTML || '').slice(0, 900) : '';
+                  } catch (e) { return ''; }
+                })(),
+                assistantText: (function() {
+                  try {
+                    var u = document.querySelector("div[data-content-search-unit-key$=':assistant']");
+                    return u ? String(u.textContent || '').slice(0, 300) : '';
+                  } catch (e) { return ''; }
+                })(),
+                units: (function() {
+                  var out = [];
+                  try {
+                    var list = document.querySelectorAll('[data-content-search-unit-key]');
+                    for (var i = 0; i < list.length && i < 4; i++) {
+                      var el = list[i];
+                      out.push({
+                        key: el.getAttribute('data-content-search-unit-key'),
+                        ids: el.getAttribute('data-chatgpt-search-message-ids'),
+                        text: String(el.innerText || '').slice(0, 50)
+                      });
+                    }
+                  } catch (e) {}
+                  return out;
+                })(),
+                turnKeys: (function() {
+                  var out = [];
+                  try {
+                    var list = document.querySelectorAll('[data-content-search-turn-key]');
+                    for (var i = 0; i < list.length && i < 3; i++) {
+                      out.push({ key: list[i].getAttribute('data-content-search-turn-key'), state: list[i].getAttribute('data-talvt-turn-state') });
+                    }
+                  } catch (e) {}
+                  return out;
+                })(),
+                chatPath: (function() {
+                  var label = null;
+                  try {
+                    var all = document.querySelectorAll('*');
+                    for (var i = 0; i < all.length; i++) {
+                      var el = all[i];
+                      if (el.children.length === 0 && String(el.textContent || '').trim() === 'ChatGPT said:') {
+                        label = el;
+                        break;
+                      }
+                    }
+                  } catch (e) {}
+                  var path = [];
+                  var p = label;
+                  for (var j = 0; p && j < 8; j++) {
+                    var attrs = [];
+                    try {
+                      for (var k = 0; k < p.attributes.length && k < 6; k++) attrs.push(p.attributes[k].name);
+                    } catch (e) {}
+                    path.push(p.tagName.toLowerCase() + '.' + String(p.className || '').slice(0, 45) + '|' + attrs.join(','));
+                    p = p.parentElement;
+                  }
+                  return path;
+                })(),
+                composer: (function() {
+                  var el = null;
+                  try { el = document.querySelector("#prompt-textarea, div.ProseMirror[contenteditable='true']"); } catch (e) {}
+                  var out = [];
+                  for (var i = 0; el && i < 5; i++) {
+                    out.push(el.tagName.toLowerCase() + '.' + String(el.className || '').slice(0, 70));
+                    el = el.parentElement;
+                  }
+                  return out;
+                })(),
+                mainText: main ? String(main.innerText || '').slice(0, 300) : '',
+                html: main ? String(main.innerHTML || '').slice(0, 2200) : ''
+              });
+            })()
+        """.trimIndent()
+
+        /** 只填文本，不点发送（诊断用）。 */
+        private val FILL_TEXT_ONLY = """
+            (function() {
+              var el = null;
+              try { el = document.querySelector("#prompt-textarea, div.ProseMirror[contenteditable='true']"); } catch (e) {}
+              if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+              el.focus();
+              document.execCommand('selectAll', false, null);
+              document.execCommand('insertText', false, '按钮诊断');
+              return JSON.stringify({ ok: true, len: String(el.textContent || '').length });
+            })()
+        """.trimIndent()
+
+        /** 列出所有带 send/stop 语义的按钮（含 outerHTML 片段）。 */
+        private val SEND_BUTTON_INFO = """
+            (function() {
+              var out = [];
+              document.querySelectorAll('button').forEach(function(b) {
+                var a = b.getAttribute('aria-label') || '';
+                var t = b.getAttribute('data-testid') || '';
+                if (/send|stop/i.test(a) || /send|stop/i.test(t)) {
+                  var r = b.getBoundingClientRect();
+                  out.push({
+                    a: a, t: t, d: b.disabled === true,
+                    w: Math.round(r.width), h: Math.round(r.height),
+                    cls: String(b.className || '').slice(0, 80),
+                    html: String(b.outerHTML || '').slice(0, 420)
+                  });
+                }
+              });
+              return JSON.stringify({ ok: true, count: out.length, buttons: out });
+            })()
+        """.trimIndent()
+
+        private val CLEAR_COMPOSER = """
+            (function() {
+              var el = null;
+              try {
+                el = document.querySelector("#prompt-textarea, div.ProseMirror[contenteditable='true'], textarea");
+              } catch (e) {}
+              if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+              el.focus();
+              if (el.isContentEditable) {
+                el.textContent = '';
+                el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+              } else {
+                el.value = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+              var left = (el.value === undefined ? (el.textContent || '') : el.value);
+              return JSON.stringify({ ok: true, remainingLength: String(left).trim().length });
+            })()
+        """.trimIndent()
     }
 
     private lateinit var webView: WebView
@@ -245,6 +431,7 @@ open class AiProbeActivity : Activity() {
         listOf(
             AiSourceId.DEEPSEEK_WEBVIEW,
             AiSourceId.GEMINI_WEBVIEW,
+            AiSourceId.CHATGPT_WEBVIEW,
             AiSourceId.CUSTOM_WEBVIEW
         ).forEach { id ->
             siteBar.addView(Button(this).apply {
@@ -267,14 +454,17 @@ open class AiProbeActivity : Activity() {
     private fun switchTo(siteKey: String, explicitUrl: String?) {
         requireUiThread("switchTo")
         val id = AiSourceId.entries.firstOrNull { it.key == siteKey }
-        adapter = when (id) {
-            AiSourceId.DEEPSEEK_WEBVIEW -> DeepSeekAdapter()
-            AiSourceId.GEMINI_WEBVIEW -> GeminiAdapter()
-            else -> DeepSeekAdapter() // 自定义源暂复用 DeepSeek 选择器集合（CustomAdapter 行为一致）
-        }
         val url = explicitUrl
             ?: (id?.let { AiSourcePresets.homeUrlFor(it) })
             ?: AiSourcePresets.homeUrlFor(AiSourceId.GEMINI_WEBVIEW)!!
+        adapter = when (id) {
+            AiSourceId.DEEPSEEK_WEBVIEW -> DeepSeekAdapter()
+            AiSourceId.GEMINI_WEBVIEW -> GeminiAdapter()
+            // AI-158：ChatGPT 必须先能选中自己的适配器，否则会静默套用 DeepSeek 选择器。
+            AiSourceId.CHATGPT_WEBVIEW -> ChatGPTAdapter()
+            AiSourceId.CUSTOM_WEBVIEW -> CustomAdapter(url)
+            else -> DeepSeekAdapter()
+        }
         currentUrl = url
         log("SITE", "switch -> ${adapter.siteKey} url=$url")
         webView.loadUrl(url)
@@ -297,6 +487,25 @@ open class AiProbeActivity : Activity() {
             }
             "gemini_fps" -> testFillPasteSubmit()
             "gemini_attach" -> runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() }
+            // AI-158：只读快照（输入区文本/附件计数/回答节点），站点无关。
+            "snapshot" -> runAdapterScript("SNAP") { adapter.snapshotScript() }
+            "clear" -> runScript(CLEAR_COMPOSER) { log("CLEAR", it) }
+            // AI-158：只跑一次填文本+提交，打印脚本原始结果，再读快照看是否真的发出。
+            "fill_submit" -> {
+                runScript(adapter.fillAndSubmitScript("请只回复：测试收到", "", "", "")) {
+                    log("FILLSUBMIT", it)
+                }
+                webView.postDelayed({
+                    runAdapterScript("AFTER_SUBMIT") { adapter.snapshotScript() }
+                }, 6000)
+                webView.postDelayed({ runScript(DOM_DUMP) { log("DOMDUMP", it) } }, 8000)
+            }
+            "domdump" -> runScript(DOM_DUMP) { log("DOMDUMP", it) }
+            // AI-158：填入文本后只看发送/停止按钮的真实属性，用于校正选择器。
+            "sendinfo" -> {
+                runScript(FILL_TEXT_ONLY) { log("PREP", it) }
+                webView.postDelayed({ runScript(SEND_BUTTON_INFO) { log("BTNS2", it) } }, 1500)
+            }
             "gemini_senddiag" -> runScript(GEMINI_SEND_DIAG) { r -> log("GSDIAG", r) }
             "gemini_diag" -> runAdapterScript("DIAG") { adapter.diagnoseScript() }
             // AI-008D：页面结构深度探测（只读）。
@@ -421,7 +630,18 @@ open class AiProbeActivity : Activity() {
         val submit = adapter.fillAndSubmitScript(prompt, "", "", "")
         runScript(submit) { sr ->
             log("CTRL_SUBMIT", sr)
-            pollAnswerForControl(attempt = 0)
+            // AI-161：与驱动层一致——按钮未就绪时等一拍再重填一次，不盲点 disabled 按钮。
+            val ok = JsonParse.parse(sr)?.optBoolean("ok", false) == true
+            if (!ok) {
+                webView.postDelayed({
+                    runScript(adapter.fillAndSubmitScript(prompt, "", "", "")) { sr2 ->
+                        log("CTRL_SUBMIT2", sr2)
+                        pollAnswerForControl(attempt = 0)
+                    }
+                }, 2000)
+            } else {
+                pollAnswerForControl(attempt = 0)
+            }
         }
     }
 
@@ -695,6 +915,13 @@ open class AiProbeActivity : Activity() {
                 )
             } catch (e: Exception) {
                 log("SOURCE_E2E_FAIL", "${e.javaClass.simpleName}: ${e.message}")
+            } finally {
+                // 失败时也要留下页面结构，才能判断是选择器错还是回答本身为空。
+                // 所有 WebView/Host 读取都必须在主线程（AI-022）。
+                webView.post {
+                    log("SOURCE_URL", UrlRedactor.redact(host.currentWebView()?.url ?: ""))
+                    runScript(DOM_DUMP) { log("DOMDUMP", it) }
+                }
             }
         }, "source-e2e").start()
     }

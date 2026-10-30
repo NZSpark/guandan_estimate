@@ -180,16 +180,29 @@ class WebViewAiSource(
                 nowMillis()
             )
 
-            val uploadError = if (adapter.uploadsInsideSubmit) null else uploadWithFallback(request, base64)
-            if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
-            if (cancelled) throw AiSourceError.Cancelled()
+            if (adapter.uploadsAfterFill) {
+                // AI-182：填文本 → 上传并在提交前确认 → 点发送。
+                // 顺序来自网页版图片直传方案：只有文本已在框内、附件挂上并确认后，
+                // 才能提交同一条消息。
+                if (!pages.fillComposer(request.prompt)) {
+                    throw AiSourceError.SubmitFailed("输入框未确认填入")
+                }
+                val uploadError = uploadWithFallback(request, base64)
+                if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
+                if (cancelled) throw AiSourceError.Cancelled()
+                submitAfterFill()
+            } else {
+                val uploadError = if (adapter.uploadsInsideSubmit) null else uploadWithFallback(request, base64)
+                if (uploadError != null) throw AiSourceError.UploadFailed(uploadError)
+                if (cancelled) throw AiSourceError.Cancelled()
 
-            // AI-173：提交失败但文本已填入 → 等发送按钮可用后重填一次。
-            submitWithSendEnabledRetry(request, base64)
+                // AI-173：提交失败但文本已填入 → 等发送按钮可用后重填一次。
+                submitWithSendEnabledRetry(request, base64)
 
-            // 上传由提交脚本内联完成（`uploadsInsideSubmit`）：提交后仍要确认预览真的出现。
-            if (adapter.uploadsInsideSubmit && !pages.verifyAttachment()) {
-                throw AiSourceError.UploadFailed("提交后未确认附件预览")
+                // 上传由提交脚本内联完成（`uploadsInsideSubmit`）：提交后仍要确认预览真的出现。
+                if (adapter.uploadsInsideSubmit && !pages.verifyAttachment()) {
+                    throw AiSourceError.UploadFailed("提交后未确认附件预览")
+                }
             }
             if (cancelled) throw AiSourceError.Cancelled()
 
@@ -241,8 +254,9 @@ class WebViewAiSource(
      * 2. 输入框有残留文本：本轮 prompt 会接在残留后面一起发出去；
      * 3. 输入区已有附件预览：图片 A 会跟着图片 B 一起提交，模型看到的不是本轮图。
      *
-     * 2/3 的处置是切换到**经 DOM 确认**的新会话（[PageOps.startNewConversation]），
-     * 而不是手动清空页面：新会话的输入区天然干净，也不会残留上一轮的发送状态。
+     * 2/3 首选处置是切换到**经 DOM 确认**的新会话（[PageOps.startNewConversation]）。
+     * 只有站点会恢复未发送草稿、新会话确认失败时，才允许对**纯文本**残留调用
+     * [PageOps.clearComposer] 并用快照复验；附件残留绝不手动清，必须新建会话。
      */
     private fun prepareBaseline(initial: AnswerSnapshot): AnswerSnapshot {
         var base = initial
@@ -267,9 +281,17 @@ class WebViewAiSource(
                     "starting a confirmed new conversation"
             )
             if (!pages.startNewConversation()) {
-                throw AiSourceError.SubmitFailed("输入框有残留内容或附件，且无法确认新会话已建立")
+                // AI-158：部分站点会把未发送文本恢复成草稿（真机实测），新建会话也清不掉。
+                // 只有「纯文字残留」才允许显式清空；附件一律不手动清，必须靠新会话。
+                if (!base.attached && base.inputText.isNotBlank() && pages.clearComposer()) {
+                    Log.i(TAG, "new conversation unconfirmed; cleared text draft, re-reading baseline")
+                    base = pages.captureBaseline()
+                } else {
+                    throw AiSourceError.SubmitFailed("输入框有残留内容或附件，且无法确认新会话已建立")
+                }
+            } else {
+                base = pages.captureBaseline()
             }
-            base = pages.captureBaseline()
         }
         if (base.composerDirty) {
             throw AiSourceError.SubmitFailed("新会话仍不干净（输入框残留或附件未清除）")
@@ -285,9 +307,13 @@ class WebViewAiSource(
      */
     private fun submitWithSendEnabledRetry(request: RecognizeRequest, base64: String): SubmitOutcome {
         var outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
-        if (!outcome.ok && outcome.inputFilled && pages.awaitSendEnabled()) {
-            Log.i(TAG, "send button became usable; retrying submit once")
-            outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
+        if (!outcome.ok && outcome.inputFilled) {
+            val enabled = pages.awaitSendEnabled()
+            Log.i(TAG, "submit retry gate: sendEnabled=$enabled why=${outcome.why}")
+            if (enabled) {
+                Log.i(TAG, "send button became usable; retrying submit once")
+                outcome = pages.fillAndSubmit(request.prompt, request.fileName, request.mimeType, base64)
+            }
         }
         if (!outcome.ok) throw AiSourceError.SubmitFailed(outcome.why ?: "未知原因")
         return outcome
@@ -305,9 +331,33 @@ class WebViewAiSource(
         val reasons = mutableListOf<String>()
         for (strategy in candidates) {
             if (tryUpload(strategy, request, base64)) return null
-            reasons += "$strategy 未确认附件预览"
+            // AI-183：把页面给出的具体原因（额度用尽 / 未获得焦点）带出来，
+            // 否则用户只看到「未确认附件预览」，无从判断该等额度还是该重登录。
+            val why = pages.lastUploadFailure()
+            reasons += if (why.isNullOrBlank()) {
+                "$strategy 未确认附件预览"
+            } else {
+                "$strategy 未确认附件预览（$why）"
+            }
         }
         return reasons.joinToString("；")
+    }
+
+    /**
+     * AI-182：附件已确认后的提交。
+     *
+     * 只重试点击发送，**绝不重填文本**：重填可能覆盖已挂好的附件，
+     * 也违背「附件必须在提交前确认」的不变量。
+     */
+    private fun submitAfterFill(): SubmitOutcome {
+        var outcome = pages.submitComposer()
+        if (!outcome.ok && outcome.inputFilled) {
+            val enabled = pages.awaitSendEnabled()
+            Log.i(TAG, "split submit retry gate: sendEnabled=$enabled why=${outcome.why}")
+            if (enabled) outcome = pages.submitComposer()
+        }
+        if (!outcome.ok) throw AiSourceError.SubmitFailed(outcome.why ?: "未知原因")
+        return outcome
     }
 
     private fun tryUpload(strategy: UploadStrategy, request: RecognizeRequest, base64: String): Boolean {
@@ -318,8 +368,19 @@ class WebViewAiSource(
                 Log.w(TAG, "paste event was not dispatched")
                 return false
             }
+            if (pages.verifyAttachment()) return true
+            // AI-158：首屏 SPA 可能重渲染 composer，第一次 paste 被丢弃；
+            // 此时预览计数为 0（没有残留），补派发一次不会造成重复附件。
+            Log.w(TAG, "paste dispatched but no preview; re-dispatching once")
+            if (!pages.pasteImage(request.fileName, request.mimeType, base64)) return false
+            return pages.verifyAttachment()
         }
-        // FILE_CHOOSER 由 WebViewHost.fileChooserHandler 在原生侧完成，驱动层只验证结果。
+        // AI-182：FILE_CHOOSER 必须先准备缓存文件并原生触摸上传入口，否则
+        // WebViewHost.fileChooserHandler 没有可回填的 URI，后续必然等不到预览。
+        if (!pages.prepareFileChooserUpload(request.fileName, request.mimeType, request.jpegBytes)) {
+            Log.w(TAG, "file chooser upload was not prepared")
+            return false
+        }
         return pages.verifyAttachment()
     }
 

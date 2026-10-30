@@ -106,6 +106,12 @@ class PageDriver(
     @Volatile
     private var reloadSuspended = false
 
+    /** AI-183：最近一次上传失败的页面侧原因，供上层生成可执行错误文案。 */
+    @Volatile
+    private var uploadFailure: String? = null
+
+    override fun lastUploadFailure(): String? = uploadFailure
+
     override fun setReloadSuspended(suspended: Boolean) {
         reloadSuspended = suspended
         if (suspended) Log.i(TAG, "auto-reload suspended (business task running)")
@@ -386,6 +392,21 @@ class PageDriver(
         return confirmed
     }
 
+    /**
+     * AI-158：清空文本草稿。附加动作只做一次，结果由调用方的快照复验。
+     */
+    override fun clearComposer(): Boolean {
+        val script = adapter.clearComposerScript()
+        if (script.isBlank()) return false
+        val json = JsonParse.parse(runBlockingEvaluate(script))
+        if (json == null || !json.optBoolean("ok", false)) {
+            Log.w(TAG, "clearComposer failed: ${json?.let { JsonParse.why(it) } ?: "unparsable"}")
+            return false
+        }
+        Log.i(TAG, "clearComposer: script ok, awaiting snapshot confirmation")
+        return true
+    }
+
     override fun pollSnapshot(): AnswerSnapshot {
         val json = JsonParse.parse(runBlockingEvaluate(adapter.snapshotScript()))
             ?: return AnswerSnapshot.EMPTY
@@ -407,7 +428,38 @@ class PageDriver(
         val script = adapter.fillAndSubmitScript(prompt, fileName, mimeType, base64)
         val json = JsonParse.parse(runBlockingEvaluate(script))
             ?: return SubmitOutcome.fail("script-empty-or-invalid-json")
-        return adapter.parseSubmitResult(json)
+        val outcome = adapter.parseSubmitResult(json)
+        // AI-158：只打结论，不打印 prompt / 图片内容。
+        Log.i(TAG, "fillAndSubmit: ok=${outcome.ok} why=${outcome.why} filled=${outcome.inputFilled}")
+        return outcome
+    }
+
+    /** AI-182：只填文本，不提交。 */
+    override fun fillComposer(prompt: String): Boolean {
+        val script = adapter.fillComposerScript(prompt)
+        if (script.isBlank()) return false
+        val json = JsonParse.parse(runBlockingEvaluate(script)) ?: return false
+        val filled = adapter.parseFillResult(json)
+        Log.i(TAG, "fillComposer: filled=$filled why=${JsonParse.why(json)}")
+        if (filled) {
+            // 输入文本会触发编辑器/工具栏重排（真机实测上传图标从 y=652 移到 725）。
+            // 等布局稳定再取坐标，否则原生触摸会点到旧位置。
+            sleepMillis(400)
+        }
+        return filled
+    }
+
+    /** AI-182：只点发送；附件已在提交前确认，这里不得再改输入区。 */
+    override fun submitComposer(): SubmitOutcome {
+        val script = adapter.submitComposerScript()
+        if (script.isBlank()) {
+            return SubmitOutcome.fail("submit-composer-not-supported", inputFilled = true)
+        }
+        val json = JsonParse.parse(runBlockingEvaluate(script))
+            ?: return SubmitOutcome.fail("script-empty-or-invalid-json", inputFilled = true)
+        val outcome = adapter.parseSubmitResult(json)
+        Log.i(TAG, "submitComposer: ok=${outcome.ok} why=${outcome.why} filled=${outcome.inputFilled}")
+        return outcome
     }
 
     /**
@@ -419,7 +471,11 @@ class PageDriver(
      * 返回 true 只代表“回填已就绪”，真实成功仍以 [verifyAttachment] 为准（M11）。
      */
     override fun prepareFileChooserUpload(fileName: String, mimeType: String, bytes: ByteArray): Boolean {
-        val ctx = host.appContextForFiles() ?: return false
+        uploadFailure = null
+        val ctx = host.appContextForFiles() ?: run {
+            uploadFailure = "无法读取应用缓存目录"
+            return false
+        }
         return try {
             val dir = java.io.File(ctx.cacheDir, "ai-upload").apply { mkdirs() }
             // AI-041：写新图前清掉上一轮残留，避免图片 A 的文件被图片 B 的请求复用。
@@ -432,10 +488,14 @@ class PageDriver(
             runOnMainSync("PageDriver.prepareUpload") { host.prepareUpload(uri) }
             // 触发页面自己的上传入口；它最终会调用 onShowFileChooser。
             val ok = triggerUploadButton()
-            if (!ok) runOnMainSync("PageDriver.clearPendingUpload") { host.clearPendingUpload() }
+            if (!ok) {
+                uploadFailure = "上传入口未打开（未找到可点的图标或菜单项）"
+                runOnMainSync("PageDriver.clearPendingUpload") { host.clearPendingUpload() }
+            }
             ok
         } catch (e: Exception) {
             Log.w(TAG, "prepareFileChooserUpload failed", e)
+            uploadFailure = "准备上传文件失败"
             runOnMainSync("PageDriver.clearPendingUpload") { host.clearPendingUpload() }
             false
         }
@@ -450,33 +510,119 @@ class PageDriver(
     private fun triggerUploadButton(): Boolean {
         val iconScript = adapter.uploadIconScript()
         if (iconScript.isNotBlank()) {
-            val json = JsonParse.parse(runBlockingEvaluate(iconScript))
-            if (json != null && json.optBoolean("ok", false)) {
-                val x = json.optInt("x", -1)
-                val y = json.optInt("y", -1)
-                val viewportH = json.optInt("innerHeight", 0)
-                // 视口宽度可能缺省（旧脚本），0 表示由宿主按高度比例兜底。
-                val viewportW = json.optInt("innerWidth", 0)
-                if (x >= 0 && y >= 0 && viewportH > 0) {
-                    if (runOnMainSync("PageDriver.tapViewportPoint") {
-                            host.tapViewportPoint(x, y, viewportH, viewportW)
+            // AI-182：工具栏异步渲染 + 输入后重排，坐标可能在读与点之间变化。
+            // 外层最多重试两轮：菜单没打开就重新取坐标再点一次。
+            repeat(2) { round ->
+                repeat(4) { attempt ->
+                    val json = JsonParse.parse(runBlockingEvaluate(iconScript))
+                    if (json != null && json.optBoolean("ok", false)) {
+                        val x = json.optInt("x", -1)
+                        val y = json.optInt("y", -1)
+                        val viewportH = json.optInt("innerHeight", 0)
+                        // 视口宽度可能缺省（旧脚本），0 表示由宿主按高度比例兜底。
+                        val viewportW = json.optInt("innerWidth", 0)
+                        if (x >= 0 && y >= 0 && viewportH > 0) {
+                            Log.i(
+                                TAG,
+                                "upload icon at $x,$y viewport=${viewportW}x$viewportH " +
+                                    "(round ${round + 1}, attempt ${attempt + 1})"
+                            )
+                            if (runOnMainSync("PageDriver.tapViewportPoint") {
+                                    host.tapViewportPoint(x, y, viewportH, viewportW)
+                                }
+                            ) {
+                                // 部分站点的上传入口只是菜单，再点一次具体项才会开 chooser。
+                                if (tapUploadMenuIfNeeded()) return true
+                                // 坐标已过期（页面重排）→ 重新定位图标再试一轮。
+                                Log.w(TAG, "upload menu did not open; re-locating icon")
+                                return@repeat
+                            }
                         }
-                    ) return true
+                    } else {
+                        Log.w(TAG, "upload icon not ready (attempt ${attempt + 1}): $json")
+                    }
+                    sleepMillis(400)
                 }
+                sleepMillis(300)
             }
+            return false
         }
         val script = adapter.uploadTriggerScript()
         if (script.isBlank()) return false
         val json = JsonParse.parse(runBlockingEvaluate(script)) ?: return false
+        Log.w(TAG, "upload icon unavailable; JS trigger -> $json")
         return json.optBoolean("ok", false)
+    }
+
+    /**
+     * AI-182：在页面弹出的上传菜单里点「Files」。
+     *
+     * 菜单由前端异步渲染，必须轮询坐标；找不到不是致命错误——
+     * 站点也可能一次点击就直接打开了文件选择器。
+     */
+    private fun tapUploadMenuIfNeeded(): Boolean {
+        val script = adapter.uploadMenuIconScript()
+        if (script.isBlank()) return true
+        // 工具箱有展开动画（真机实测约 1.5s），条目在动画完成前可能仍在视口外。
+        repeat(8) { attempt ->
+            sleepMillis(400)
+            val json = JsonParse.parse(runBlockingEvaluate(script)) ?: return@repeat
+            if (!json.optBoolean("ok", false)) {
+                Log.w(TAG, "upload menu not ready (attempt ${attempt + 1}): $json")
+                return@repeat
+            }
+            val x = json.optInt("x", -1)
+            val y = json.optInt("y", -1)
+            val viewportH = json.optInt("innerHeight", 0)
+            val viewportW = json.optInt("innerWidth", 0)
+            if (x < 0 || y < 0 || viewportH <= 0) return@repeat
+            if (runOnMainSync("PageDriver.tapUploadMenu") {
+                    host.tapViewportPoint(x, y, viewportH, viewportW)
+                }
+            ) {
+                Log.i(TAG, "upload menu: tapped at $x,$y (attempt ${attempt + 1})")
+                return true
+            }
+        }
+        Log.w(TAG, "upload menu: item not found")
+        return false
     }
 
     /** 粘贴路径注入图片。`dispatched=true` 不代表成功，调用方仍需 [verifyAttachment]。 */
     override fun pasteImage(fileName: String, mimeType: String, base64: String): Boolean {
-        val pasteable = adapter as? PasteCapableAdapter ?: return false
-        val json = JsonParse.parse(runBlockingEvaluate(pasteable.pasteAttachmentScript(fileName, mimeType, base64)))
-            ?: return false
-        return json.optBoolean("dispatched", false)
+        uploadFailure = null
+        val pasteable = adapter as? PasteCapableAdapter ?: run {
+            uploadFailure = "适配器不支持粘贴上传"
+            return false
+        }
+        // AI-182：聚焦 WebView 后再派发 paste。部分站点（真机实测）只接受
+        // document.hasFocus() 为 true 时的粘贴，离屏宿主必须显式请求焦点。
+        runOnMainSync("PageDriver.focusForPaste") { host.currentWebView()?.requestFocus() }
+        val raw = runBlockingEvaluate(pasteable.pasteAttachmentScript(fileName, mimeType, base64))
+        val json = JsonParse.parse(raw)
+        if (json == null) {
+            uploadFailure = "粘贴脚本没有返回有效结果"
+            Log.w(TAG, "paste: unparsable result=${raw.take(160)}")
+            return false
+        }
+        if (!json.optBoolean("dispatched", false)) {
+            uploadFailure = pageFailure(json) ?: "粘贴事件被页面拒绝"
+            Log.w(TAG, "paste rejected: $json")
+            return false
+        }
+        Log.i(TAG, "paste dispatched")
+        return true
+    }
+
+    /** 把页面返回的失败字段翻译成用户能照做的原因；未识别时保留原始 why。 */
+    private fun pageFailure(json: org.json.JSONObject): String? {
+        if (json.optBoolean("quotaBlocked", false)) {
+            return "站点上传额度已用尽，需等待额度恢复或升级账号"
+        }
+        if (json.optBoolean("documentNotFocused", false)) {
+            return "页面未获得焦点，粘贴被忽略"
+        }
+        return JsonParse.why(json)
     }
 
     /** AI-037：删除上传用的临时 JPEG（成功 / 失败 / 取消都调用）。 */
@@ -497,7 +643,19 @@ class PageDriver(
                 loggedSample = true
                 Log.i(TAG, "verifyAttachment sample: $json")
             }
-            if (json != null && adapter.parseAttachment(json)) return true
+            if (json != null) {
+                // AI-183：保留页面给出的具体拒绝原因（如额度用尽），别让它被通用文案淹没。
+                pageFailure(json)?.let { if (uploadFailure == null) uploadFailure = it }
+                if (adapter.parseAttachment(json)) {
+                    Log.i(TAG, "verifyAttachment confirmed: $json")
+                    return true
+                }
+                // 额度用尽不可能在本次轮询内恢复，继续等到 20s 只是浪费一轮请求。
+                if (json.optBoolean("quotaBlocked", false)) {
+                    Log.w(TAG, "verifyAttachment blocked: $json")
+                    return false
+                }
+            }
             sleepMillis(300)
         }
         return false

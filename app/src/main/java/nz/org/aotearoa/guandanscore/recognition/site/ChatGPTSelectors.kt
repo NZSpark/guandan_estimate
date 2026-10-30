@@ -3,12 +3,10 @@ package nz.org.aotearoa.guandanscore.recognition.site
 /**
  * ChatGPT 网页版 DOM 选择器的单一事实来源。
  *
- * ## 验证状态：**未真机验证**（AI-164）
- * 本组选择器来自公开页面结构（ProseMirror 编辑器的通行约定），**没有**在目标设备上
- * 用探针回填过命中数。因此：
- * - 不得在 `README.md` / 配置页里宣称 ChatGPT 源「已验证可用」；
- * - 首次真机接入必须先用 `AiProbeActivity --es site chatgpt_web --es auto gemini_diag`
- *   （诊断脚本与站点无关）逐条确认命中，再按 [DeepSeekSelectors] 的写法回填本文件。
+ * ## 验证状态：真机回填（2026-10-30，AI-158）
+ * 已在目标设备 `chatgpt.com` 实测：输入框 1、发送按钮 1、助手消息单元 1（新结构
+ * `div[data-content-search-unit-key$=':assistant']`），登录态下 password/login 均为 0。
+ * 旧结构（`data-message-author-role`）保留作为兼容路径。
  *
  * ## 已知结构（未验证）
  * - 输入框是 **ProseMirror `contenteditable` div**（`#prompt-textarea`），不是 textarea。
@@ -28,7 +26,9 @@ object ChatGPTSelectors {
 
     /** 助手回答节点。只取 assistant 角色，绝不混入用户消息。 */
     const val RESPONSE =
-        "div[data-message-author-role='assistant'], article[data-testid^='conversation-turn'] div.markdown"
+        "div[data-message-author-role='assistant'], " +
+            "div[data-content-search-unit-key$=':assistant'], " +
+            "article[data-testid^='conversation-turn'] div.markdown"
 
     /** 登录入口。必须与密码框同时存在才算未登录（M6）。 */
     const val LOGIN =

@@ -10,17 +10,21 @@
 ## 当前任务
 
 执行 `doc/ai_tasks.md`：多 AI 源 WebView 迁移 + 阶段 7 UI + 阶段 8 宿主/提交协议。
-清单共 231 项，**212 项已勾选**；剩余 19 项依赖 ChatGPT 真机登录、Gemini 重新登录、三源横向验收与 TalkBack 取证。
+清单共 233 项，**214 项已勾选**；剩余 19 项集中在 ChatGPT 额度恢复后的验收、Gemini 会话过期、横向验收。
 
-## 本轮完成（2026-10-30 下午第二轮，真机）
+## 本轮完成（2026-10-30 下午第四轮，图片上传收口）
 
-- **AI-077**：旋转探针页 → `onDestroy → onCreate(restored=true)`，同一 pid、无重复 `WebView created`，重挂 `2328x679` / `1176x1801`；离开/返回 Gemini 页面无崩溃；`force-stop`+`kill` 后新 pid 启动，DeepSeek 登录态保留。主界面固定 portrait。
-- **AI-078**：`source_e2e` 提交后 5 秒 Home 切后台（`detached`），8 秒后返回（`Attached 1176x1801`），识牌继续并完成 `cards=27`；证明不能只凭挂接状态判断健康。
-- **AI-095**：写入旧格式 prefs（仅 provider/endpoint/model/api_key）→ 启动迁移到 DeepSeek 默认 profile，AI 页面往返后仍「网页可用」，登录态保留；代码无 Cookie/WebStorage 清理调用；测试后已还原原配置。
-- **G-21（部分）**：窄屏 720×1280/360dpi 正常；字体 1.3× 完整显示；9 个可点击控件实测 48~52dp。横屏不适用（主界面竖屏锁定）；TalkBack 设备未安装 → 保持未勾选。
-- **G-07**：Activity 重建已真机验证；上传 20s 超时仍缺直接证据 → 保持未勾选。
-- **探针**：新增 `LIFECYCLE` 日志（onCreate/onDestroy，含 pid 与 restored），用于区分重建与新建实例。
-- **验证**：`./gradlew testDebugUnitTest assembleDebug` 全绿；34 类 / 321 项。
+- **拆分上传与提交（AI-182）**：新增 `SiteAdapter.uploadsAfterFill` / `fillComposerScript` / `submitComposerScript`；驱动层固定「填文本 → 上传并确认 → 点发送」，附件确认严格在提交前。发送按钮延迟时只重试点击，不重填文本（避免覆盖附件）。
+- **修复 FILE_CHOOSER 从未执行**：`WebViewAiSource.tryUpload` 之前只调 `verifyAttachment`，从未调 `prepareFileChooserUpload`，Gemini 切到文件选择后立即暴露；已修复并补单测。
+- **Gemini 上传改走原生文件选择**：CDP 实测离屏 WebView `document.hasFocus()=false`，Gemini 对合成 paste `preventDefault` 但不挂附件；改为原生触摸 `Upload and tools`（约 56,725）→ 工具箱 `Files`（约 87,456）→ `onShowFileChooser` → FileProvider URI 回填。工具箱有 ~1.5s 动画，菜单轮询 8 次；填文本后工具栏重排（652→725），取坐标前等 400ms。
+- **修正 Gemini 附件假阳性**：`[data-test-id*="upload"]` 命中 6 个上传工具栏按钮，`verifyAttachment` 恒 true；现只认 `uploader-file-preview` / `.file-preview-chip` / `gem-media-attachment` / 预览缩略图。上传前 sample `previewCount=0`，回填后 `previewCount=3 thumbCount=1 attached=true`。
+- **真机结果（离屏，LIO-N29 / Android 10 / WebView 114.0.5.302）**：
+  - Gemini 单图：`SOURCE_E2E_OK cards=9 status=Offscreen`，`verifyAttachment confirmed` 在 `submitComposer` 之前；
+  - Gemini 连续两图：`SOURCE_E2E_TWICE_OK first=10 second=27 status=Offscreen`，第二轮基线 `inputChars=0 attached=false`；
+  - DeepSeek 回归：`cards=27 status=Offscreen`；
+  - ChatGPT：`UploadFailed: … 站点上传额度已用尽，需等待额度恢复或升级账号`，首次采样即失败、未提交纯文本。
+- **ChatGPT 额度阻塞（AI-183）**：页面明确提示 `You've reached the limit for file attachments`，约 **2026-10-31 12:36** 恢复；换账号或等待前无法验收 PASTE/连续两图。额度/焦点原因已透传到 `UploadFailed`。
+- **验证**：`./gradlew testDebugUnitTest assembleDebug` 全绿（333 项单测，0 失败）。
 
 ## 验证基线
 
@@ -30,42 +34,38 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 ```
 
 真机：HUAWEI LIO-N29 / Android 10 / WebView 114.0.5.302（WiFi adb `192.168.3.158:5555`）。
-探针真实图：先 `adb push` 到 `/data/local/tmp`，再 `run-as` 拷进 `cache/probe/`。
+测试图：`/data/local/tmp/hand_test.png`（Gemini 9/10 张）、`/data/local/tmp/case14.jpg`（27 张）。
 
 ## 剩余未完成（19 项）
 
-- **AI-158 ~ AI-163 / G-15 / G-23 ~ G-25**：ChatGPT 真机登录、选择器核对、PASTE 附件验证、带图闭环、连续两图与三源横向验收。
-- **AI-089 / AI-090**：Gemini 手动登录后的单图/连续图/过期恢复；本地链路迁移前后设备对照。
-- **AI-148 / AI-149 / AI-154 / AI-155**：三源闭环与切换隔离、HTTP API Key 回归、结论回写。
-- **G-10**：三源真实会话记录（缺 ChatGPT）。
-- **G-07**：仅缺上传超时的直接证据（真机或假时钟单测）。
-- **G-21**：仅缺 TalkBack（设备未安装读屏服务）。
+- **ChatGPT**：AI-158（未登录侧）、159~163、G-23~25。额度恢复后重跑 `source_e2e` / `source_e2e_twice`。
+- **Gemini**：AI-089 还差「会话过期及恢复」；单图与连续两图已通过。
+- **横向**：AI-148/149/154/155、G-15、G-10。
+- **其他**：G-07（上传超时证据）、G-21（TalkBack）。
 
 ## 已知缺口 / 阻塞
 
-- **ChatGPT**：适配器/脚本/注册/单测齐全，但设备未登录、选择器未核对；不得写成已验证。
-- **Gemini 登录态**：设备上的 Google 登录已失效，AI-089 需人工重新登录。
-- **TalkBack**：目标设备 `pm list packages` 无任何 TalkBack/读屏服务，G-21 无法取证。
-- **上传超时**：`PageDriver.UPLOAD_TIMEOUT_MILLIS = 20s` 有实现，但无假时钟单测；补一个注入时钟的测试即可闭合 G-07。
-- **横屏**：`MainActivity` 固定 `portrait`，无横屏布局，属设计选择而非缺陷。
+- **ChatGPT 附件额度**：测试账号额度用尽，页面提示等待约 10-31 12:36；这不是代码路径问题，当前无法取得附件成功证据。
+- **ChatGPT 新 DOM**：composer 为 `div.ProseMirror[aria-label='Ask ChatGPT']`，`#prompt-textarea` 已不存在；`ChatGPTSelectors.INPUT` 靠 `div.ProseMirror` 兜底命中。
+- **Gemini 合成 paste**：只在 `document.hasFocus()` 为 true 时生效；生产识牌走离屏 1×1 锚点，不能依赖焦点，故只用 FILE_CHOOSER。
+- **未登录侧**：ChatGPT/Gemini 均处于已登录态，不能为取证退出账号。
+- **TalkBack**：设备未安装读屏服务，G-21 无法取证。
+- **HTTP API**：仍无可用 Key，AI-154 未回归。
 
 ## 下一步
 
-1. 补 `PageDriver` 上传超时的假时钟单测 → 可勾 G-07。
-2. 设备登录 ChatGPT，按 `--es auto` 只读诊断回填选择器，跑 AI-158~163 与 G-23~25。
-3. 人工重新登录 Gemini，跑 AI-089/090。
-4. 三源横向与 HTTP API 回归（AI-148/149/154/155），结论回写 §5.6。
+1. 2026-10-31 12:36 后复测 ChatGPT `source_e2e` 与 `source_e2e_twice`，跑 AI-159/160/162、G-23/G-24。
+2. 补 Gemini 会话过期与恢复取证（AI-089）。
+3. 三源稳定后跑 AI-148/149/154/155、G-15/G-25，回写 §5.6。
+4. 注意 Gemini 同一张图两次识别的张数会波动（9/10），验收时以“能解析出合法牌面”为主，同时保留张数记录供人工核对。
 
 ## 已知问题（踩坑备忘）
 
 - `evaluateJavascript` 只返回同步值；Promise / `setTimeout` 结果拿不到，异步副作用必须用后续快照验证。
 - **JS 里禁止同步忙等**：会卡死事件循环，Angular/React 渲染全部停摆。
-- `FileProvider` 已声明 `cache/photos/`、`cache/ai-upload/`、`cache/probe/`；其它目录会抛 `Failed to find configured root`。
-- 拖放/粘贴 `dispatchEvent` 返回 false **不等于失败**，唯一判据是 composer 作用域内的附件预览计数。
-- DeepSeek 回答可能带 UI 前缀（如 `jsonCopyDownload[`），解析会退回逐条提取并告警；牌面仍正确。
-- 本机无系统 JDK，需 `JAVA_HOME=/opt/homebrew/opt/openjdk@17`；adb 在 `~/Library/Android/sdk/platform-tools/adb`。
-- 本机 `am force-stop` 不生效，需 `am force-stop` + `am kill` 并用 `pidof` 确认；`logcat -c` 不清主缓冲，须按 pid 过滤。
-- 探针 Activity 已在前台时 `am start` 只会投递 intent，不触发 `runAuto`；重跑前必须 force-stop + kill，确认 `pidof` 为空。
-- 旋转测试需 `settings put system accelerometer_rotation 0` 后再设 `user_rotation`，否则设置被传感器覆盖；结束后恢复原值。
-- uiautomator 的 bounds 会被 ScrollView 底边裁切，触控目标必须滚动后再测量。
+- **WebView/Host 的所有读取必须在主线程**：在 worker 线程调用 `host.currentWebView()` 会直接 `IllegalStateException`。
+- 离屏宿主 `document.hasFocus()` 为 false；依赖焦点的站点（Gemini）会丢弃合成 paste。派发前在主线程调用 `webView.requestFocus()` 可让同一离屏 WebView 的 `document.hasFocus()` 变为 true（ChatGPT 真机不再返回 `document-not-focused`）；Gemini 仍选择文件选择路径，避免依赖焦点。
+- 附件判据不能包含 `data-test-id*="upload"`：工具栏按钮也带该字段，会恒判已挂附件。
+- 上传入口坐标会随文本填入/动画变化（Gemini 652→725）；取坐标后先等布局稳定，菜单打不开时重新定位再点。
+- 本机 `am force-stop` 需配合 `am kill` 并用 `pidof` 确认；`logcat` 默认缓冲偏小，长任务可 `logcat -G 8M`。
 - 轮询类单测的时钟必须递增，否则稳定判定永不满足。

@@ -77,9 +77,37 @@ interface PageOps {
      */
     fun startNewConversation(): Boolean = false
 
+    /**
+     * AI-158：清空 composer 里未发送的**文本草稿**（不碰附件）。
+     *
+     * 仅当新建会话无法消除文字残留时使用；调用方必须在之后重新读快照确认，
+     * 不得把本方法的返回值当成「输入区已干净」。默认不支持。
+     */
+    fun clearComposer(): Boolean = false
+
     fun pollSnapshot(): AnswerSnapshot
 
     fun fillAndSubmit(prompt: String, fileName: String, mimeType: String, base64: String): SubmitOutcome
+
+    /**
+     * 只填文本，不提交。
+     *
+     * 用于 `uploadsAfterFill` 的站点：填文本 → 上传并确认 → [submitComposer]。
+     * 返回 false 表示输入区没有被确认写入，调用方不得继续上传/提交。
+     */
+    fun fillComposer(prompt: String): Boolean = false
+
+    /** 只点击发送；返回契约与 [fillAndSubmit] 相同。 */
+    fun submitComposer(): SubmitOutcome =
+        SubmitOutcome.fail("submit-composer-not-supported")
+
+    /**
+     * 最近一次上传失败的页面侧原因（AI-183）。
+     *
+     * 例如站点把上传额度用尽、附件被页面拒绝；用于让 `UploadFailed`
+     * 带上可执行信息，而不是笼统的「未确认附件预览」。默认没有。
+     */
+    fun lastUploadFailure(): String? = null
 
     /** 粘贴路径是否被派发。真实成功仍以 [verifyAttachment] 为准。 */
     fun pasteImage(fileName: String, mimeType: String, base64: String): Boolean
