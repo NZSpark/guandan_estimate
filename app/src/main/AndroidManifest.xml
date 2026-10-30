@@ -12,8 +12,16 @@
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files" android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+        <!-- AI 源配置独立页面（doc/ai_configure.md） -->
+        <activity
+            android:name=".ui.AiSettingsActivity"
+            android:exported="false"
+            android:label="AI 源管理"
+            android:parentActivityName=".MainActivity"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
         <!-- 阶段 0 验证入口，Gemini WebView 迁移完成后移除 -->
-        <activity android:name=".probe.AiProbeActivity" android:exported="true" android:label="AI Probe" />
+        <activity android:name=".probe.AiProbeActivity" android:exported="true" android:label="AI Probe" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".probe.GeminiProbeActivity" android:exported="true" android:label="Gemini Probe" />
         <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true">
             <intent-filter>

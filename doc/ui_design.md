@@ -1,6 +1,6 @@
 # 掼蛋牌力评估 App：UI 全面重设计方案
 
-> 文档状态：设计规格，待实施与验收。
+> 文档状态：设计规格；主工作台与 AI 源管理已实施，无障碍/横屏验收见 `doc/ai_tasks.md`。
 >
 > 分析基线：当前分支代码、`README.md`、`doc/multi_ai_update.md`，截至 2026-10-28。
 >
@@ -27,7 +27,7 @@
 | `README.md` | 用户功能范围、评分指标、识牌步骤、隐私边界和构建条件 |
 | `doc/multi_ai_update.md` | Gemini、DeepSeek、自定义网页源和 HTTP API 四类源；配置 profile、登录状态与健康状态 |
 | `app/src/main/java/nz/org/aotearoa/guandanscore/MainActivity.kt` | 图片导入、手牌校正、级牌选择、牌力计算、随机手牌与图片保存 |
-| `app/src/main/java/nz/org/aotearoa/guandanscore/ui/AiSettingsDialog.kt` | AI 源选择、profile 管理、按源显隐配置字段、网页登录入口 |
+| `doc/ai_configure.md` | AI 源管理独立页面（已实施）：源选择、profile 管理、按源显隐字段、健康检查与网页登录入口 |
 | `app/src/main/res/layout/activity_main.xml` | 当前主界面控件及其 ID，作为迁移功能核对依据 |
 | `app/src/main/res/values/colors.xml`、`themes.xml` | 已有 Material 3、深绿、奶油白和金色视觉基础 |
 | `app/src/main/java/nz/org/aotearoa/guandanscore/probe/GeminiProbeActivity.kt` | WebView 页面承载、网页登录和页面探测入口 |
@@ -416,9 +416,11 @@
 
 ## 6. AI 源管理页面
 
+> 实施细节（页面结构、交互、状态、校验、健康检查、测试与实施顺序）以 [`doc/ai_configure.md`](ai_configure.md) 为准；本节保留信息架构方向。页面形态为独立 Activity，不再使用弹窗。
+
 ### 6.1 设计目标
 
-将当前 `AiSettingsDialog` 的配置能力迁移到更清楚的表单结构中，核心逻辑依旧使用 `AiSettingsStore`、`AiSourceId`、`AiSourceRegistry` 和对应预设。
+AI 源配置由独立 `AiSettingsActivity` 承载，表单与配置档管理拆成清楚的区块；核心逻辑依旧使用 `AiSettingsStore`、`AiSourceId`、`AiSourceRegistry` 和对应预设。
 
 ### 6.2 页面布局
 
@@ -500,10 +502,10 @@ API Key
 
 建议采用图标 + 文字 + 行动入口组合：
 
-- `需要登录` → `打开网页登录`。
+- `需要登录` → `打开网页登录`；`已就绪` 仍保留「网页登录 / 切换账号」，以支持全新安装与账号切换。
 - `页面暂不可用` → `重新检查` / `查看诊断`。
 - `正在检查` → 进度指示。
-- `已就绪` → 仅在健康检查实际确认时显示。
+- `已就绪` → 仅在健康检查实际确认时显示；不因此隐藏登录入口。
 - `状态未知` → 使用中性色，不展示绿色成功图标。
 
 不要将健康状态只保存在表单打开时的一次性文本中。登录返回后应重新查询当前源状态并刷新展示。
@@ -697,7 +699,7 @@ WebView 占据可用内容区域，必须正常测量、布局和出帧。处理
 |---|---|
 | `activity_main.xml` | 按输入、识别、手牌、级牌、结果分区重构布局 |
 | `MainActivity.kt` | 保留业务协调；提供清晰、独立的页面状态和事件处理 |
-| `ui/AiSettingsDialog.kt` | 复用其 profile 和源管理能力，逐步改为更易用的配置页面；先保留原功能以便回滚 |
+| `ui/AiSettingsActivity.kt` | 独立 AI 源管理页：源/配置档选择、字段显隐与校验、健康检查、登录跳转；旧弹窗已删除 |
 | `probe/GeminiProbeActivity.kt` | 独立承载登录、会话恢复和诊断界面 |
 | `recognition/source/AiSourceId.kt` | UI 源选择与实际 source ID 保持一致 |
 | `recognition/source/AiSourceRegistry.kt` | 负责按配置构造真实 AI 源，UI 不按字符串猜测实现类型 |

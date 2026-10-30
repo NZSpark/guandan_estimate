@@ -66,6 +66,9 @@ open class AiProbeActivity : Activity() {
         /** 直接指定 URL，优先级高于 [EXTRA_SITE]。 */
         const val EXTRA_URL = "url"
 
+        /** true = 用户登录模式：隐藏诊断按钮与日志，只保留返回/标题/全屏网页。 */
+        const val EXTRA_LOGIN = "login"
+
         /** 兼容旧入口：`GeminiProbeActivity` 使用的参数名。 */
         const val EXTRA_START_URL = "start_url"
 
@@ -269,8 +272,9 @@ open class AiProbeActivity : Activity() {
     private lateinit var host: WebViewHost
     /** AI-169：共享宿主挂接用的全屏可见容器。 */
     private lateinit var webContainer: FrameLayout
-    private lateinit var output: TextView
-    private lateinit var logView: TextView
+    /** 诊断输出；登录模式下为 null（正式登录页不展示探针日志）。 */
+    private var output: TextView? = null
+    private var logView: TextView? = null
     private lateinit var siteBar: LinearLayout
 
     /** 当前适配器；切换站点时替换。 */
@@ -291,71 +295,109 @@ open class AiProbeActivity : Activity() {
                 "restored=${savedInstanceState != null}"
         )
 
+        val loginMode = intent?.getBooleanExtra(EXTRA_LOGIN, false) == true
+        val explicitUrl = intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }
+            ?: intent?.getStringExtra(EXTRA_START_URL)?.takeIf { it.isNotBlank() }
+        val siteKey = intent?.getStringExtra(EXTRA_SITE)?.takeIf { it.isNotBlank() } ?: DEFAULT_SITE
+        val sourceLabel = AiSourceId.entries.firstOrNull { it.key == siteKey }?.label ?: "网页"
+
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        // ---- 站点切换栏 ----
-        siteBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        root.addView(
-            android.widget.HorizontalScrollView(this).apply { addView(siteBar) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        )
-        rebuildSiteBar()
+        if (loginMode) {
+            // 正式登录模式：不展示站点切换、诊断按钮和探针日志，避免用户误入调试界面。
+            val header = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(8, 8, 8, 8)
+            }
+            header.addView(Button(this).apply {
+                text = "← 返回"
+                setOnClickListener { finish() }
+            })
+            header.addView(TextView(this).apply {
+                text = "网页登录"
+                textSize = 18f
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(16, 0, 16, 0)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            header.addView(Button(this).apply {
+                text = "重新加载"
+                setOnClickListener { webView.reload() }
+            })
+            root.addView(header)
+            root.addView(TextView(this).apply {
+                text = "$sourceLabel · 登录完成后返回，会自动重新检查登录状态。"
+                textSize = 12f
+                setPadding(24, 0, 24, 8)
+            })
+        } else {
+            // ---- 站点切换栏 ----
+            siteBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            root.addView(
+                android.widget.HorizontalScrollView(this).apply { addView(siteBar) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            )
+            rebuildSiteBar()
 
-        // ---- 适配器诊断栏 ----
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun button(label: String, action: () -> Unit) = Button(this).apply {
-            text = label
-            setOnClickListener { action() }
-            bar.addView(this)
-        }
-        button("基线") { logBaseline() }
-        button("诊断") { runAdapterScript("DIAG") { adapter.diagnoseScript() } }
-        button("深度探测") { runAdapterScript("DEEP") { adapter.deepProbeScript() } }
-        button("文件框属性") { runAdapterScript("FILEATTR") { adapter.fileInputProbeScript() } }
-        button("停止控件") { runAdapterScript("STOPCTL") { adapter.stopControlProbeScript() } }
-        button("快照") { runAdapterScript("SNAP") { adapter.snapshotScript() } }
-        button("登录检查") { runAdapterScript("LOGIN") { adapter.loginCheckScript() } }
-        button("附件检查") { runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() } }
-        button("准备测试图") { prepareChooserImage() }
-        button("上传入口") { runAdapterScript("UPLOAD") { adapter.uploadTriggerScript() } }
-        button("原生点上传") { tapUploadIcon() }
-        button("输入区按钮") { runScript(COMPOSER_BUTTONS) { log("CBTNS", it) } }
-        button("上传图标坐标") { runAdapterScript("ICON") { adapter.uploadIconScript() } }
-        button("粘贴测试") { testPaste() }
-        button("拖放测试") { testDrop() }
-        button("系统剪贴板") { testSystemClipboard() }
-        button("填+贴+发") { testFillPasteSubmit() }
-        button("UA") { runScript("navigator.userAgent") { log("UA", it) } }
-        button("按钮枚举") { runScript(ENUM_BUTTONS) { log("BTNS", it) } }
-        button("Gemini发送枚举") { runScript(GEMINI_SEND_ENUM) { log("GSEND", it) } }
-        button("Gemini填文本") { runScript(GEMINI_FILL_ONLY) { log("GFILL", it) } }
-        button("输入框详情") { runScript(ENUM_INPUT) { log("INPUT", it) } }
-        button("文件框详情") { runScript(ENUM_FILE) { log("FILE", it) } }
-        button("清日志") { output.text = ""; logView.text = "" }
-        root.addView(android.widget.HorizontalScrollView(this).apply { addView(bar) })
+            // ---- 适配器诊断栏 ----
+            val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            fun button(label: String, action: () -> Unit) = Button(this).apply {
+                text = label
+                setOnClickListener { action() }
+                bar.addView(this)
+            }
+            button("基线") { logBaseline() }
+            button("诊断") { runAdapterScript("DIAG") { adapter.diagnoseScript() } }
+            button("深度探测") { runAdapterScript("DEEP") { adapter.deepProbeScript() } }
+            button("文件框属性") { runAdapterScript("FILEATTR") { adapter.fileInputProbeScript() } }
+            button("停止控件") { runAdapterScript("STOPCTL") { adapter.stopControlProbeScript() } }
+            button("快照") { runAdapterScript("SNAP") { adapter.snapshotScript() } }
+            button("登录检查") { runAdapterScript("LOGIN") { adapter.loginCheckScript() } }
+            button("附件检查") { runAdapterScript("ATTACH") { adapter.verifyAttachmentScript() } }
+            button("准备测试图") { prepareChooserImage() }
+            button("上传入口") { runAdapterScript("UPLOAD") { adapter.uploadTriggerScript() } }
+            button("原生点上传") { tapUploadIcon() }
+            button("输入区按钮") { runScript(COMPOSER_BUTTONS) { log("CBTNS", it) } }
+            button("上传图标坐标") { runAdapterScript("ICON") { adapter.uploadIconScript() } }
+            button("粘贴测试") { testPaste() }
+            button("拖放测试") { testDrop() }
+            button("系统剪贴板") { testSystemClipboard() }
+            button("填+贴+发") { testFillPasteSubmit() }
+            button("UA") { runScript("navigator.userAgent") { log("UA", it) } }
+            button("按钮枚举") { runScript(ENUM_BUTTONS) { log("BTNS", it) } }
+            button("Gemini发送枚举") { runScript(GEMINI_SEND_ENUM) { log("GSEND", it) } }
+            button("Gemini填文本") { runScript(GEMINI_FILL_ONLY) { log("GFILL", it) } }
+            button("输入框详情") { runScript(ENUM_INPUT) { log("INPUT", it) } }
+            button("文件框详情") { runScript(ENUM_FILE) { log("FILE", it) } }
+            button("清日志") { output?.text = ""; logView?.text = "" }
+            root.addView(android.widget.HorizontalScrollView(this).apply { addView(bar) })
 
-        logView = TextView(this).apply {
-            textSize = 10f
-            setTextIsSelectable(true)
-            setBackgroundColor(0x10000000)
-        }
-        // 探测页把 WebView 放到最大：视口必须接近真实使用场景，否则 DOM 布局
-        // 与全屏 App 内不同，坐标类实验（回形针位置、innerHeight）会失真。
-        root.addView(
-            ScrollView(this).apply { addView(logView) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.12f)
-        )
+            val logPanel = TextView(this).apply {
+                textSize = 10f
+                setTextIsSelectable(true)
+                setBackgroundColor(0x10000000)
+            }
+            logView = logPanel
+            // 探测页把 WebView 放到最大：视口必须接近真实使用场景，否则 DOM 布局
+            // 与全屏 App 内不同，坐标类实验（回形针位置、innerHeight）会失真。
+            root.addView(
+                ScrollView(this).apply { addView(logPanel) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.12f)
+            )
 
-        output = TextView(this).apply {
-            textSize = 9f
-            gravity = Gravity.TOP or Gravity.START
-            setTextIsSelectable(true)
-            setPadding(8, 8, 8, 8)
+            val outputPanel = TextView(this).apply {
+                textSize = 9f
+                gravity = Gravity.TOP or Gravity.START
+                setTextIsSelectable(true)
+                setPadding(8, 8, 8, 8)
+            }
+            output = outputPanel
+            root.addView(
+                ScrollView(this).apply { addView(outputPanel) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.20f)
+            )
         }
-        root.addView(
-            ScrollView(this).apply { addView(output) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.20f)
-        )
 
         // AI-169：探针页不再自建 WebView，而是挂接进程级共享宿主。
         // 这样「打开网页登录」与正式识牌共用同一个 WebView / Cookie / 页面：
@@ -363,7 +405,11 @@ open class AiProbeActivity : Activity() {
         webContainer = FrameLayout(this)
         root.addView(
             webContainer,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 2.4f)
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                if (loginMode) 1f else 2.4f
+            )
         )
 
         setContentView(root)
@@ -382,9 +428,6 @@ open class AiProbeActivity : Activity() {
         webView = host.ensureWebView()
 
         // 初始站点：EXTRA_URL > EXTRA_START_URL > EXTRA_SITE > 默认
-        val explicitUrl = intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }
-            ?: intent?.getStringExtra(EXTRA_START_URL)?.takeIf { it.isNotBlank() }
-        val siteKey = intent?.getStringExtra(EXTRA_SITE)?.takeIf { it.isNotBlank() } ?: DEFAULT_SITE
         switchTo(siteKey, explicitUrl)
     }
 
@@ -1069,8 +1112,8 @@ open class AiProbeActivity : Activity() {
     private fun log(tag: String, msg: String) {
         Log.i(TAG, "$tag: $msg")
         runOnUiThread {
-            logView.append("[$tag] $msg\n")
-            output.append("[$tag] $msg\n")
+            logView?.append("[$tag] $msg\n")
+            output?.append("[$tag] $msg\n")
         }
     }
 

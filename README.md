@@ -63,12 +63,12 @@ P    = 15 × N_waste        （N ≥ 10；N < 10 的残局不扣散牌惩罚）
 
 **网页源的运行方式**
 
-1. **登录**：设置页「打开网页登录」进入独立页面完成登录，Cookie 由 `CookieManager` 在应用内全局保留，之后主界面识图复用同一登录态。
+1. **登录**：AI 源管理页「网页登录 / 切换账号」进入无诊断控件的全屏登录页完成登录，Cookie 由 `CookieManager` 在应用内全局保留，之后主界面识图复用同一登录态。全新安装没有 Cookie 时，健康检查会显示「需要登录」，登录入口始终可用。
 2. **上传**：按适配器声明的 `supportedUploads` 尝试（每个源只启用真机验证过的路径，不再无条件回退）——DeepSeek 支持合成 `paste` 与原生触摸文件选择器；Gemini 使用原生触摸文件选择（`Upload and tools` → `Files`）；ChatGPT 使用合成 `paste`；自定义源走文件选择器。所有路径都必须以页面出现附件预览为成功判据，**附件未确认绝不提交**。
 3. **提交与等待**：先记录回答基线 → 填 prompt → 上传并在提交前确认附件 → 点发送（必须同时确认已填写与已点击）→ 轮询页面新增回答，文本连续稳定才判定生成结束，避免追问拿到上一轮回答。
-4. **健康检查**：只读诊断，不导航、不 reload；页面被分为 READY / LOADING / COMPOSER_MISSING / VIEWPORT_UNHEALTHY / LOGIN_REQUIRED / HOST_NOT_ATTACHED，分别对应「继续 / 重试 / 重载 / 需人处理（视口异常）/ 请登录 / 请先打开一次 AI 页面」。选择器缺失与视口异常不会被误报成未登录。
+4. **健康检查**：已挂接页面只做只读诊断，不导航、不 reload；页面被分为 READY / LOADING / COMPOSER_MISSING / VIEWPORT_UNHEALTHY / LOGIN_REQUIRED / HOST_NOT_ATTACHED，分别对应「继续 / 重试 / 重载 / 需人处理（视口异常）/ 请登录 / 宿主待恢复」。冷启动（进程内还没有 WebView）时，健康检查会在后台自动完成创建 → 离屏挂接 → 首页导航，再重新只读诊断，因此**不需要用户先手动打开 AI 页面**；只有自动挂接仍失败时才提示「请先打开一次 AI 页面」。选择器缺失与视口异常不会被误报成未登录。
 5. **不占界面**：主界面不插入可见 WebView，页面挂在 1×1 离屏锚点上按全屏像素布局，`innerHeight` 等于屏高，页面照常出帧、文件选择器照常触发。
-6. **共享宿主**：主界面与「打开网页登录」页共用同一个 WebView 实例；在可见容器与离屏锚点之间切换前会先解除旧父容器。冷启动尚未挂接时提示「请先打开一次 AI 页面」，而不是误报未登录。
+6. **共享宿主**：主界面与「网页登录 / 切换账号」页共用同一个 WebView 实例；在可见容器与离屏锚点之间切换前会先解除旧父容器。冷启动由首个健康检查自动离屏挂接并加载首页，健康态从「检测中」直接变为「网页可用」或「需要登录」；只有锚点不可用时才提示「请先打开一次 AI 页面」，而不是误报未登录。
 
 **HTTP API 源**
 
@@ -76,7 +76,7 @@ P    = 15 × N_waste        （N ≥ 10；N < 10 的残局不扣散牌惩罚）
 - 只接受 `https://` 地址；配置页会做字段级校验，错误显示在字段下方而不是只弹 Toast。
 - 预设只填入示例接口与模型名，请按所用服务商的当前文档核对后修改。
 
-**配置管理**：每个源可保存多套 profile，设置页按源类型显隐字段——网页源完全隐藏 endpoint / model / API Key 及其标签；删除 profile 需二次确认并显示将删除的名称。
+**配置管理**：每个源可保存多套 profile，AI 源管理页按源类型显隐字段——网页源完全隐藏 endpoint / model / API Key 及其标签；删除 profile 需二次确认并显示将删除的名称。
 
 ## 架构
 
@@ -96,13 +96,13 @@ MainActivity（工作台，状态驱动渲染）
 | `scoring/` | `HandScorer`、`HandResult`、`Meld` | 生成牌型候选、精确覆盖搜索、SPI/NSPI 与动态评级 |
 | `recognition/` | `CardRecognizer`、`CardTemplateMatcher` | 本地三阶段识别 |
 | | `AiCardResponseParser`、`AiRecognitionClient` | 回答解析、HTTP API 协议适配 |
-| `recognition/source/` | `AiSource`、`AiSourceId`、`AiSourceRegistry`、`HttpApiSource`、`AiSourcePresets` | 业务侧唯一依赖的源抽象、注册表与站点首页常量 |
+| `recognition/source/` | `AiSource`、`AiSourceId`、`AiSourceRegistry`、`HttpApiSource`、`AiSourcePresets`、`HealthCheckGate` | 业务侧唯一依赖的源抽象、注册表、站点首页常量与健康检查串行化 |
 | `recognition/site/` | `SiteAdapter`、`DeepSeek/Gemini/ChatGPT/Custom Adapter` + `Scripts` + `Selectors` | 站点知识：选择器、注入脚本、结构化解析、上传首选策略 |
 | `recognition/webview/` | `WebViewHost`、`PageDriver`、`PageOps`、`WebViewAiSource` | 宿主、站点无关驱动、识牌状态机 |
 | | `PageState`、`ReadyRetryPolicy`、`AttachGate`、`BlockingBridge` | 页面状态分类、就绪退避、挂接体检、主线程死锁防线 |
 | | `ViewportTapMapper`、`FileChooserSlot`、`UrlRedactor`、`WebViewSecurityConfig` | 视口坐标换算、文件选择回调所有权、日志脱敏、安全开关契约 |
 | `imaging/` | `HandImageRenderer`、`VisualCardCodec`、`CardAssetNames`、`UploadImageEncoder` | 手牌图/拆牌图渲染、内嵌校验码、素材名映射、上传压缩 |
-| `ui/` | `WorkbenchState`、`AiSettingsScreen` | 分域显示状态（纯 JVM 可测）、AI 源管理页 |
+| `ui/` | `WorkbenchState`、`AiSettingsActivity`、`AiSettingsEditor`、`AiSettingsValidation` | 分域显示状态、独立 AI 源管理页及其纯 JVM 编辑/校验逻辑 |
 | `probe/` | `AiProbeActivity`、`GeminiProbeActivity` | 真机诊断入口（开发者工具，非用户功能） |
 | 根 | `MainActivity` | 单 Activity 工作台：操作 → 业务层 → 状态渲染 |
 
@@ -112,7 +112,7 @@ MainActivity（工作台，状态驱动渲染）
 2. **主线程契约**：`WebViewHost` 全部方法断言主线程；`PageOps` 可被 worker 线程调用，由实现切主线程；`BlockingBridge` 在主线程直接抛异常，禁止 `runBlocking` 等 JS 回调。
 3. **禁止同步忙等**：页面元素由前端框架异步渲染，`while (Date.now() < …)` 会冻结事件循环导致元素永远渲染不出来，一律用 `setTimeout` 重试。
 4. **证据优先**：附件以页面预览节点为准、提交以 `filled && submitted` 为准、回答以基线之后的新增文本为准；不以事件派发的返回值当成功判据。
-5. **健康检查只读**：设置页的「重新检查」不得变成一次真实导航；识牌生成过程中暂停自动 reload。
+5. **健康检查只读**：AI 源管理页的「重新检查」不得变成一次真实导航；识牌生成过程中暂停自动 reload。
 
 ## 构建与运行
 
@@ -147,7 +147,7 @@ adb install -r -t app/build/outputs/apk/debug/app-debug.apk
 
 ## 测试
 
-`./gradlew testDebugUnitTest` 是提交前基线。当前 34 个测试类、321 项单元测试全绿，覆盖：
+`./gradlew testDebugUnitTest` 是提交前基线。当前 38 个测试类、373 项单元测试全绿，覆盖：
 
 - 牌型分值：普通牌型映射上下界（191）、最小四炸（192）、高阶炸弹对数分、火箭（1000）、级牌逢人配的三种语义。
 - 拆牌与指标：1～27 张部分/完整手牌、`T_max(N)`、SPI/NSPI、散牌惩罚、动态评级、并列方案的取舍。

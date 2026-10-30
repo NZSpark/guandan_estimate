@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
@@ -33,6 +34,7 @@ import nz.org.aotearoa.guandanscore.recognition.CardRecognizer
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceError
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceRegistry
+import nz.org.aotearoa.guandanscore.recognition.source.HealthCheckGate
 import nz.org.aotearoa.guandanscore.recognition.source.RecognizeRequest
 import nz.org.aotearoa.guandanscore.recognition.source.SourceHealth
 import nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost
@@ -40,7 +42,7 @@ import nz.org.aotearoa.guandanscore.scoring.HandResult
 import nz.org.aotearoa.guandanscore.scoring.HandScorer
 import nz.org.aotearoa.guandanscore.ui.AiFailureKind
 import nz.org.aotearoa.guandanscore.ui.AiRecognitionState
-import nz.org.aotearoa.guandanscore.ui.AiSettingsScreen
+import nz.org.aotearoa.guandanscore.ui.AiSettingsActivity
 import nz.org.aotearoa.guandanscore.ui.HealthState
 import nz.org.aotearoa.guandanscore.ui.ImageSource
 import nz.org.aotearoa.guandanscore.ui.ImageState
@@ -124,7 +126,9 @@ class MainActivity : AppCompatActivity() {
             root?.addView(anchor, android.view.ViewGroup.LayoutParams(1, 1))
         }
 
-        refreshSourceState()
+        // AI-184：首次健康检查由 onResume post 触发。onCreate/onResume 阶段 decorView
+        // 还没挂进窗口，此时离屏锚点 attach 必然失败，会把后台自动挂接误报成
+        // 「WebView 未挂接窗口」。
         render()
     }
 
@@ -403,14 +407,38 @@ class MainActivity : AppCompatActivity() {
         gallery.launch(pick)
     }
 
-    private fun load(uri: Uri, source: ImageSource) {
-        try {
+    /**
+     * 读取相册/相机图片，最长边按约 1800px 降采样。
+     *
+     * [ImageDecoder] 只在 API 28+ 可用；minSdk 26 必须保留 BitmapFactory 回退，
+     * 否则 Android 8/9 点「相册」会直接 NoClassDefFoundError/NoSuchMethodError。
+     */
+    private fun decodeInput(uri: Uri): Bitmap {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val decoderSource = ImageDecoder.createSource(contentResolver, uri)
-            val bitmap = ImageDecoder.decodeBitmap(decoderSource) { decoder, info, _ ->
+            return ImageDecoder.decodeBitmap(decoderSource) { decoder, info, _ ->
                 val scale = maxOf(info.size.width / 1800, info.size.height / 1800, 1)
                 decoder.setTargetSize(info.size.width / scale, info.size.height / scale)
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
+        }
+
+        // API 26–27：BitmapFactory 不支持 ImageDecoder 的 targetSize，用 inSampleSize 近似。
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= 1800 || bounds.outHeight / (sample * 2) >= 1800) {
+            sample *= 2
+        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        return contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        } ?: throw IllegalStateException("无法读取图片")
+    }
+
+    private fun load(uri: Uri, source: ImageSource) {
+        try {
+            val bitmap = decodeInput(uri)
             inputBitmap = bitmap
             outputBitmap = null
             lastInputSource = source
@@ -597,7 +625,16 @@ class MainActivity : AppCompatActivity() {
                 source = SourceState(name = name, isWebView = sourceId.isWebView, health = HealthState.Unknown)
             )
         )
-        if (sourceId.isWebView) checkHealth(settings)
+        if (sourceId.isWebView) {
+            // AI-184：离屏自动挂接要求锚点已 attached 到窗口，否则 attachOffscreenViaProvider
+            // 会拒绝（anchor.isAttachedToWindow=false）。此时 post，等 dispatchAttachedToWindow
+            // 之后再做检查；不在这里直接发起，避免把宿主问题伪装成页面问题。
+            if (ui.root.isAttachedToWindow) {
+                checkHealth(settings)
+            } else if (!isFinishing && !isDestroyed) {
+                ui.root.post { refreshSourceState() }
+            }
+        }
     }
 
     /**
@@ -612,7 +649,8 @@ class MainActivity : AppCompatActivity() {
         Thread({
             val health = try {
                 val source = AiSourceRegistry.create(settings, host = webHost, context = this)
-                when (val h = source.healthCheck()) {
+                // 与 AI 源管理页共用一把检查锁，避免冷启动时重复预热同一个 WebView。
+                when (val h = HealthCheckGate.run { source.healthCheck() }) {
                     SourceHealth.Ready -> HealthState.Ready
                     is SourceHealth.NotLoggedIn -> HealthState.NotLoggedIn(h.hint)
                     is SourceHealth.Unavailable -> HealthState.Unavailable(h.reason)
@@ -628,14 +666,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAiSettings() {
-        AiSettingsScreen(
-            activity = this,
-            store = aiSettingsStore,
-            onSaved = { settings ->
-                toast("当前 AI 源：${settings.provider}")
-                refreshSourceState()
-            }
-        ).show()
+        // AI 源配置已改为独立管理页面（doc/ai_configure.md）；返回后由 onResume 刷新健康态。
+        startActivity(Intent(this, AiSettingsActivity::class.java))
     }
 
     private fun openLoginPage() {
@@ -733,7 +765,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshSourceState()
+        // AI-184：decorView 在 onResume 返回后才由 WindowManager 挂上窗口；
+        // post 的 runnable 由 dispatchAttachedToWindow 触发，保证健康检查（以及其中的
+        // 后台自动挂接）开始时视图树已经 attached。
+        ui.root.post { refreshSourceState() }
     }
 
     override fun onDestroy() {

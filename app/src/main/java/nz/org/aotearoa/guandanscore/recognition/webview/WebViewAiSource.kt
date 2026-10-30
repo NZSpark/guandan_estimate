@@ -92,26 +92,22 @@ class WebViewAiSource(
         val health = try {
             // AI-033：先做只读分类，避免「把选择器失败报成未登录、把未登录报成未就绪」。
             // pageState() 不导航；不支持只读诊断的实现返回 null，落到旧的探测路径。
-            val state = pages.pageState()
-            when {
-                state == null -> legacyHealthProbe()
-                state == PageState.READY -> SourceHealth.Ready
-                // 账号问题：需要用户去网页里登录，重试无用。
-                state == PageState.LOGIN_REQUIRED ->
-                    SourceHealth.NotLoggedIn("登录已失效，请在页面中重新登录")
-                // 以下是页面/宿主问题，绝不能报成未登录。
-                state == PageState.LOADING ->
-                    SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
-                state == PageState.COMPOSER_MISSING ->
-                    SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
-                state == PageState.VIEWPORT_UNHEALTHY ->
-                    SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
-                // AI-036：宿主没挂接是宿主问题，既不是未登录也不是「页面未就绪」。
-                // 必须给出可执行提示，而不是走 legacyHealthProbe 报一句笼统失败。
-                state == PageState.HOST_NOT_ATTACHED ->
-                    SourceHealth.Unavailable(PageStateClassifier.reason(state, null))
-                else -> SourceHealth.Unavailable("未知页面状态")
+            var state = pages.pageState()
+            var warmedUp = false
+            // AI-184：冷启动时进程内还没有 WebView（HOST_NOT_ATTACHED），旧行为只能提示
+            // 「先打开一次 AI 页面」。健康检查本身跑在后台线程，这里直接复用识牌的就绪链路，
+            // 在后台完成「创建 WebView → 离屏挂接 → 导航首页 → 等待可操作」，随后再只读诊断一次。
+            //
+            // 只对 HOST_NOT_ATTACHED 触发：该状态的定义就是「没有 WebView」，因此不会
+            // 打断已有页面或生成中的任务（AI-076 的“不导航/reload”约束仍然成立）。
+            if (state == PageState.HOST_NOT_ATTACHED) {
+                Log.i(TAG, "healthCheck: host not attached, warming up page in background")
+                pages.ensureLoaded()
+                warmedUp = true
+                state = pages.pageState()
+                Log.i(TAG, "healthCheck: warm-up finished state=$state")
             }
+            classifyPageState(state, warmedUp)
         } catch (e: AiSourceError) {
             SourceHealth.Unavailable(e.message ?: "未知错误")
         } catch (e: Exception) {
@@ -119,6 +115,37 @@ class WebViewAiSource(
         }
         cachedHealth = health
         return health
+    }
+
+    /**
+     * 只读页面状态 → 健康结论。
+     *
+     * 账号问题与页面/宿主问题必须分开报：把「选择器缺失」报成「未登录」会把用户
+     * 引向错误的处置（AI-033/AI-036）。
+     */
+    private fun classifyPageState(state: PageState?, warmedUp: Boolean = false): SourceHealth = when {
+        // 诊断本身读不出来。若刚刚才自动挂接并导航过，再跑一次 ensureLoaded 只会重复导航，
+        // 因此直接给出就绪失败原因；否则保持旧的兼容路径。
+        state == null -> if (warmedUp) {
+            SourceHealth.Unavailable(pages.lastFailureReason() ?: "页面诊断失败")
+        } else {
+            legacyHealthProbe()
+        }
+        state == PageState.READY -> SourceHealth.Ready
+        // 账号问题：需要用户去网页里登录，重试无用。
+        state == PageState.LOGIN_REQUIRED ->
+            SourceHealth.NotLoggedIn("登录已失效，请在页面中重新登录")
+        // 以下是页面/宿主问题，绝不能报成未登录。
+        state == PageState.LOADING ||
+            state == PageState.COMPOSER_MISSING ||
+            state == PageState.VIEWPORT_UNHEALTHY ->
+            SourceHealth.Unavailable(PageStateClassifier.reason(state, pages.diagnose()))
+        // AI-036：宿主没挂接是宿主问题，既不是未登录也不是「页面未就绪」。
+        // AI-184 之后通常会被自动挂接消解；仍走到这里说明自动挂接没成功，
+        // 提示保留为用户可执行的兜底。
+        state == PageState.HOST_NOT_ATTACHED ->
+            SourceHealth.Unavailable(PageStateClassifier.reason(state, null))
+        else -> SourceHealth.Unavailable("未知页面状态")
     }
 
     /**

@@ -560,9 +560,72 @@ class WebViewAiSourceTest {
         assertTrue(source(pages).healthCheck() is SourceHealth.Unavailable)
     }
 
-    /** AI-036：宿主未挂接要明确报出可执行原因，不能被当成未登录或「页面未就绪」。 */
+    // ---- AI-184：冷启动由后台健康检查自动完成挂接与首页导航 ----
+
+    /** 宿主未挂接时先自动挂接/导航，再按新状态报 Ready，不再要求用户先打开 AI 页面。 */
     @Test
-    fun healthCheckMapsHostNotAttachedToUnavailableWithHint() {
+    fun healthCheckWarmsUpHostAndReportsReady() {
+        var pageState: PageState = PageState.HOST_NOT_ATTACHED
+        var loads = 0
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = pageState
+            override fun ensureLoaded(force: Boolean): Boolean {
+                loads++
+                pageState = PageState.READY
+                return true
+            }
+        }
+        assertEquals(SourceHealth.Ready, source(pages).healthCheck())
+        assertEquals(1, loads)
+    }
+
+    /** 自动挂接后进入登录页：仍要报账号问题，不能报成页面未就绪。 */
+    @Test
+    fun healthCheckWarmUpMapsLoginRequiredToNotLoggedIn() {
+        var pageState: PageState = PageState.HOST_NOT_ATTACHED
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = pageState
+            override fun ensureLoaded(force: Boolean): Boolean {
+                pageState = PageState.LOGIN_REQUIRED
+                return false
+            }
+        }
+        val h = source(pages).healthCheck()
+        assertTrue(h is SourceHealth.NotLoggedIn)
+        assertTrue((h as SourceHealth.NotLoggedIn).hint.contains("登录"))
+    }
+
+    /** AI-076：已有页面时健康检查必须保持只读，绝不能借自动挂接去导航或 reload。 */
+    @Test
+    fun healthCheckDoesNotNavigateWhenHostAlreadyAttached() {
+        var loads = 0
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.READY
+            override fun ensureLoaded(force: Boolean): Boolean {
+                loads++
+                return true
+            }
+        }
+        assertEquals(SourceHealth.Ready, source(pages).healthCheck())
+        assertEquals(0, loads)
+    }
+
+    /** 自动挂接失败时保留真实原因（如离屏锚点挂不上），不折叠成「未登录」。 */
+    @Test
+    fun healthCheckWarmUpFailureKeepsActionableReason() {
+        val pages = object : PageOps by FakePageOps() {
+            override fun pageState() = PageState.HOST_NOT_ATTACHED
+            override fun ensureLoaded(force: Boolean): Boolean =
+                throw AiSourceError.NotReady("WebView 未挂接窗口；请先打开一次 AI 页面")
+        }
+        val h = source(pages).healthCheck()
+        assertTrue(h is SourceHealth.Unavailable)
+        assertTrue((h as SourceHealth.Unavailable).reason.contains("未挂接窗口"))
+    }
+
+    /** AI-036：自动挂接后依然没有 WebView 时，保留手动打开的兜底提示。 */
+    @Test
+    fun healthCheckReportsHintWhenWarmUpCannotAttach() {
         val pages = object : PageOps by FakePageOps() {
             override fun pageState() = PageState.HOST_NOT_ATTACHED
         }

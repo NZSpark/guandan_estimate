@@ -4,7 +4,7 @@
 >
 > **目标：** ① 将在线识牌扩展为 Android WebView 网页源与 HTTP API 两种传输路径；② 把 AI 源做成配置可选，**DeepSeek 网页版为首发源**，同时支持 ChatGPT 网页版、Gemini 网页版、自定义网页源与 HTTP API。网页源复用网页登录态，不要求官方 API Key；HTTP API 保留现有配置与调用能力。同时保留本地 OCR、模板匹配、`VisualCardCodec`、现有 `Card` 领域模型和牌力评分功能。
 >
-> **当前状态（2026-10-30）：** 多源基础抽象层（`AiSource` / `SiteAdapter` / `PageDriver` / `WebViewAiSource`）、DeepSeek/Gemini/ChatGPT/自定义适配器及源选择配置均已落地；DeepSeek 网页源已在真机完成单图、连续两图、追问与离屏/可见三态切换闭环（`source_e2e` / `source_e2e_twice`）；Gemini 改用原生触摸文件选择后，离屏单图（9 张）与连续两图（10/27 张）均已跑通（AI-182）。ChatGPT 已真机登录，12:36 曾跑通一次 27 张带图识牌；随后测试账号**附件额度已用尽**（约 2026-10-31 12:36 恢复），无法再取附件成功证据，G-23~G-25 保持未勾选。所有任务以本清单执行记录和可核对的测试或设备证据为准，不因设计文档存在就勾选。
+> **当前状态（2026-10-30）：** AI 源配置已迁移为独立全屏页面（UI-023），旧弹窗删除；多源基础抽象层（`AiSource` / `SiteAdapter` / `PageDriver` / `WebViewAiSource`）、DeepSeek/Gemini/ChatGPT/自定义适配器及源选择配置均已落地；DeepSeek 网页源已在真机完成单图、连续两图、追问与离屏/可见三态切换闭环（`source_e2e` / `source_e2e_twice`）；Gemini 改用原生触摸文件选择后，离屏单图（9 张）与连续两图（10/27 张）均已跑通（AI-182）。ChatGPT 已真机登录，12:36 曾跑通一次 27 张带图识牌；随后测试账号**附件额度已用尽**（约 2026-10-31 12:36 恢复），无法再取附件成功证据，G-23~G-25 保持未勾选。所有任务以本清单执行记录和可核对的测试或设备证据为准，不因设计文档存在就勾选。
 >
 > **执行原则：** 严格按阶段推进。图片真实上传是核心准入条件；未验证成功前，不进入完整业务集成。GeminiBridge 与 DeepseekBridge 的网页自动化经验只作参考，不能把其他项目的选择器或上传行为视作目标 Android WebView 的既定事实。
 >
@@ -284,11 +284,12 @@
 ### A4.2 页面健康与宿主恢复
 
 - [x] **AI-075** 区分页面尚在初始化、元素暂未命中、登录失效、导航失败、窗口失效和真正页面异常。（`PageStateClassifier` 五态 + `isLoginUrl` URL 判据，顺序固定；`awaitReady` 遇 NEEDS_USER 立即中止并带原因。导航失败/窗口失效分别由 `AiSourceError.NotReady`（含宿主未挂接）与 `WebViewHost` 状态机表达。`VIEWPORT_UNHEALTHY` 仅单测覆盖。）
-- [x] **AI-076** 健康检查使用低干扰的只读操作；生成过程中不得通过 reload、导航或频繁脚本探针打断正在进行的识牌任务。（`PageOps.pageState()` 只读、不导航；`healthCheck` 走它而非 `ensureLoaded`；`generating` 时直接返回缓存；`PageOps.setReloadSuspended` 在 `recognize` 全程暂停自动 reload。）
+- [x] **AI-076** 健康检查使用低干扰的只读操作；生成过程中不得通过 reload、导航或频繁脚本探针打断正在进行的识牌任务。（`PageOps.pageState()` 只读、不导航；`healthCheck` 走它而非 `ensureLoaded`；`generating` 时直接返回缓存；`PageOps.setReloadSuspended` 在 `recognize` 全程暂停自动 reload。）AI-184 起唯一例外：`HOST_NOT_ATTACHED`（进程内没有 WebView）时先自动挂接并导航首页，再只读诊断；已有页面时仍严格只读。
 - [x] **AI-077** 验证屏幕旋转、Activity 重建、离开和返回 Gemini 页面以及应用进程重启后的 WebView 行为。 → 结果（2026-10-30）：真机：探针页转横屏触发 `onDestroy`→`onCreate(restored=true)`，同一 pid、无 `WebView created`，重新 `Attached 2328x679`；转回竖屏同样重建并 `Attached 1176x1801`。离开并返回 Gemini 页面（`gemini.google.com/app`）无崩溃、宿主复用。`force-stop`+`kill` 后新 pid 启动 `WebView created`，打开 AI 页面再返回主界面为「网页可用」，DeepSeek 登录态保留。主界面固定 portrait，横屏不适用。
 - [x] **AI-078** 在切后台及返回前台时记录尺寸、窗口挂接和实际回答更新情况，不能只以 `isAttachedToWindow`、URL 或 JS 可执行作为健康结论。 → 结果（2026-10-30）：真机：`source_e2e` 提交后第 5 秒按 Home 切后台，宿主 `detached (webview + session kept)`；8 秒后返回 `attach status=Attached 1176x1801`，识牌继续并完成 `SOURCE_E2E_OK cards=27 status=Attached`。后台期间不能只凭挂接状态判断健康，实际回答确实更新。
 - [x] **AI-079** 初版以可见 WebView 路径为验收基线；只有后台识牌成为明确需求时，才独立评估 overlay、额外窗口宿主、前台服务和保活方案。 → 结果（2026-10-30）：初版已越过可见基线：AI-165~171 采用 1×1 离屏宿主 + 全屏像素 layout，主界面不插可见 WebView；无 overlay 权限时回退 decorView 1dp 容器。
 - [x] **AI-080** 对页面恢复和重试设置次数上限及退避策略；恢复失败时呈现诊断结果，不无限 reload 或无限等待。（`ReadyRetryPolicy`：300ms 起 ×1.5 退避封顶 1200ms、reload ≤1 次、生成中/刚导航不得 reload；`awaitReady` 超时把 `PageStateClassifier.reason` 写入 `lastReadyFailure` → `AiSourceError.NotReady` → 设置页显示原因。）
+- [x] **AI-184** 主界面冷启动不再要求用户先打开 AI 页面：健康检查遇到 `HOST_NOT_ATTACHED` 时在后台完成「创建 WebView → 离屏挂接 → 导航首页 → 等待可操作」，再重新只读诊断；`MainActivity` 等视图真正 attached 后再发起检查，避免离屏锚点 `isAttachedToWindow=false` 被误报成宿主故障。已有页面时保持只读，不导航、不 reload（AI-076）。 → 结果（2026-10-30）：`WebViewAiSource.healthCheck` 增加后台预热与二次分类；`MainActivity` 首次检查改由 `onResume` post 触发，`refreshSourceState` 未 attached 时也 post 等待。单测新增 4 例（挂接后 Ready、登录页 → NotLoggedIn、已有页面 0 次 `ensureLoaded`、挂接失败保留具体原因）；真机 LIO-N29 冷启动日志：`pageState: webView is null` → `healthCheck: host not attached, warming up` → `attachOffscreen: webviewLayout=1176x2328 anchorAttached=true` → `awaitReady ok` → `warm-up finished state=READY`，主界面直接显示「状态：网页可用」。
 
 ### A4.3 图片与回答隔离测试
 
@@ -389,12 +390,13 @@
 - [x] **UI-020** 按设计系统统一现有主题资源、颜色、间距、圆角、按钮层级和数字格式；验证对比度，状态不能只靠颜色区分。
 - [x] **UI-021** 验证窄屏、横屏、较大屏幕、键盘弹出和系统字体缩放；重要操作可达，触控目标符合至少 48×48dp 的设计要求，并为牌面、图标、状态及错误提供有意义的 TalkBack 文案。
 - [x] **UI-022** 执行 `./gradlew testDebugUnitTest` 和 `./gradlew assembleDebug`，记录真实结果并修复回归；在实际 Android 设备验证工作台主流程、手牌编辑、评分、图片生成/保存、五种 AI 源配置和网页登录导航。记录必要截图和设备证据；UI 单测不能替代阶段 0/2 对 ChatGPT、DeepSeek、Gemini 网页登录及真实带图上传的验收。
+- [x] **UI-023** 按 `doc/ai_configure.md` 将 AI 源配置从弹窗迁移为独立全屏页面：源/配置档/表单/健康态分区、未保存修改确认、字段级校验与首个错误聚焦、删除回退、配置变更草稿恢复；网页源只检查激活配置，主界面与本页健康检查串行化。删除旧 `AiSettingsScreen` / `AiSettingsDialog`，不保留双入口。 → 结果（2026-10-30）：新增 `AiSettingsActivity`、`AiSettingsEditor`、`AiSettingsValidation`、`HealthCheckGate` 与 28 项纯 JVM 单测；`MainActivity` 入口改为 `startActivity`；`testDebugUnitTest assembleDebug` 373 项测试全绿。真机 LIO-N29 已验证 1–6、8 及 7 的错误路径；7 的完整配置态与 9–12 待补。登录入口在 Ready 下仍显示，点击进入无诊断控件的全屏登录页，返回自动重查。
 
 **阶段 7 验收：** 主工作台能够完成输入到评分的完整流程；显示的分值、状态和源健康信息均来自真实业务结果；现有功能不被无故删除；配置档和网页登录行为清晰可恢复；布局、无障碍、测试、构建及真机验收结果均有记录。
 
 **阶段 7 实施记录（2026-10-30，LIO-N29 / Android 10 / 1176×2400 / density 480，WiFi adb）：**
 
-- 代码：`res/layout/activity_main.xml` 重写为 01 输入 / 02 识别 / 03 核对 / 级牌+计算 / 04 结果五分区；新增 `ui/WorkbenchState.kt`（8 个状态域 + `invalidate()` 失效规则）、`ui/AiSettingsScreen.kt`（替代旧对话框，字段按源显隐、字段级错误、删除二次确认）、`res/values/{colors,dimens,styles}.xml` Token。`MainActivity.kt` 重写为状态驱动渲染，输入图与输出图分离（`inputBitmap` / `outputBitmap`）。
+- 代码：`res/layout/activity_main.xml` 重写为 01 输入 / 02 识别 / 03 核对 / 级牌+计算 / 04 结果五分区；新增 `ui/WorkbenchState.kt`（8 个状态域 + `invalidate()` 失效规则）、AI 源管理界面（后续 UI-023 已迁移为独立页面，旧弹窗删除）、`res/values/{colors,dimens,styles}.xml` Token。`MainActivity.kt` 重写为状态驱动渲染，输入图与输出图分离（`inputBitmap` / `outputBitmap`）。
 - 单测：新增 `WorkbenchStateTest`（8 例）覆盖状态计数、id 重排、级牌变更、`Success → Stale`、`Running` 不变、AI 失败类别不合并。
 - 构建：`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL。
 - 真机主流程：空状态 → 随机生成 27 张（输入图渲染、状态「已识别 27 张」、保存按钮启用）→ 手牌网格 27/27（红/黑配色、大小王、独立删除图标、补录禁用）→ 计算 → 结果卡（强势 / SPI 187.13 / NSPI 1247.6 / 分子 2245.60 / 轮数 12 / T_max 15 / 散牌惩罚 P=45）→ 展开拆牌明细 12 组按分值降序（同花顺 494 … 对子 43）+ 公式说明。
@@ -479,6 +481,9 @@
 
 | 日期 | 任务编号/阶段 | 结果 | 证据或问题 | 后续动作 |
 |---|---|---|---|---|
+| 2026-10-30 | UI-023 / `doc/ai_configure.md` P0–P4 | AI 源管理独立页面完成 | 新增 `AiSettingsActivity`、`AiSettingsEditor`、`AiSettingsValidation`、`HealthCheckGate`；旧弹窗删除、入口改 `startActivity`；网页源只检查激活配置，字段按源整组显隐，dirty 切换确认，删除含回退名。`testDebugUnitTest assembleDebug` 373 项全绿；APK 清单确认 Activity 非导出/竖屏/`adjustResize` | 已跑真机 1–6、8 与 7 的错误路径（临时 profile 已删除，prefs 恢复一致）；补 7 完整配置态与 9–12 |
+| 2026-10-30 | 兼容性修复 / `MainActivity.load` | Android 8/9 图片读取兜底 | `ImageDecoder` 加 API 28 守卫，API 26–27 改用 `BitmapFactory` + `inSampleSize`；`lintDebug` 8 个 `NewApi` 错误清零，`testDebugUnitTest assembleDebug lintDebug` 全绿；LIO-N29 重装后主界面启动正常 | API 26/27 真机与 EXIF 方向仍未实测 |
+| 2026-10-30 | AI-184 宿主自动挂接 | 冷启动主界面自愈 | 真机 force-stop 后首启：健康检查后台 `attachOffscreen`（1176×2328）并导航 Gemini，`warm-up finished state=READY`，界面「状态：网页可用」，无需先打开 AI 页面；345 项单测 0 失败 | 锚点不可用时仍回落「请先打开一次 AI 页面」提示，需保留该兜底 |
 | 2026-10-30 | AI-182/183、AI-089 复测 | Gemini 图片上传闭环打通 | 根因：离屏 WebView `document.hasFocus()=false`，Gemini 静默丢弃合成 paste；改走原生触摸 `Upload and tools → Files` 两段点击 + 原生 `onShowFileChooser`，并修正 `[data-test-id*=upload]` 误命中上传工具栏导致的附件假阳性。离屏 `source_e2e` 9 张、`source_e2e_twice` 10→27 张，附件均在提交前确认；DeepSeek 回归 27 张；ChatGPT 真机附件额度用尽，明确报错且不提交。单测与 `assembleDebug` 全绿 | 额度恢复（约 10-31 12:36）后复测 ChatGPT PASTE 与连续两图；补 Gemini 会话过期恢复；三源横向验收 |
 | 2026-10-30 | AI-077/078/095、G-07/G-21 复核 | 生命周期与设置迁移真机通过 | 旋转触发重建但复用同一 WebView（`created` 无重复）；识牌中切后台 8 秒返回仍完成 27 张；旧格式 prefs 迁移后登录态保留；窄屏/1.3× 字体/48dp 触控实测通过；G-07 因上传超时无直接证据、G-21 因 TalkBack 未安装与竖屏锁定保持未勾选 | 剩余 ChatGPT 真机（AI-158~163、G-15/G-23~25）、Gemini 设备回归（AI-089/090）、三源横向与 API（AI-148/149/154/155）、G-10 |
 | 2026-10-30 | 阶段 8 / AI-133/134/168/169/170/178、G-17/G-20 | DeepSeek 离屏端到端与共享宿主三态真机通过 | LIO-N29：`source_e2e` 27 张；`source_e2e_twice` 27→22 张互不串线；可见 1176x1801 → 离屏 1176x2328（innerHeight 776）；冷启动「未挂接」→ 打开 AI 页面 → 返回「网页可用」（同 pid 15623）；单测 321 项全绿 | 继续 ChatGPT 真机（AI-158~163）、旋转/重建（AI-077/078）、三源横向（AI-148/149/154）、G-21 人工取证 |
