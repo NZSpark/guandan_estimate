@@ -241,10 +241,15 @@ class WebViewAiSource(
                         AiSourceError.Timeout(timeoutMillis)
                     }
                     val parsed = parser.parseDetailed(answer)
-                    if (parsed.cards.isEmpty()) {
-                        throw AiSourceError.ParseFailed(
-                            parsed.warnings.lastOrNull() ?: "未能解析出有效牌面"
-                        )
+                    if (parsed.cards.isEmpty() || parsed.warnings.isNotEmpty()) {
+                        val details = parsed.warnings.take(3).joinToString("；")
+                        val reason = if (parsed.cards.isEmpty()) {
+                            details.ifBlank { "未能解析出有效牌面" }
+                        } else {
+                            "识别结果不完整：仅解析出 ${parsed.cards.size} 张有效牌" +
+                                if (details.isBlank()) "" else "；$details"
+                        }
+                        throw AiSourceError.ParseFailed(reason)
                     }
                     return parsed.cards
                 }

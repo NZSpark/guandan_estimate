@@ -346,6 +346,20 @@ class WebViewAiSourceTest {
         assertThrows(AiSourceError.ParseFailed::class.java) { source(pages).recognize(request()) }
     }
 
+    /** 部分牌面虽然可解析，但模型声明数量不一致时不得当作成功。 */
+    @Test
+    fun partiallyParsedAnswerWithCountMismatchThrows() {
+        val answer = """{"count":3,"cards":[{"rank":"A","suit":"SPADE"},{"rank":"K","suit":"HEART"}]}"""
+        val pages = FakePageOps().apply {
+            answerSequence = listOf(AnswerSnapshot(1, answer, false, false, ""))
+        }
+        val error = assertThrows(AiSourceError.ParseFailed::class.java) {
+            source(pages).recognize(request())
+        }
+        assertTrue(error.message!!.contains("识别结果不完整"))
+        assertTrue(error.message!!.contains("声明 3 张"))
+    }
+
     /** 会话在等待期间过期 → NotLoggedIn。 */
     @Test
     fun sessionExpiredDuringWaitThrowsNotLoggedIn() {

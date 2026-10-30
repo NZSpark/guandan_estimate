@@ -1,7 +1,7 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-10-30（AI 源管理独立页面）；旧版全文归档于 `harness/archive/state-2026-10-30.md`。
+> 最后更新：2026-10-30（解析不完整即失败 + 新图标）；旧版全文归档于 `harness/archive/state-2026-10-30.md`。
 
 ## 当前分支
 
@@ -16,12 +16,19 @@
 旧 `ui/AiSettingsScreen.kt` / `AiSettingsDialog.kt` 已删除；主界面入口改为 `AiSettingsActivity`。
 真机 LIO-N29 已跑通入口/返回、五源显隐、dirty 确认、保存并选用+重启保留、非激活「未选用」、API 错误聚焦、删除激活配置回退、登录页往返重查；剩余完整 API 配置态、最后一份删除禁用、字体/TalkBack、重建草稿与冷启动并发。
 
-## 本轮完成（2026-10-30，AI 源管理独立页面）
+## 本轮完成（2026-10-30，识别结果完整性校验）
+
+- **解析收紧**：`WebViewAiSource` 在 `parsed.warnings` 非空时也抛 `ParseFailed`，不再把「只解析出部分牌」当作成功；错误文案区分「未能解析出有效牌面」与「识别结果不完整：仅解析出 N 张有效牌」，并附带前 3 条告警。
+- **测试**：新增 `partiallyParsedAnswerWithCountMismatchThrows`，覆盖声明张数与实际解析张数不一致的路径；`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL（38 个测试类 / **374 项，0 失败**）。
+- **图标**：五档 `mipmap-*/ic_launcher.png` 全部替换。
+- **真机（LIO-N29 / Android 10）**：`adb install -r -t` 安装成功，`MainActivity` COLD 启动 759 ms，进程存活，无崩溃。
+
+## 同日更早完成（2026-10-30，AI 源管理独立页面）
 
 - **页面**：`ui/AiSettingsActivity` 全屏承载当前使用卡、五源单选、配置档下拉、新建/删除、按源显隐表单、真实健康态、固定底部「保存并选用」。`AndroidManifest` 注册为 `exported=false`、竖屏、`adjustResize`。
 - **纯逻辑**：`ui/AiSettingsEditor`（源/配置档切换、draft/dirty、删除回退、重建草稿恢复）、`ui/AiSettingsValidation`（网页只校验 homeUrl，API 校验 endpoint/model/key，HTTPS + host）、`recognition/source/HealthCheckGate`（主界面与本页健康检查串行化，避免并发 `ensureLoaded()` 重挂共享 WebView）。
 - **交互**：有未保存修改时切换源/配置档/返回均确认；校验错误落在 `TextInputLayout` 并滚动到首个错误（含嵌套 `apiSection` 的坐标累加）；删除当前激活配置按「同源第一份 → 全库第一份」回退；仅激活网页配置可登录并自动重查，非激活配置显示「保存并选用后可打开网页登录」。
-- **验证**：`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL（38 个测试类 / **373 项，0 失败**）；新增 28 项纯 JVM 测试覆盖编辑器、校验与串行化。APK 清单确认 Activity 导出/方向/输入模式。
+- **验证**：`./gradlew testDebugUnitTest assembleDebug` BUILD SUCCESSFUL（38 个测试类 / **374 项，0 失败**）；新增 28 项纯 JVM 测试覆盖编辑器、校验与串行化。APK 清单确认 Activity 导出/方向/输入模式。
 - **真机（LIO-N29 / Android 10 / 1176×2400）**：页面完全替代弹窗；五源顺序与字段显隐正确；dirty 切换/返回确认，取消后输入保留；新建并保存临时 profile 后主界面立即刷新，force-stop 重启仍保留；非激活 API profile 显示「未选用」；API Key 缺失在字段下方报错并聚焦；删除激活 profile 的确认框写出回退名称，删除后回退 DeepSeek 且健康态刷新为「网页可用」；Ready 下登录入口仍可见，点击进入无诊断控件的全屏登录页，返回后自动重查并保持「网页可用」；全程无 FATAL EXCEPTION。临时 profile 已删除，prefs 结构与操作前一致。
 - **兼容性**：`MainActivity` 图片解码为 `ImageDecoder` 增加 API 28 守卫，API 26–27 回退 `BitmapFactory` + `inSampleSize`；`lintDebug` 从 8 个 `NewApi` 错误变为通过。
 
