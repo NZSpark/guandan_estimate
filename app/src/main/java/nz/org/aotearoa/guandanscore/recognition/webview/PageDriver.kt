@@ -82,7 +82,10 @@ class PageDriver(
 
         /** AI-034：就绪等待期间允许的最大重载次数。防止「选择器缺失 → 重载 → 仍缺失」无限循环。 */
         const val READY_MAX_RELOADS = 1
-        const val UPLOAD_TIMEOUT_MILLIS = 20_000L
+        const val UPLOAD_TIMEOUT_MILLIS = AttachmentWaitPolicy.DEFAULT_TIMEOUT_MILLIS
+
+        /** 附件预览轮询间隔。 */
+        const val ATTACHMENT_POLL_MILLIS = AttachmentWaitPolicy.DEFAULT_POLL_INTERVAL_MILLIS
         const val SUBMIT_CONFIRM_TIMEOUT_MILLIS = 15_000L
 
         /** AI-173：等待发送按钮可用的轮询间隔。 */
@@ -632,33 +635,53 @@ class PageDriver(
         dir.listFiles()?.forEach { if (!it.delete()) Log.w(TAG, "upload cleanup failed: ${it.name}") }
     }
 
-    /** 校验附件预览。不通过即视为上传失败（M11）。 */
+    /**
+     * 校验附件预览。不通过即视为上传失败（M11）。
+     *
+     * 等待/超时/额度阻断的判定在 [AttachmentWaitPolicy] 里，便于直接单测
+     * 「20s 超时」与「额度用尽不空等」两条路径（G-07）。
+     */
     override fun verifyAttachment(): Boolean {
-        val deadline = nowMillis() + UPLOAD_TIMEOUT_MILLIS
         var loggedSample = false
-        while (nowMillis() < deadline) {
-            val json = JsonParse.parse(runBlockingEvaluate(adapter.verifyAttachmentScript()))
-            // 只打首次读数：附件一直不出现时，靠它区分“没贴进去”与“选择器范围不对”。
-            if (!loggedSample && json != null) {
-                loggedSample = true
-                Log.i(TAG, "verifyAttachment sample: $json")
-            }
-            if (json != null) {
-                // AI-183：保留页面给出的具体拒绝原因（如额度用尽），别让它被通用文案淹没。
-                pageFailure(json)?.let { if (uploadFailure == null) uploadFailure = it }
-                if (adapter.parseAttachment(json)) {
-                    Log.i(TAG, "verifyAttachment confirmed: $json")
-                    return true
+        val result = AttachmentWaitPolicy(
+            timeoutMillis = UPLOAD_TIMEOUT_MILLIS,
+            pollIntervalMillis = ATTACHMENT_POLL_MILLIS,
+            nowMillis = nowMillis,
+            sleepMillis = sleepMillis
+        ).await(
+            sample = {
+                JsonParse.parse(runBlockingEvaluate(adapter.verifyAttachmentScript())).also { json ->
+                    // 只打首次读数：附件一直不出现时，靠它区分“没贴进去”与“选择器范围不对”。
+                    if (!loggedSample && json != null) {
+                        loggedSample = true
+                        Log.i(TAG, "verifyAttachment sample: $json")
+                    }
                 }
-                // 额度用尽不可能在本次轮询内恢复，继续等到 20s 只是浪费一轮请求。
-                if (json.optBoolean("quotaBlocked", false)) {
-                    Log.w(TAG, "verifyAttachment blocked: $json")
-                    return false
-                }
+            },
+            isAttached = adapter::parseAttachment,
+            // 额度用尽不可能在本次轮询内恢复，继续等到 20s 只是浪费一轮请求。
+            isBlocked = { it.optBoolean("quotaBlocked", false) },
+            // AI-183：保留页面给出的具体拒绝原因（如额度用尽），别让它被通用文案淹没。
+            onSample = { json -> pageFailure(json)?.let { if (uploadFailure == null) uploadFailure = it } }
+        )
+        return when (result) {
+            is AttachmentWaitPolicy.Result.Confirmed -> {
+                Log.i(TAG, "verifyAttachment confirmed: ${result.json}")
+                true
             }
-            sleepMillis(300)
+            is AttachmentWaitPolicy.Result.Blocked -> {
+                Log.w(TAG, "verifyAttachment blocked: ${result.json}")
+                false
+            }
+            is AttachmentWaitPolicy.Result.TimedOut -> {
+                Log.w(
+                    TAG,
+                    "verifyAttachment timed out after ${UPLOAD_TIMEOUT_MILLIS}ms " +
+                        "(samples=${result.samples})"
+                )
+                false
+            }
         }
-        return false
     }
 
     /**

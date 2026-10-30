@@ -210,7 +210,7 @@
 
 > ChatGPT 是新增的网页源，不改变 DeepSeek 首发的实施优先级。任何候选选择器、合成 paste 事件或测试桥接项目的历史结论均不能代替目标 Android WebView 的实际验收。
 
-- [ ] **AI-158** 在目标 Android 设备打开 `https://chatgpt.com/` 并手动登录；记录日期、设备、Android 与 WebView 版本、页面 URL、`readyState`、输入框/发送按钮/回答节点/文件输入/附件预览的诊断命中数。验证登录判据能区分未登录与已登录页面，且不得记录密码、Cookie、令牌或私人对话内容。 → 现状（2026-10-30）：已真机登录并记录：LIO-N29 / Android 10 / WebView 114.0.5.302，`input=1`（`div.ProseMirror[contenteditable]`，新 DOM 已无 `#prompt-textarea`）、`send=1`、`fileInput=4`、`password=0`、`loginIndicator=0`；未登录侧仍未复现（不退出用户账号，G-24 缺一半证据），故不整体勾选。
+- [ ] **AI-158** 在目标 Android 设备打开 `https://chatgpt.com/` 并手动登录；记录日期、设备、Android 与 WebView 版本、页面 URL、`readyState`、输入框/发送按钮/回答节点/文件输入/附件预览的诊断命中数。验证登录判据能区分未登录与已登录页面，且不得记录密码、Cookie、令牌或私人对话内容。 → 现状（2026-10-30）：已真机登录并记录：LIO-N29 / Android 10 / WebView 114.0.5.302，`input=1`（`div.ProseMirror[contenteditable]`，新 DOM 已无 `#prompt-textarea`）、`send=1`、`fileInput=4`、`password=0`、`loginIndicator=0`；未登录侧仍未复现（不退出用户账号，G-24 缺一半证据），故不整体勾选。**同日追加**：直接导航 `https://chatgpt.com/auth/login` 会被已登录会话弹回 `https://chatgpt.com/`，因此在不清 Cookie / 不退出账号的前提下拿不到未登录侧 DOM；该半项须在用户明确同意退出登录后单独取证。
 - [ ] **AI-159** 验证 `PASTE` 路径：使用 `RecognizeRequest.jpegBytes` 构造真实 `File`，通过 `DataTransfer` 与合成 `ClipboardEvent('paste')` 附加图片；之后独立确认当前待发送消息的真实附件预览出现。事件派发、`dispatchEvent` 返回值或输入框存在都不能替代附件验收。若该路径失败，再独立评估 `FILE_CHOOSER`；不得假定其他站点的上传策略对 ChatGPT 有效。 → 现状（2026-10-30）：已按文档把顺序改为「填文本 → paste → 提交前确认 → 发送」；真机 paste 被站点静默丢弃，页面提示附件额度用尽（`Get Plus for more uploads` / 约 10-31 12:36 恢复）。额度恢复前**无法**区分“代码问题”与“账号限制”，故不勾选。
 - [ ] **AI-160** 完成 ChatGPT 单次识牌闭环：先填 prompt 和图片，再验证附件，最后才提交；确认用户消息进入页面、取得本轮新回答、由 `GenerationWatcher` 判定结束，并由 `AiCardResponseParser` 解析出合法 `List<Card>`。上传或附件验证失败时返回 `UploadFailed`，不得继续提交纯文本。 → 现状（2026-10-30）：流程已改为提交前确认附件，并真机验证“额度用尽 → `UploadFailed`，不提交”；带图闭环仍被账号额度阻塞，未通过。
 - [ ] **AI-161** 对同一测试图片进行带图/不带图对照，要求模型复述可人工核验的具体牌面细节，确认答案确实使用图片像素；记录输出、耗时与失败原因。 → 现状（2026-10-30）：依赖 AI-160；带图/不带图对照尚未执行。
@@ -454,7 +454,7 @@
 - [x] **G-04** 只读取当前任务的新回答，不接受旧回答、用户问题回显或空容器。 → 结果（2026-10-30）：发送前基线 + `GenerationWatcher`；旧回答、prompt 回显、空节点均有单测。
 - [x] **G-05** `AiCardResponseParser` 严格校验模型输出并产生合法的项目 `Card` 列表或明确错误。 → 结果（2026-10-30）：`AiCardResponseParser` 严格校验 rank/suit/数量，非法结果返回警告或 `ParseFailed`。
 - [x] **G-06** 本地 OCR、模板匹配、图像编码解码、手动校对及评分功能保持不变。 → 结果（2026-10-30）：本地 OCR、模板匹配、`VisualCardCodec`、手动校对与 `HandScorer` 未重写；全部既有单测通过。
-- [ ] **G-07** Activity 重建、任务取消、登录失效、上传超时和重试均有明确且可恢复的行为。 → 现状（2026-10-30）：Activity 重建已真机验证（旋转重建、宿主复用、登录态保留）；取消、登录失效、重试有单测。上传 20s 超时路径有实现但无直接单测或真机证据，故不整体勾选。
+- [x] **G-07** Activity 重建、任务取消、登录失效、上传超时和重试均有明确且可恢复的行为。 → 结果（2026-10-30）：Activity 重建已真机验证（旋转重建、宿主复用、登录态保留）；取消、登录失效、重试有单测；上传超时从 `PageDriver.verifyAttachment` 抽成 `AttachmentWaitPolicy`，新增 8 个直接单测：20s（67 次采样 / 300ms）后必判 `TimedOut` 且返回 `UploadFailed`、额度用尽首次采样即 `Blocked` 不空等、晚到预览仍确认、空读数不误判、时钟冻结也有 68 次上限不会死循环。
 - [x] **G-08** 日志与诊断不泄露密码、Cookie、令牌或完整图片 Base64。 → 结果（2026-10-30）：URL 进日志前经 `UrlRedactor`；无 Cookie / 密码 / 令牌 / Base64 输出；`WebViewSecurityConfigTest` 8 例、`UrlRedactorTest` 7 例。
 - [x] **G-09** 旧 Gemini Key 已按迁移策略处理，OpenAI/custom API profile 保持兼容。 → 结果（2026-10-30）：`LegacyKeyCleanup` 清空网页源旧 Key、无 Key 时才删 alias；HTTP API profile 与校验保留。
 - [ ] **G-10** 单元测试、构建和目标设备真实会话验收均有可核对的执行记录。 → 现状（2026-10-30）：单测与构建记录完整，DeepSeek/Gemini 有真机会话记录；ChatGPT 真机会话缺失，不满足“均有记录”。

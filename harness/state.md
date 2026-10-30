@@ -10,9 +10,15 @@
 ## 当前任务
 
 执行 `doc/ai_tasks.md`：多 AI 源 WebView 迁移 + 阶段 7 UI + 阶段 8 宿主/提交协议。
-清单共 233 项，**214 项已勾选**；剩余 19 项集中在 ChatGPT 额度恢复后的验收、Gemini 会话过期、横向验收。
+清单共 233 项，**215 项已勾选**；剩余 18 项集中在 ChatGPT 额度恢复后的验收、Gemini 会话过期、横向验收。
 
-## 本轮完成（2026-10-30 下午第四轮，图片上传收口）
+## 本轮完成（2026-10-30 傍晚，G-07 上传超时收口）
+
+- **G-07 勾选**：把 `PageDriver.verifyAttachment` 的等待逻辑抽成 `AttachmentWaitPolicy`（时钟 / sleep 可注入），新增 `AttachmentWaitPolicyTest` 8 例：20s 超时（67 次采样）必失败、额度用尽首采样即 `Blocked`、晚到预览、空读数、时钟冻结上限。
+- **验证**：`./gradlew testDebugUnitTest assembleDebug` 全绿（341 项单测，0 失败）。
+- **AI-158 追加证据**：已登录态下直接导航 `chatgpt.com/auth/login` 会被弹回 `/`，未登录侧必须经用户同意退出后取证；任务保持未勾选。
+
+## 上一轮完成（2026-10-30 下午第四轮，图片上传收口）
 
 - **拆分上传与提交（AI-182）**：新增 `SiteAdapter.uploadsAfterFill` / `fillComposerScript` / `submitComposerScript`；驱动层固定「填文本 → 上传并确认 → 点发送」，附件确认严格在提交前。发送按钮延迟时只重试点击，不重填文本（避免覆盖附件）。
 - **修复 FILE_CHOOSER 从未执行**：`WebViewAiSource.tryUpload` 之前只调 `verifyAttachment`，从未调 `prepareFileChooserUpload`，Gemini 切到文件选择后立即暴露；已修复并补单测。
@@ -36,12 +42,12 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 真机：HUAWEI LIO-N29 / Android 10 / WebView 114.0.5.302（WiFi adb `192.168.3.158:5555`）。
 测试图：`/data/local/tmp/hand_test.png`（Gemini 9/10 张）、`/data/local/tmp/case14.jpg`（27 张）。
 
-## 剩余未完成（19 项）
+## 剩余未完成（18 项）
 
 - **ChatGPT**：AI-158（未登录侧）、159~163、G-23~25。额度恢复后重跑 `source_e2e` / `source_e2e_twice`。
 - **Gemini**：AI-089 还差「会话过期及恢复」；单图与连续两图已通过。
 - **横向**：AI-148/149/154/155、G-15、G-10。
-- **其他**：G-07（上传超时证据）、G-21（TalkBack）。
+- **其他**：G-21（TalkBack）。
 
 ## 已知缺口 / 阻塞
 
