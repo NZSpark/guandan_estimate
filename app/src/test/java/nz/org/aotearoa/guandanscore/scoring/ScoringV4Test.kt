@@ -89,21 +89,21 @@ class ScoringV4Test {
     }
 
     @Test fun wildSubstitutedBombUsesSameLogScaleFormula() {
-        // 5张2 + ♥7（级牌逢人配）：逢人配按替代点数 2 计，Sum=12，与6张2完全同分 538
+        // 5张2 + ♥7（级牌红心配）：红心配按替代点数 2 计，Sum=12，与6张2完全同分 538
         val result = HandScorer(Rank.SEVEN).score(repeats(Rank.TWO, 5) + Card(5, Rank.SEVEN, Suit.HEART))
         assertEquals(1, result.rounds)
         assertEquals(538, result.total)
     }
 
     @Test fun nineCardBombWithOneWildMatchesFormula() {
-        // 8张2 + ♥7（级牌逢人配）：Sum=18, Sum+7V=32 => 784+floor(66*log2(1.32)) = 810
+        // 8张2 + ♥7（级牌红心配）：Sum=18, Sum+7V=32 => 784+floor(66*log2(1.32)) = 810
         val result = HandScorer(Rank.SEVEN).score(repeats(Rank.TWO, 8) + Card(8, Rank.SEVEN, Suit.HEART))
         assertEquals(1, result.rounds)
         assertEquals(810, result.total)
     }
 
     @Test fun tenCardBombWithTwoWildsMatchesFormula() {
-        // 8张2 + 2张♥7（级牌逢人配）：Sum=20, Sum+5V=30 => 890+floor(60*log2(1.30)) = 912
+        // 8张2 + 2张♥7（级牌红心配）：Sum=20, Sum+5V=30 => 890+floor(60*log2(1.30)) = 912
         val hand = repeats(Rank.TWO, 8) + List(2) { Card(8 + it, Rank.SEVEN, Suit.HEART) }
         val result = HandScorer(Rank.SEVEN).score(hand)
         assertEquals(1, result.rounds)
@@ -133,7 +133,7 @@ class ScoringV4Test {
     }
 
     @Test fun wildSubstitutedBombScoresAsItsRepresentedRank() {
-        // 级牌 2：三张5 + ♥2 就是四张5（210）。旧实现把逢人配按 15 计，得到 220，
+        // 级牌 2：三张5 + ♥2 就是四张5（210）。旧实现把红心配按 15 计，得到 220，
         // 反而压过四张6（216），与牌理矛盾。
         val scorer = HandScorer(Rank.TWO)
         val wildBomb = scorer.score(repeats(Rank.FIVE, 3) + Card(3, Rank.TWO, Suit.HEART))
@@ -218,7 +218,7 @@ class ScoringV4Test {
     }
 
     @Test fun levelTripleStaysOptimalWhenBombsCarryTheHand() {
-        // 4张2 + 4张3 + 4张7（级牌，其中♥7为逢人配）。最优：4张3+配的5炸(307)
+        // 4张2 + 4张3 + 4张7（级牌，其中♥7为红心配）。最优：4张3+配的5炸(307)
         // + 4张2炸(192) + 三张自然7(191)；若三张7被按 5×7 计，整体会改选别的拆法。
         val hand = repeats(Rank.TWO, 4) + repeats(Rank.THREE, 4) + repeats(Rank.SEVEN, 4)
         val result = HandScorer(Rank.SEVEN).score(hand)

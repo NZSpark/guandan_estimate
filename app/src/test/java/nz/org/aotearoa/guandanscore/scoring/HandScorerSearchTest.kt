@@ -90,7 +90,7 @@ class HandScorerSearchTest {
 
     @Test
     fun `bomb plus single is scored as documented`() {
-        // 4 张 2 + 1 张 6，级牌 3（无逢人配参与）。
+        // 4 张 2 + 1 张 6，级牌 3（无红心配参与）。
         val cards = hand(Rank.TWO to 4, Rank.SIX to 1)
         val result = HandScorer(Rank.THREE).score(cards)
 
@@ -135,7 +135,7 @@ class HandScorerSearchTest {
 
     @Test
     fun `wild card can complete a pair and still count as level single`() {
-        // 级牌 3：♥3 逢人配可与 4 组成对子，另一张级牌单张按 15 点计。
+        // 级牌 3：♥3 红心配可与 4 组成对子，另一张级牌单张按 15 点计。
         val cards = listOf(
             Card(0, Rank.FOUR, Suit.CLUB),
             Card(1, Rank.FOUR, Suit.DIAMOND),

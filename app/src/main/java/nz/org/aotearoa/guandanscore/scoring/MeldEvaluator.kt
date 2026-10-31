@@ -15,7 +15,7 @@ internal object MeldEvaluator {
     /**
      * 指定下标子集的全部合法解释，按 `(mask, type)` 去重，同键取最高分。
      * 只对选中子集生成候选（等价于整手生成后按 mask 过滤），避免手工页每次编辑重扫 27 张。
-     * 级牌、逢人配、同花顺的规则仍复用同一个 `generate`，与优化器完全一致。
+     * 级牌、红心配（旧称逢人配）、同花顺的规则仍复用同一个 `generate`，与优化器完全一致。
      */
     fun interpretations(
         hand: List<Card>,
@@ -82,7 +82,7 @@ internal object MeldEvaluator {
             combinations(ids, 3).forEach { add(it, MeldType.TRIPLE, tripleScore(rank.value, level)) }
         }
         (2..14).forEach { v ->
-            // 级牌对子/三张（含用于级牌自身的逢人配）按 15 计，不能走 3v/5v。
+            // 级牌对子/三张（含用于级牌自身的红心配）按 15 计，不能走 3v/5v。
             assignments(listOf(v to 2)) { add(it, MeldType.PAIR, pairScore(v, level)) }
             assignments(listOf(v to 3)) { add(it, MeldType.TRIPLE, tripleScore(v, level)) }
         }
@@ -92,7 +92,7 @@ internal object MeldEvaluator {
                 val n = naturalCount + wc
                 if (n < 4) continue
                 combinations(ids, naturalCount).forEach { ns -> combinations(wild, wc).forEach { ws ->
-                    // 逢人配按替代点数计入 Sum：三张5+配与四张5同分，不得越过四张6。
+                    // 红心配按替代点数计入 Sum：三张5+配与四张5同分，不得越过四张6。
                     // V4.1：6~9 炸常数按方案 B 重标定，4/5/10 炸不变。
                     add(ns + ws, MeldType.BOMB, bombScore(n, base(rank, level)))
                 } }
@@ -103,7 +103,7 @@ internal object MeldEvaluator {
         if (jokers.size == 4 && jokers.count { cards[it].rank == Rank.SMALL_JOKER } == 2) add(jokers, MeldType.ROCKET, 1000)
 
         // Straights and straight flushes, including A2345.
-        // V_max 按顺子中的实际点数计（A2345 的 A 记 1；逢人配按填补点），不按级牌的 15。
+        // V_max 按顺子中的实际点数计（A2345 的 A 记 1；红心配按填补点），不按级牌的 15。
         val windows = listOf(listOf(14, 2, 3, 4, 5)) + (2..10).map { s -> (s until s + 5).toList() }
         windows.forEach { values ->
             val pools = values.map { v -> cards.indices.filter { cards[it].rank.value == v && !cards[it].isWild(level) } }

@@ -19,7 +19,7 @@ private fun logScale(multiplier: Int, delta: Int): Int =
 /**
  * V4.1 炸弹分值，严格按评分方案 §四：
  * 4/5 炸为线性式，6~10 炸为 offset + floor(系数 × log₂(1 + delta/100))。
- * [value] 为炸弹点数（级牌为 15）；[count] 为总张数（逢人配已并入）。
+ * [value] 为炸弹点数（级牌为 15）；[count] 为总张数（红心配已并入）。
  */
 internal fun bombScore(count: Int, value: Int): Int {
     val sum = count * value

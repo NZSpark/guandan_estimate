@@ -426,10 +426,10 @@ class HandScorer(
         return PartitionEvaluator.summarize(n, level, melds, exhaustive = exact)
     }
 
-    /** 对子候选分：级牌（含用于级牌自身的逢人配）按 15 计，其余按所代表点数。 */
+    /** 对子候选分：级牌（含用于级牌自身的红心配）按 15 计，其余按所代表点数。 */
     internal fun pairScore(value: Int): Int = MeldEvaluator.pairScore(value, level)
 
-    /** 三张候选分：级牌（含用于级牌自身的逢人配）按 15 计，其余按所代表点数。 */
+    /** 三张候选分：级牌（含用于级牌自身的红心配）按 15 计，其余按所代表点数。 */
     internal fun tripleScore(value: Int): Int = MeldEvaluator.tripleScore(value, level)
 
     /** 三带二候选分：级牌（用于级牌自身或替代非级牌）按规则计分，其余按所代表点数。 */
