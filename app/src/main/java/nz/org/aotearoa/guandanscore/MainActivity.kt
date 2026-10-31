@@ -386,7 +386,7 @@ class MainActivity : AppCompatActivity() {
             append("评分分子 ")
             append(String.format(Locale.US, "%.2f", result.numerator))
             append(" · 计划出牌轮数 ${result.rounds}")
-            append(" · T_max ${result.tMax}")
+            append(" · T_max ${result.tMax} · ${result.stage}")
             append(
                 when {
                     origin is ScoreOrigin.Adjusted -> " · 手工拆牌"
@@ -400,6 +400,19 @@ class MainActivity : AppCompatActivity() {
             ui.penaltyNote.text = "散牌惩罚：P = " + "%.0f".format(result.penalty) + "（${result.waste} 组孤立单张/小对子）"
         } else {
             ui.penaltyNote.visibility = View.GONE
+        }
+        // 综合评估 §6：残局以控制覆盖比为优先指标；T_plan=1 时不除以零，标注单次出牌方案。
+        if (result.stage == "残局") {
+            val ratio = result.controlRatio
+            ui.controlNote.visibility = View.VISIBLE
+            ui.controlNote.text = if (ratio == null) {
+                "单次出牌方案（T_plan=1）：控制覆盖比不适用 · 控制单元 ${result.control}"
+            } else {
+                "残局控制覆盖比 R = " + String.format(Locale.US, "%.2f", ratio) +
+                    "（控制单元 ${result.control} / 需再次夺权 ${result.rounds - 1} 次）"
+            }
+        } else {
+            ui.controlNote.visibility = View.GONE
         }
         ui.breakdown.text = result.melds.sortedByDescending { it.score }
             .joinToString("\n") { m -> m.label }

@@ -466,6 +466,15 @@
                     android:textSize="13sp"
                     android:visibility="gone" />
 
+                <TextView
+                    android:id="@+id/controlNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_2"
+                    android:textColor="@color/green_900"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/toggleBreakdown"
                     style="@style/Widget.Material3.Button.TextButton"

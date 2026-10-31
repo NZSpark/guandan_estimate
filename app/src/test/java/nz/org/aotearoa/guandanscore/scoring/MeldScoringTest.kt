@@ -40,15 +40,19 @@ class MeldScoringTest {
     }
 
     @Test
-    fun `waste penalty applies from ten cards and disappears in endgame`() {
+    fun `waste penalty applies at every hand size`() {
+        // 综合评估 §4.3 未设张数豁免：残局同样按出牌单元扣 15。
         val lowPair = meld(10, MeldType.PAIR, Card(0, Rank.TWO, Suit.CLUB), Card(1, Rank.TWO, Suit.SPADE))
-        assertEquals(1000 - 1500, netValue100(lowPair, handSize = 10, level = Rank.SEVEN))
-        assertEquals(1000, netValue100(lowPair, handSize = 9, level = Rank.SEVEN))
+        assertEquals(1000 - 1500, netValue100(lowPair, Rank.SEVEN))
     }
 
     @Test
-    fun `control bonus and waste penalty combine`() {
+    fun `control bonus is applied once per meld`() {
         val levelSingle = meld(100, MeldType.SINGLE, Card(0, Rank.SEVEN, Suit.SPADE))
-        assertEquals(11500, netValue100(levelSingle, handSize = 27, level = Rank.SEVEN))
+        assertEquals(11500, netValue100(levelSingle, Rank.SEVEN))
+        assertTrue(levelSingle.isControlMeld(Rank.SEVEN))
+        assertFalse(lowSingle().isControlMeld(Rank.SEVEN))
     }
+
+    private fun lowSingle() = meld(10, MeldType.SINGLE, Card(0, Rank.NINE, Suit.CLUB))
 }

@@ -1,6 +1,6 @@
 # 手工拆牌页面设计（Manual Meld Patterns）
 
-> **状态（2026-10-31）：** 代码已实施（P0–P4），JVM 回归 49 类 / 457 项全绿；真机清单 1–10 全部通过。任务进度 **37/37**，详见 [`patterns_tasks.md`](patterns_tasks.md)。
+> **状态（2026-10-31）：** 代码已实施（P0–P4），JVM 回归 49 类 / 460 项全绿；真机清单 1–10 全部通过。任务进度 **37/37**，详见 [`patterns_tasks.md`](patterns_tasks.md)。
 >
 > 目标读者：实现 `MeldAdjustActivity` 的开发者、评审与真机验收人员。
 > 评分公式与牌型合法性以 `doc/掼蛋牌型量化评分方案.md`、`doc/手牌综合牌力评估方法.md` 为唯一真源；本文只规定交互、状态与接口，不复制公式数值。
@@ -265,7 +265,7 @@ object PartitionEvaluator {
     /** 与 HandScorer.score() 完全相同的汇总口径：α、P、rounds、numerator、spi、waste。 */
     fun evaluate(hand: List<Card>, groups: List<MeldGroup>, level: Rank): HandResult
 
-    /** 优化器与手工路径共用；level 参与 α 与散牌判定，handSize 决定 P 的 N ≥ 10 门槛与 T_max。 */
+    /** 优化器与手工路径共用；level 参与 α 与散牌判定，handSize 决定阶段与 T_max；散牌惩罚对全部张数生效。 */
     internal fun summarize(handSize: Int, level: Rank, melds: List<Meld>): HandResult
 }
 ```

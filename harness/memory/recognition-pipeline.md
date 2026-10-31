@@ -49,7 +49,7 @@
 | 编排 | `WebViewAiSource` | 是（经 PageOps） | 互斥、取消、基线、上传回退、回答等待 |
 | HTTP | `HttpApiSource` | 是（Bitmap） | 保留原 `AiRecognitionClient` 协议 |
 
-**当前状态**：这是生产路径；Gemini 专用的旧 `AiRecognitionService` / `GeminiUpstream` 已删除。当前 49 个测试类 / 457 项单测全绿（手工拆牌新增 10 类）。
+**当前状态**：这是生产路径；Gemini 专用的旧 `AiRecognitionService` / `GeminiUpstream` 已删除。当前 49 个测试类 / 460 项单测全绿（手工拆牌新增 10 类）。
 
 关键不变量：
 

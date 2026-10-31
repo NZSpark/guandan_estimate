@@ -4,10 +4,11 @@ import nz.org.aotearoa.guandanscore.model.Card
 import nz.org.aotearoa.guandanscore.model.Rank
 import nz.org.aotearoa.guandanscore.model.Suit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** V4.1 单牌型评分与综合牌力评估的关键校验（对齐两份评分文档）。 */
+/** V4.2 单牌型评分与综合牌力评估的关键校验（对齐两份评分文档）。 */
 class ScoringV4Test {
     private fun cards(vararg ranks: Rank): List<Card> = ranks.mapIndexed { index, rank ->
         Card(index, rank, if (rank.value > 14) Suit.JOKER else Suit.entries[index % 4])
@@ -25,7 +26,7 @@ class ScoringV4Test {
             intArrayOf(6, 20, 51),
             intArrayOf(10, 30, 75),
             intArrayOf(20, 40, 74),
-            intArrayOf(16, 50, 103),
+            intArrayOf(16, 50, 109),
             intArrayOf(18, 50, 106),
             intArrayOf(15, 60, 123)
         )
@@ -144,17 +145,31 @@ class ScoringV4Test {
         assertTrue(wildBomb.total < 216)
     }
 
-    @Test fun residualBombPlusLowSingleIgnoresWastePenalty() {
-        // 文档示例2：AAAA + 2（残局 5 张，P=0）→ SPI = (264×1.15 + 10×1.0)/2 = 156.8
+    @Test fun residualBombPlusLowSingleAppliesWastePenaltyPerExample2() {
+        // 综合评估 §八 示例 2：AAAA + 2（残局 5 张，N_waste=1、P=15）
+        // SPI = (264×1.15 + 10 − 15)/2 = 149.30；N_control=1，R_control = 1/(2−1) = 1.00。
         val suits = listOf(Suit.SPADE, Suit.HEART, Suit.CLUB, Suit.DIAMOND)
         val result = HandScorer(Rank.SEVEN).score(
             suits.mapIndexed { i, s -> Card(i, Rank.ACE, s) } + Card(4, Rank.TWO, Suit.SPADE)
         )
         assertEquals(2, result.rounds)
-        assertEquals(0, result.waste)
-        assertEquals(313.6, result.numerator, 0.001)
-        assertEquals(156.8, result.spi, 0.001)
+        assertEquals(1, result.waste)
+        assertEquals(298.6, result.numerator, 0.001)
+        assertEquals(149.3, result.spi, 0.001)
+        assertEquals(1, result.control)
+        assertEquals(1.0, result.controlRatio!!, 0.001)
+        assertEquals("残局", result.stage)
         assertEquals("强势", result.grade)
+    }
+
+    @Test fun singleUnitPlanHasNoControlRatio() {
+        // §6.4：T_plan=1 时分母为零，控制覆盖比不计算。
+        val result = HandScorer(Rank.SEVEN).score(cards(Rank.BIG_JOKER))
+        assertEquals(1, result.rounds)
+        assertEquals(1, result.control)
+        assertNull(result.controlRatio)
+        assertEquals("残局", result.stage)
+        assertEquals("碾压级", result.grade)
     }
 
     @Test fun openingHandPenalizesLeftoverLowPair() {
@@ -174,37 +189,45 @@ class ScoringV4Test {
 
     @Test fun dynamicGradeThresholdsFollowV4Table() {
         fun result(spi: Double, n: Int) = HandResult(spi, 0, 1, emptyList(), n)
-        // 残局 1~12：<60 / 60~120 / 120~180 / ≥180
+        // 残局 1~9（辅助参考）：<60 / 60~120 / 120~180 / ≥180
         assertEquals("弱势", result(59.9, 5).grade)
         assertEquals("均衡", result(60.0, 5).grade)
         assertEquals("强势", result(120.0, 5).grade)
         assertEquals("碾压级", result(180.0, 5).grade)
+        assertEquals("残局", result(9.0, 9).stage)
         // 中局 13~18：<70 / 70~130 / 130~200 / ≥200
         assertEquals("弱势", result(69.9, 13).grade)
         assertEquals("均衡", result(70.0, 13).grade)
         assertEquals("强势", result(130.0, 13).grade)
         assertEquals("碾压级", result(200.0, 13).grade)
-        // 开局（≥19，含19~26过渡）：<80 / 80~140 / 140~220 / ≥220
+        assertEquals("中局", result(100.0, 10).stage)
+        // 27 张：<80 / 80~140 / 140~220 / ≥220
         assertEquals("弱势", result(79.9, 27).grade)
         assertEquals("均衡", result(80.0, 27).grade)
         assertEquals("强势", result(140.0, 27).grade)
         assertEquals("碾压级", result(220.0, 27).grade)
+        assertEquals("开局/前中局", result(100.0, 19).stage)
+        // §5.2 / T13：19~26 张与 10~12 张无阈值依据，不输出正式评级，也不外推相邻区间。
+        assertEquals("待标定", result(220.0, 20).grade)
+        assertEquals("待标定", result(220.0, 26).grade)
+        assertEquals("待标定", result(220.0, 10).grade)
+        assertEquals("待标定", result(220.0, 12).grade)
     }
 
     @Test fun fullHouseCountsNaturalLevelCardsAsFifteen() {
-        // 级牌 2：222+33 raw = (3×15 + 2×3) + 2×15 = 81 → 155（旧实现是 16 → 50）
+        // 级牌 2：222+33 raw = (3×15 + 2×3) + 2×15 = 81 → 50 + 65×141/93 = 149（V4.2 分母 93）
         val result = HandScorer(Rank.TWO).score(repeats(Rank.TWO, 3) + repeats(Rank.THREE, 2))
         assertEquals(1, result.rounds)
         assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
-        assertEquals(155, result.total)
+        assertEquals(149, result.total)
     }
 
     @Test fun fullHouseLevelTripleOutranksAceTriple() {
-        // 222+33 = 155 必须高于 AAA+33 = 147；旧实现是 50 < 156。
+        // 222+33 = 149 必须高于 AAA+33 = 141（raw 76）。
         val levelTriple = HandScorer(Rank.TWO).score(repeats(Rank.TWO, 3) + repeats(Rank.THREE, 2)).total
         val aceTriple = HandScorer(Rank.TWO).score(repeats(Rank.ACE, 3) + repeats(Rank.THREE, 2)).total
-        assertEquals(155, levelTriple)
-        assertEquals(147, aceTriple)
+        assertEquals(149, levelTriple)
+        assertEquals(141, aceTriple)
     }
 
     @Test fun levelPairAndTripleCandidatesUseFifteen() {
@@ -233,27 +256,47 @@ class ScoringV4Test {
         // 注：整手评分会拆成三张 K + 两张级牌单张（单张级牌 α=1.15），
         // 这里的候选分用于确认级牌对子不再按面值 2 计。
         val scorer = HandScorer(Rank.TWO)
-        assertEquals(178, scorer.fullHouseScore(13, 2))
-        assertEquals(186, scorer.fullHouseScore(14, 2))
+        assertEquals(170, scorer.fullHouseScore(13, 2))
+        assertEquals(177, scorer.fullHouseScore(14, 2))
     }
 
     @Test fun fullHouseMaximumStaysBelowSmallestBomb() {
-        // 级牌 2 的最大三带二：222+AA raw = 103 → 191，仍小于最小 4 炸 192。
-        val result = HandScorer(Rank.TWO).score(repeats(Rank.TWO, 3) + repeats(Rank.ACE, 2))
-        assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
-        assertEquals(191, result.total)
-        assertTrue(result.total < 192)
+        // V4.2 §六 示例 8：级牌 2 的 222+AA raw = 103 → 50 + 87×141/93 = 182，仍小于最小 4 炸 192。
+        // 分母扩大后整手最优会改拆「三张级牌单张（α=1.15）+ 对 A」，所以校验牌型候选分而非最优分区。
+        val scorer = HandScorer(Rank.TWO)
+        assertEquals(182, scorer.fullHouseScore(Rank.TWO.value, Rank.ACE.value))
+        val hand = repeats(Rank.TWO, 3) + repeats(Rank.ACE, 2)
+        assertTrue(
+            MeldEvaluator.interpretations(hand, hand.indices.toList(), Rank.TWO)
+                .any { it.type == MeldType.FULL_HOUSE && it.score == 182 }
+        )
+        assertTrue(182 < 192)
+    }
+
+    @Test fun fullHouseWithJokerPairReachesMaxAndStaysLegal() {
+        // V4.2 §三 / §六 示例 7：三张级牌 + 一对大王 raw = 79 + 30 = 109 → 191。
+        // 综合评估 T06/T07：王对必须能通过合法性检查（王不可由红心配替代）。
+        val scorer = HandScorer(Rank.TWO)
+        assertEquals(191, scorer.fullHouseScore(Rank.TWO.value, Rank.BIG_JOKER.value))
+        assertEquals(188, scorer.fullHouseScore(Rank.TWO.value, Rank.SMALL_JOKER.value))
+        val hand = repeats(Rank.TWO, 3) + listOf(
+            Card(3, Rank.BIG_JOKER, Suit.JOKER),
+            Card(4, Rank.BIG_JOKER, Suit.JOKER),
+        )
+        val fullHouses = MeldEvaluator.interpretations(hand, hand.indices.toList(), Rank.TWO)
+            .filter { it.type == MeldType.FULL_HOUSE }
+        assertTrue(fullHouses.any { it.score == 191 })
     }
 
     @Test fun fullHouseWithoutLevelCardsUsesExtendedMapping() {
-        // AAAKK raw = 96 在新映射 16..103 下为 180；旧映射会得到 191。
+        // AAAKK raw = 96 在 V4.2 映射 16..109 下为 171。
         val result = HandScorer(Rank.SEVEN).score(repeats(Rank.ACE, 3) + repeats(Rank.KING, 2))
         assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
-        assertEquals(180, result.total)
+        assertEquals(171, result.total)
     }
 
     @Test fun fullHouseWildSubstitutionUsesRepresentedRank() {
-        // 级牌 2：10,10,♥2(代10),5,5 raw = 5×10 + 2×5 = 60 → 121
+        // 级牌 2：10,10,♥2(代10),5,5 raw = 5×10 + 2×5 = 60 → 50 + 44×141/93 = 117
         val hand = listOf(
             Card(0, Rank.TEN, Suit.SPADE),
             Card(1, Rank.TEN, Suit.CLUB),
@@ -264,6 +307,15 @@ class ScoringV4Test {
         val result = HandScorer(Rank.TWO).score(hand)
         assertEquals(1, result.rounds)
         assertEquals(MeldType.FULL_HOUSE, result.melds.single().type)
-        assertEquals(121, result.total)
+        assertEquals(117, result.total)
+    }
+
+    @Test fun nineAndTenCardBombMinimaDependOnLevel() {
+        // §4.3：810 / 912 是跨级牌局的全局最小值；级牌为 2 时红心配只能按 15 计，
+        // 有效最低构成退为「8 张 3 + 配」，即 821 / 922。
+        assertEquals(810, bombScore(9, 2))
+        assertEquals(912, bombScore(10, 2))
+        assertEquals(821, bombScore(9, 3))
+        assertEquals(922, bombScore(10, 3))
     }
 }

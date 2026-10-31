@@ -119,8 +119,8 @@ internal object MeldEvaluator {
                 assignments(values.map { it to 1 }, suit) { add(it, MeldType.STRAIGHT_FLUSH, vals.sum() + 400 + 3 * vals.max()) }
             }
         }
-        // Full houses: natural level cards count 15; a wild heart substituting a
-        // non-level rank still counts the represented rank.
+        // Full houses（三带二）：三张主体只取自然点数 2..14；自然级牌按 15，
+        // 红心配替代非级牌时按替代点数（替代级牌时按 15）。
         allRanks.forEach { (tr, tids) -> allRanks.filterKeys { it != tr }.forEach { (pair, pids) ->
             val score = fullHouseScore(tr.value, pair.value, level)
             combinations(tids, 3).forEach { t -> combinations(pids, 2).forEach { p ->
@@ -129,6 +129,19 @@ internal object MeldEvaluator {
         } }
         for (tr in 2..14) for (pair in 2..14) if (tr != pair) assignments(listOf(tr to 3, pair to 2)) {
             add(it, MeldType.FULL_HOUSE, fullHouseScore(tr, pair, level))
+        }
+        // V4.2 §三：对子允许是一对小王或一对大王。王不是普通牌面，红心配不得替代，
+        // 因此王对只取实体牌；三张主体仍可由红心配补齐。
+        listOf(Rank.SMALL_JOKER, Rank.BIG_JOKER).forEach { joker ->
+            val jokerIds = cards.indices.filter { cards[it].rank == joker }
+            if (jokerIds.size < 2) return@forEach
+            val scored = IntArray(15)
+            for (tr in 2..14) scored[tr] = fullHouseScore(tr, joker.value, level)
+            for (tr in 2..14) assignments(listOf(tr to 3)) { triple ->
+                combinations(jokerIds, 2).forEach { pair ->
+                    add(triple + pair, MeldType.FULL_HOUSE, scored[tr])
+                }
+            }
         }
         // Exactly three consecutive pairs and exactly two consecutive triples.
         val seqRanks = listOf(14, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
@@ -161,8 +174,9 @@ internal object MeldEvaluator {
     internal fun tripleScore(value: Int, level: Rank): Int =
         ordinaryMappedScore(5 * baseValue(value, level), 10, 30, 75)
 
+    /** V4.2：最大「三张级牌 + 一对大王」原始值 109，分母 93；对子可为王对。 */
     internal fun fullHouseScore(triple: Int, pair: Int, level: Rank): Int =
-        ordinaryMappedScore(5 * baseValue(triple, level) + 2 * baseValue(pair, level), 16, 50, 103)
+        ordinaryMappedScore(5 * baseValue(triple, level) + 2 * baseValue(pair, level), 16, 50, 109)
 
     private fun base(rank: Rank, level: Rank) = if (rank == level) 15 else rank.value
     private fun baseValue(value: Int, level: Rank) = if (value == level.value) 15 else value

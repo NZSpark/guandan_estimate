@@ -96,9 +96,10 @@ class HandScorerSearchTest {
 
         assertEquals(2, result.rounds)
         assertEquals(250, result.total)
-        assertEquals(278.8, result.numerator, 1e-9)
-        assertEquals(139.4, result.spi, 1e-9)
-        assertEquals(0, result.waste)
+        // 单张 6 低于 10 且未并入更高结构：残局同样计 P=15（综合评估 §4.3）
+        assertEquals(263.8, result.numerator, 1e-9)
+        assertEquals(131.9, result.spi, 1e-9)
+        assertEquals(1, result.waste)
         assertTrue(result.melds.any { it.type == MeldType.BOMB })
     }
 
@@ -144,8 +145,10 @@ class HandScorerSearchTest {
         val result = HandScorer(Rank.THREE).score(cards)
 
         assertEquals(2, result.rounds)
-        assertEquals(235.05, result.numerator, 1e-9)
-        assertEquals(117.525, result.spi, 1e-9)
+        // 对 4 属低点数散牌单元（计 1 个，不按两张牌计），残局同样扣 15。
+        assertEquals(220.05, result.numerator, 1e-9)
+        assertEquals(110.025, result.spi, 1e-9)
+        assertEquals(1, result.waste)
         assertTrue(result.melds.any { it.type == MeldType.PAIR })
         assertTrue(result.melds.any { it.type == MeldType.SINGLE })
     }

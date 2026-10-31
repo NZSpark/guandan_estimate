@@ -28,7 +28,8 @@ object PartitionEvaluator {
         summarize(hand.size, level, resolve(hand, groups, level), exhaustive = false)
 
     /**
-     * 优化器与手工路径共用；level 参与 α 与散牌判定，handSize 决定 P 的 N ≥ 10 门槛与 T_max。
+     * 优化器与手工路径共用；level 参与 α 与散牌判定，handSize 决定阶段与 T_max。
+     * 散牌惩罚按出牌单元计，残局（N<10）同样适用（综合评估 §4.3）。
      * [exhaustive] 只描述来源：优化器通过时 true，手工分区固定 false。
      */
     internal fun summarize(
@@ -39,7 +40,7 @@ object PartitionEvaluator {
     ): HandResult {
         require(melds.isNotEmpty()) { "分区不完整，请重置后重试" }
         val rounds = melds.size
-        val numerator = melds.sumOf { netValue100(it, handSize, level) } / 100.0
+        val numerator = melds.sumOf { netValue100(it, level) } / 100.0
         return HandResult(
             spi = numerator / rounds,
             total = melds.sumOf(Meld::score),
@@ -47,8 +48,9 @@ object PartitionEvaluator {
             melds = melds,
             cardCount = handSize,
             numerator = numerator,
-            waste = if (handSize >= 10) melds.count { it.isLowWaste(level) } else 0,
+            waste = melds.count { it.isLowWaste(level) },
             exhaustive = exhaustive,
+            control = melds.count { it.isControlMeld(level) },
         )
     }
 }

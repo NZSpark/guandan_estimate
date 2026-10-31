@@ -36,7 +36,7 @@
 
 ## 通用验收基线
 
-- `export JAVA_HOME=/opt/homebrew/opt/openjdk@17` 后运行 `./gradlew testDebugUnitTest assembleDebug`；改造前 39 个测试类 / 395 项为基线，当前 49 个测试类 / 457 项全绿。
+- `export JAVA_HOME=/opt/homebrew/opt/openjdk@17` 后运行 `./gradlew testDebugUnitTest assembleDebug`；改造前 39 个测试类 / 395 项为基线，当前 49 个测试类 / 460 项全绿。
 - 不修改 SPI/NSPI 公式、评级阈值、`T_max`、牌型分值；不新增 RecyclerView / Compose / 拖拽库等依赖。
 - 手工路径只走 `PartitionEvaluator`，不得复制公式，不得在 UI 层计分。
 - 手工结果不持久化；仅通过 `onSaveInstanceState` 抗配置变更。
@@ -329,7 +329,7 @@
 ## 完成定义（DoD）
 
 - MP-001～MP-037 全部勾选，且每项有测试或真机证据（当前 37/37）。
-- 当前 49 类 / 457 项全绿（改造前 39 类 / 395 项基线不变），`assembleDebug` 成功。
+- 当前 49 类 / 460 项全绿（改造前 39 类 / 395 项基线不变），`assembleDebug` 成功。
 - 真机 1–10 项通过；环境导致的未测项单独列出，不冒充通过。
 - 非手工路径的渲染、评分、拆牌图命名与失效行为无回归。
 - `doc/patterns_design.md`、`doc/tasks.md`、`harness/state.md` 与 ADR 状态一致。

@@ -12,22 +12,38 @@ data class HandResult(
     val rounds: Int,
     val melds: List<Meld>,
     val cardCount: Int,
-    /** V4.1 SPI 分子 = Σ(Fᵢ×αᵢ) − P（残局 N<10 张时 P=0）。 */
+    /** SPI 分子 = Σ(Fᵢ×αᵢ) − P；综合评估 §4.3 未设张数豁免，残局同样计散牌惩罚。 */
     val numerator: Double = spi * rounds,
-    /** 散牌惩罚涉及的点数<10孤立单张/小对子数量 N_waste（残局 N<10 时恒为 0）。 */
+    /** 散牌惩罚涉及的点数<10孤立单张/小对子数量 N_waste（按出牌单元计数）。 */
     val waste: Int = 0,
     /** 是否由穷举搜索证明为全局最优；false 表示达到时间/状态上限后的 anytime 最优解。 */
     val exhaustive: Boolean = true,
+    /** 控制型出牌单元数量 N_control（炸弹、同花顺、火箭、单张大王、单张自然级牌）。 */
+    val control: Int = 0,
 ) {
     val penalty get() = 15.0 * waste
     val tMax get() = theoreticalMaxRounds(cardCount)
     val nspi get() = spi / tMax * 100.0
 
-    /** V4.1 动态分级：残局1~12张 60/120/180；中局13~18张 70/130/200；开局(≥19张，含19~26过渡) 80/140/220。 */
-    val grade get() = when {
-        cardCount <= 12 -> graded(60.0, 120.0, 180.0)
-        cardCount <= 18 -> graded(70.0, 130.0, 200.0)
-        else -> graded(80.0, 140.0, 220.0)
+    /** 残局控制覆盖比 R_control = N_control / (T_plan − 1)；T_plan=1 时无定义（单次出牌方案）。 */
+    val controlRatio: Double? get() = if (rounds >= 2) control.toDouble() / (rounds - 1) else null
+
+    /** 阶段划分（综合评估 §5.1）：19~27 开局/前中局、10~18 中局、1~9 残局。 */
+    val stage get() = when (cardCount) {
+        in 19..27 -> "开局/前中局"
+        in 10..18 -> "中局"
+        else -> "残局"
+    }
+
+    /**
+     * 经验参考评级（综合评估 §5.2）：27 张 80/140/220；13~18 张 70/130/200；1~9 张（辅助）60/120/180。
+     * 19~26 张与 10~12 张没有阈值依据，按 §5.2 / T13 输出「待标定」，不外推相邻区间。
+     */
+    val grade get() = when (cardCount) {
+        27 -> graded(80.0, 140.0, 220.0)
+        in 13..18 -> graded(70.0, 130.0, 200.0)
+        in 1..9 -> graded(60.0, 120.0, 180.0)
+        else -> "待标定"
     }
     private fun graded(balanced: Double, strong: Double, crush: Double) = when {
         spi >= crush -> "碾压级"
@@ -79,7 +95,7 @@ class HandScorer(
         val n = cards.size
         val candidates = MeldEvaluator.candidates(cards, level, considerSuits)
         // 分子用「1 = 0.01」的整数累计：α∈{1.00,1.15} 与 P=15 都落在百分位上。
-        val net = IntArray(candidates.size) { netValue100(candidates[it], n, level) }
+        val net = IntArray(candidates.size) { netValue100(candidates[it], level) }
         val byCard = Array(n) { i ->
             val bit = 1 shl i
             candidates.indices.filter { candidates[it].mask and bit != 0 }
