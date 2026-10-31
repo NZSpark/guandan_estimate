@@ -3,7 +3,7 @@
 原生 Android（Kotlin）掼蛋手牌分析工具：**照片 → 识别牌面 → 人工核对 → 最优拆牌 → SPI / NSPI 牌力评估**。
 
 - 应用名「掼蛋牌力」，包名 `nz.org.aotearoa.guandanscore`
-- 评分规则以仓库内两份评分文档为唯一真源：[掼蛋牌型量化评分方案（V4.2，文档先行）](./doc/掼蛋牌型量化评分方案.md)、[手牌综合牌力评估方法](./doc/手牌综合牌力评估方法.md)。**App 代码当前仍按 V4.1 计分**，V4.2 落地清单见评分方案 §七。
+- 评分规则以仓库内两份评分文档为唯一真源：[掼蛋牌型量化评分方案（V4.2，文档先行）](./doc/掼蛋牌型量化评分方案.md)、[手牌综合牌力评估方法](./doc/手牌综合牌力评估方法.md)。**App 代码已按 V4.2 计分**，落地记录见评分方案 §八与 ADR-0030。
 - 识图支持「网页版 AI（复用登录态，免 API Key）」与「HTTP API（自带 Key）」两类源，可同时保存多套配置并切换
 
 ## 主要功能
@@ -230,11 +230,12 @@ adb shell am start -n nz.org.aotearoa.guandanscore/.probe.AiProbeActivity \
 
 | 文件 | 内容 |
 | --- | --- |
-| [doc/掼蛋牌型量化评分方案.md](./doc/掼蛋牌型量化评分方案.md) | 单牌型分值、炸弹/同花顺/火箭公式（权威）；当前版本 V4.2（文档先行，代码 V4.1） |
+| [doc/掼蛋牌型量化评分方案.md](./doc/掼蛋牌型量化评分方案.md) | 单牌型分值、炸弹/同花顺/火箭公式（权威）；当前版本 V4.2（文档与代码已对齐） |
 | [doc/手牌综合牌力评估方法.md](./doc/手牌综合牌力评估方法.md) | SPI / NSPI / 动态评级 / 散牌惩罚（权威） |
 | [doc/tasks.md](./doc/tasks.md) | 任务总索引、当前进度、真机基线 |
 | [doc/ai_tasks.md](./doc/ai_tasks.md) | AI 识牌迁移与多源 WebView 任务（阶段 0～8、验收清单） |
 | [doc/ui_design.md](./doc/ui_design.md) | 主工作台与 AI 源管理的 UI 规格 |
+| [doc/usermanual.md](./doc/usermanual.md) | 用户手册：安装、拍照识牌、核对、计算、手工拆牌、AI 源配置与常见问题（含真机截图） |
 | [doc/multi_ai_update.md](./doc/multi_ai_update.md) | 多 AI 源架构设计 |
 | [model_training/README.md](./model_training/README.md) | 标注、训练、导出与接入流程 |
 
