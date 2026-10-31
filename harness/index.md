@@ -9,6 +9,7 @@
 | --- | --- | --- | --- |
 | 修改牌型分值 / SPI / NSPI / 评级阈值 | `doc/掼蛋牌型量化评分方案.md`、`doc/手牌综合牌力评估方法.md` | `memory/scoring-rules.md`、`README.md` 牌力指标节 | `skills/add-scoring-test` |
 | 排查识图 / AI Provider / 模板匹配 | `memory/recognition-pipeline.md` | `recognition/` 四个文件、`testcases/` | `skills/ai-recognition-debug` |
+| 优化本地识图 / 性能与准确率 | `doc/local_engine.md` | `memory/recognition-pipeline.md`、`recognition/`、`testcases/` | `skills/ai-recognition-debug` |
 | 修改 AI 源管理 / 配置档 / 健康检查 | `doc/ai_configure.md` | `ui/AiSettings*`、`recognition/source/HealthCheckGate.kt`、`doc/multi_ai_update.md` | — |
 | 修改拍照取图 / 图片渲染 / 拆牌图 | `memory/project-overview.md` | `imaging/`、`MainActivity.kt`、`res/layout/activity_main.xml` | — |
 | 实现手工拆牌 / 分区编辑 / 最优对照 | `doc/patterns_tasks.md` | `doc/patterns_design.md`、`doc/ui_design.md` §5.4、`scoring/` | — |
