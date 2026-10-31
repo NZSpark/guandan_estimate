@@ -57,7 +57,6 @@
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="@dimen/touch_min"
-                android:contentDescription="管理 AI 源"
                 android:text="AI 源" />
         </LinearLayout>
 
@@ -90,7 +89,6 @@
                         android:id="@+id/photo"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:contentDescription="手牌照片预览"
                         android:scaleType="fitCenter" />
 
                     <LinearLayout
@@ -338,8 +336,7 @@
                 android:id="@+id/level"
                 android:layout_width="96dp"
                 android:layout_height="@dimen/touch_min"
-                android:layout_marginStart="@dimen/space_3"
-                android:contentDescription="本局级牌" />
+                android:layout_marginStart="@dimen/space_3" />
         </LinearLayout>
 
         <TextView
@@ -475,7 +472,6 @@
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/touch_min"
                     android:layout_marginTop="@dimen/space_2"
-                    android:contentDescription="展开或收起拆牌明细"
                     android:text="查看逐组拆牌明细" />
 
                 <TextView
@@ -496,6 +492,56 @@
                     android:textAppearance="@style/TextAppearance.GuanDan.Label"
                     android:text="SPI = 评分分子 ÷ 计划轮数；NSPI = SPI ÷ T_max × 100。
 评分来自本手牌的量化评估，不代表比赛胜负保证。"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/scoreOrigin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_3"
+                    android:textAppearance="@style/TextAppearance.GuanDan.Label"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/originActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/optimalDetail"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="0dp"
+                        android:layout_height="@dimen/touch_min"
+                        android:layout_weight="1"
+                        android:text="查看最优拆牌" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/restoreOptimal"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="0dp"
+                        android:layout_height="@dimen/touch_min"
+                        android:layout_weight="1"
+                        android:text="恢复最优方案" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/optimalBreakdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_2"
+                    android:lineSpacingExtra="4dp"
+                    android:textAppearance="@style/TextAppearance.GuanDan.Body"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/adjustMelds"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_marginTop="@dimen/space_3"
+                    android:text="手工拆牌"
                     android:visibility="gone" />
 
                 <com.google.android.material.button.MaterialButton

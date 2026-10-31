@@ -25,8 +25,7 @@
             android:layout_width="wrap_content"
             android:layout_height="@dimen/touch_min"
             android:clickable="false"
-            android:focusable="false"
-            android:importantForAccessibility="no" />
+            android:focusable="false" />
 
         <LinearLayout
             android:layout_width="0dp"

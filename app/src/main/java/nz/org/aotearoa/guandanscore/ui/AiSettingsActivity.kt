@@ -407,13 +407,6 @@ class AiSettingsActivity : AppCompatActivity() {
             row.binding.radio.isChecked = row.source == editor.source
             row.binding.activeBadge.visibility =
                 if (row.source == activeSource) View.VISIBLE else View.GONE
-            row.binding.root.contentDescription = buildString {
-                append(row.source.label)
-                append("，")
-                append(descriptionFor(row.source))
-                if (row.source == editor.source) append("，正在编辑")
-                if (row.source == activeSource) append("，当前使用")
-            }
         }
     }
 

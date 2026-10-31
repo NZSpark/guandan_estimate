@@ -69,19 +69,25 @@ sealed interface AiRecognitionState {
  */
 enum class AiFailureKind { NOT_LOGGED_IN, PAGE_UNAVAILABLE, UPLOAD_FAILED, SUBMIT_FAILED, TIMEOUT, PARSE_FAILED, BUSY, CANCELLED, UNKNOWN }
 
+sealed interface ScoreOrigin {
+    data object Optimal : ScoreOrigin
+    /** base 保留完整最优结果：恢复最优、展开只读明细都不重跑搜索。 */
+    data class Adjusted(val base: HandResult) : ScoreOrigin
+}
+
 sealed interface ScoreState {
     data object None : ScoreState
     data object Running : ScoreState
-    data class Success(val result: HandResult) : ScoreState
+    data class Success(val result: HandResult, val origin: ScoreOrigin = ScoreOrigin.Optimal) : ScoreState
     data class Failed(val reason: String) : ScoreState
 
-    /** 手牌/级牌变化后的过期态：保留结果以便说明「需要重新计算」，但不作为当前结果显示。 */
-    data class Stale(val previous: HandResult) : ScoreState
+    /** 手牌/级牌变化后的过期态：保留结果与来源以便说明「需要重新计算」。 */
+    data class Stale(val previous: HandResult, val origin: ScoreOrigin = ScoreOrigin.Optimal) : ScoreState
 }
 
 /** 旧结果失效：Success -> Stale；None/Failed 保持不变；Running 保持（正在算新结果）。 */
 fun ScoreState.invalidate(): ScoreState = when (this) {
-    is ScoreState.Success -> ScoreState.Stale(result)
+    is ScoreState.Success -> ScoreState.Stale(result, origin)
     else -> this
 }
 

@@ -3,6 +3,9 @@ package nz.org.aotearoa.guandanscore.ui
 import nz.org.aotearoa.guandanscore.model.Card
 import nz.org.aotearoa.guandanscore.model.Rank
 import nz.org.aotearoa.guandanscore.model.Suit
+import nz.org.aotearoa.guandanscore.scoring.HandResult
+import nz.org.aotearoa.guandanscore.scoring.Meld
+import nz.org.aotearoa.guandanscore.scoring.MeldType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +66,41 @@ class WorkbenchStateTest {
     @Test
     fun `running score stays running on invalidate`() {
         assertEquals(ScoreState.Running, ScoreState.Running.invalidate())
+    }
+
+    private fun adjustedResult(): HandResult = HandResult(
+        spi = 100.0,
+        total = 100,
+        rounds = 1,
+        melds = listOf(Meld(0b11, cards(Rank.ACE to Suit.SPADE, Rank.KING to Suit.HEART), MeldType.SINGLE, 50)),
+        cardCount = 2,
+        exhaustive = false,
+    )
+
+    @Test
+    fun `adjusted origin carries the full base result and survives stale`() {
+        val base = adjustedResult()
+        val manual = base.copy(spi = 90.0, numerator = 90.0)
+        val scored = state().copy(score = ScoreState.Success(manual, ScoreOrigin.Adjusted(base)))
+
+        val stale = scored.withHand(cards(Rank.ACE to Suit.SPADE)).score as ScoreState.Stale
+        assertEquals(manual, stale.previous)
+        assertEquals(ScoreOrigin.Adjusted(base), stale.origin)
+        assertEquals(base.melds, (stale.origin as ScoreOrigin.Adjusted).base.melds)
+    }
+
+    @Test
+    fun `adjusted origin survives level change as stale`() {
+        val base = adjustedResult()
+        val scored = state().copy(score = ScoreState.Success(base, ScoreOrigin.Adjusted(base)))
+        val stale = scored.withLevel(Rank.FIVE).score as ScoreState.Stale
+        assertEquals(ScoreOrigin.Adjusted(base), stale.origin)
+    }
+
+    @Test
+    fun `optimal origin is the default for new success`() {
+        val result = adjustedResult()
+        assertEquals(ScoreState.Success(result), ScoreState.Success(result, ScoreOrigin.Optimal))
     }
 
     @Test

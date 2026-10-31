@@ -31,7 +31,6 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:contentDescription="返回主界面"
             android:minWidth="48dp"
             android:text="←"
             android:textSize="22sp" />

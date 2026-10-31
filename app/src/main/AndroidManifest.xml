@@ -20,6 +20,14 @@
             android:parentActivityName=".MainActivity"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
+        <!-- 手工拆牌页面（doc/patterns_design.md） -->
+        <activity
+            android:name=".ui.MeldAdjustActivity"
+            android:exported="false"
+            android:label="手工拆牌"
+            android:parentActivityName=".MainActivity"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
         <!-- 阶段 0 验证入口，Gemini WebView 迁移完成后移除 -->
         <activity android:name=".probe.AiProbeActivity" android:exported="true" android:label="AI Probe" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".probe.GeminiProbeActivity" android:exported="true" android:label="Gemini Probe" />

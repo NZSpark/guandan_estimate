@@ -40,6 +40,7 @@ import nz.org.aotearoa.guandanscore.recognition.source.SourceHealth
 import nz.org.aotearoa.guandanscore.recognition.webview.WebViewHost
 import nz.org.aotearoa.guandanscore.scoring.HandResult
 import nz.org.aotearoa.guandanscore.scoring.HandScorer
+import nz.org.aotearoa.guandanscore.scoring.MeldGroup
 import nz.org.aotearoa.guandanscore.ui.AiFailureKind
 import nz.org.aotearoa.guandanscore.ui.AiRecognitionState
 import nz.org.aotearoa.guandanscore.ui.AiSettingsActivity
@@ -47,11 +48,19 @@ import nz.org.aotearoa.guandanscore.ui.HealthState
 import nz.org.aotearoa.guandanscore.ui.ImageSource
 import nz.org.aotearoa.guandanscore.ui.ImageState
 import nz.org.aotearoa.guandanscore.ui.LocalRecognitionState
+import nz.org.aotearoa.guandanscore.ui.MeldAdjustActivity
+import nz.org.aotearoa.guandanscore.ui.MeldAdjustApply
+import nz.org.aotearoa.guandanscore.ui.MeldAdjustApplyResult
 import nz.org.aotearoa.guandanscore.ui.OutputImageState
+import nz.org.aotearoa.guandanscore.ui.PartitionCodec
+import nz.org.aotearoa.guandanscore.ui.ScoreOrigin
 import nz.org.aotearoa.guandanscore.ui.ScoreState
+import nz.org.aotearoa.guandanscore.ui.ScoreText
 import nz.org.aotearoa.guandanscore.ui.SourceState
 import nz.org.aotearoa.guandanscore.ui.WorkbenchState
+import nz.org.aotearoa.guandanscore.ui.toSnapshot
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
@@ -73,6 +82,7 @@ class MainActivity : AppCompatActivity() {
 
     private var state = WorkbenchState()
     private var cameraUri: Uri? = null
+    private var optimalExpanded = false
 
     /** 输入图与输出图分开保存（UI-013）：保存当前图片永远保存 [inputBitmap]。 */
     private var inputBitmap: Bitmap? = null
@@ -89,6 +99,36 @@ class MainActivity : AppCompatActivity() {
     }
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) launchCamera() else toast("需要相机权限才能拍照")
+    }
+    private val meldAdjust = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val current = state.score as? ScoreState.Success ?: return@registerForActivityResult
+        val base = when (val origin = current.origin) {
+            is ScoreOrigin.Adjusted -> origin.base
+            ScoreOrigin.Optimal -> current.result
+        }
+        val outcome = MeldAdjustApply.apply(
+            groupsRaw = result.data?.getStringExtra(PartitionCodec.EXTRA_GROUPS),
+            partitionRaw = result.data?.getStringExtra(PartitionCodec.EXTRA_PARTITION),
+            hand = state.hand,
+            level = state.level,
+        )
+        val manual = when (outcome) {
+            is MeldAdjustApplyResult.Applied -> outcome.result
+            is MeldAdjustApplyResult.Rejected -> {
+                toast(outcome.message)
+                return@registerForActivityResult
+            }
+        }
+        optimalExpanded = false
+        // 拆牌变化后旧「已生成」拆牌图不再对应当前结果。
+        outputBitmap = null
+        setState(
+            state.copy(
+                score = ScoreState.Success(manual, ScoreOrigin.Adjusted(base)),
+                outputImage = OutputImageState.None,
+            )
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,6 +155,9 @@ class MainActivity : AppCompatActivity() {
         ui.addCard.setOnClickListener { editCard(null) }
         ui.calculate.setOnClickListener { calculate() }
         ui.toggleBreakdown.setOnClickListener { toggleBreakdown() }
+        ui.adjustMelds.setOnClickListener { openMeldAdjust() }
+        ui.optimalDetail.setOnClickListener { toggleOptimalDetail() }
+        ui.restoreOptimal.setOnClickListener { restoreOptimal() }
         ui.sortedImage.setOnClickListener { generateSortedImage() }
 
         // AI-165：主界面不再插入可见 WebView 容器。网页登录走独立页面（UI-018）。
@@ -282,7 +325,6 @@ class MainActivity : AppCompatActivity() {
             if (card.suit == Suit.HEART || card.suit == Suit.DIAMOND) getColor(R.color.card_red)
             else getColor(R.color.card_black)
         )
-        contentDescription = "${cardAccessibleName(card)}，点击校正，点击删除图标移除"
         setOnClickListener { editCard(index) }
         setOnCloseIconClickListener {
             val next = state.hand.toMutableList().apply { removeAt(index) }
@@ -296,6 +338,8 @@ class MainActivity : AppCompatActivity() {
                 ui.resultCard.visibility = View.GONE
                 ui.calculateState.visibility = View.GONE
                 ui.levelHint.visibility = View.GONE
+                // 旧结果卡里的入口不属于当前状态，必须一起收起，避免点出无响应的按钮。
+                ui.adjustMelds.visibility = View.GONE
             }
             ScoreState.Running -> {
                 ui.resultCard.visibility = View.GONE
@@ -303,11 +347,12 @@ class MainActivity : AppCompatActivity() {
                 ui.calculateState.text = "正在寻找最优拆牌…"
                 ui.calculateState.setTextColor(getColor(R.color.text_primary))
                 ui.levelHint.visibility = View.GONE
+                ui.adjustMelds.visibility = View.GONE
             }
             is ScoreState.Success -> {
                 ui.calculateState.visibility = View.GONE
                 ui.levelHint.visibility = View.GONE
-                showResult(s.result)
+                showResult(s.result, s.origin)
             }
             is ScoreState.Failed -> {
                 ui.resultCard.visibility = View.GONE
@@ -315,29 +360,40 @@ class MainActivity : AppCompatActivity() {
                 ui.calculateState.text = "计算失败：${s.reason}"
                 ui.calculateState.setTextColor(getColor(R.color.error))
                 ui.levelHint.visibility = View.GONE
+                ui.adjustMelds.visibility = View.GONE
             }
             is ScoreState.Stale -> {
-                ui.resultCard.visibility = View.GONE
                 ui.calculateState.visibility = View.VISIBLE
                 ui.calculateState.text = "手牌或级牌已改变，需要重新计算"
                 ui.calculateState.setTextColor(getColor(R.color.gold))
                 ui.levelHint.visibility = View.GONE
+                ui.resultCard.visibility = View.VISIBLE
+                showResult(s.previous, s.origin)
+                ui.adjustMelds.isEnabled = false
+                ui.adjustMelds.text = "手牌已修改，请先重新计算"
+                ui.sortedImage.isEnabled = false
             }
         }
     }
 
-    private fun showResult(result: HandResult) {
+    private fun showResult(result: HandResult, origin: ScoreOrigin) {
         ui.resultCard.visibility = View.VISIBLE
         ui.resultCount.text = "${result.cardCount} 张"
         ui.grade.text = result.grade
-        ui.spi.text = "%.2f".format(result.spi)
-        ui.nspi.text = "%.1f".format(result.nspi)
+        ui.spi.text = String.format(Locale.US, "%.2f", result.spi)
+        ui.nspi.text = String.format(Locale.US, "%.1f", result.nspi)
         ui.summary.text = buildString {
             append("评分分子 ")
-            append("%.2f".format(result.numerator))
+            append(String.format(Locale.US, "%.2f", result.numerator))
             append(" · 计划出牌轮数 ${result.rounds}")
             append(" · T_max ${result.tMax}")
-            append(if (result.exhaustive) " · 已穷举最优" else " · 近似最优")
+            append(
+                when {
+                    origin is ScoreOrigin.Adjusted -> " · 手工拆牌"
+                    result.exhaustive -> " · 已穷举最优"
+                    else -> " · 近似最优"
+                }
+            )
         }
         if (result.waste > 0) {
             ui.penaltyNote.visibility = View.VISIBLE
@@ -346,9 +402,81 @@ class MainActivity : AppCompatActivity() {
             ui.penaltyNote.visibility = View.GONE
         }
         ui.breakdown.text = result.melds.sortedByDescending { it.score }
-            .joinToString("\n") { m -> m.label + "　" + "%d".format(m.score) }
+            .joinToString("\n") { m -> m.label }
         ui.sortedImage.isEnabled = result.cardCount == 27
-        ui.sortedImage.text = if (result.cardCount == 27) "生成并保存最优拆牌图" else "需 27 张手牌才能生成拆牌图"
+        ui.sortedImage.text = if (result.cardCount == 27) {
+            "生成并保存${ScoreText.imageLabel(origin)}"
+        } else {
+            "需 27 张手牌才能生成拆牌图"
+        }
+
+        ui.adjustMelds.visibility = if (result.cardCount in 2..27) View.VISIBLE else View.GONE
+        ui.adjustMelds.isEnabled = true
+        ui.adjustMelds.text = if (origin is ScoreOrigin.Adjusted) "继续编辑手工拆牌" else "手工拆牌"
+
+        if (origin is ScoreOrigin.Adjusted) {
+            val base = origin.base
+            ui.scoreOrigin.visibility = View.VISIBLE
+            ui.originActions.visibility = View.VISIBLE
+            ui.scoreOrigin.text = ScoreText.origin(base, result)
+            ui.optimalDetail.visibility = View.VISIBLE
+            ui.restoreOptimal.visibility = View.VISIBLE
+            ui.optimalDetail.text = if (optimalExpanded) "收起最优拆牌" else "查看最优拆牌"
+            ui.optimalBreakdown.visibility = if (optimalExpanded) View.VISIBLE else View.GONE
+            ui.optimalBreakdown.text = ScoreText.optimalBreakdown(base)
+        } else {
+            ui.scoreOrigin.visibility = View.GONE
+            ui.originActions.visibility = View.GONE
+            ui.optimalBreakdown.visibility = View.GONE
+            optimalExpanded = false
+        }
+    }
+
+    private fun currentImageLabel(): String =
+        ScoreText.imageLabel((state.score as? ScoreState.Success)?.origin ?: ScoreOrigin.Optimal)
+
+    private fun openMeldAdjust() {
+        val current = state.score as? ScoreState.Success ?: return
+        if (state.cardCount !in 2..27) return
+        val base = when (val origin = current.origin) {
+            is ScoreOrigin.Adjusted -> origin.base
+            ScoreOrigin.Optimal -> current.result
+        }
+        val groups = current.result.melds.map { meld ->
+            MeldGroup(meld.cards.map { state.hand.indexOf(it) }, meld.type)
+        }
+        val partition = runCatching {
+            PartitionCodec.encodePartition(state.level, state.hand, groups)
+        }.getOrElse {
+            toast(it.message ?: "手工拆牌数据无效")
+            return
+        }
+        val snapshot = PartitionCodec.encodeSnapshot(base.toSnapshot())
+        meldAdjust.launch(
+            Intent(this, MeldAdjustActivity::class.java)
+                .putExtra(PartitionCodec.EXTRA_PARTITION, partition)
+                .putExtra(PartitionCodec.EXTRA_BASE, snapshot)
+        )
+    }
+
+    private fun toggleOptimalDetail() {
+        val current = state.score as? ScoreState.Success ?: return
+        if (current.origin !is ScoreOrigin.Adjusted) return
+        optimalExpanded = !optimalExpanded
+        showResult(current.result, current.origin)
+    }
+
+    private fun restoreOptimal() {
+        val current = state.score as? ScoreState.Success ?: return
+        val adjusted = current.origin as? ScoreOrigin.Adjusted ?: return
+        optimalExpanded = false
+        outputBitmap = null
+        setState(
+            state.copy(
+                score = ScoreState.Success(adjusted.base, ScoreOrigin.Optimal),
+                outputImage = OutputImageState.None,
+            )
+        )
     }
 
     private fun renderOutput() {
@@ -356,12 +484,12 @@ class MainActivity : AppCompatActivity() {
             OutputImageState.None -> ui.outputState.visibility = View.GONE
             OutputImageState.Generating -> {
                 ui.outputState.visibility = View.VISIBLE
-                ui.outputState.text = "正在生成最优拆牌图…"
+                ui.outputState.text = "正在生成${currentImageLabel()}…"
                 ui.outputState.setTextColor(getColor(R.color.text_primary))
             }
             OutputImageState.Generated -> {
                 ui.outputState.visibility = View.VISIBLE
-                ui.outputState.text = "已生成最优拆牌图"
+                ui.outputState.text = "已生成${currentImageLabel()}"
                 ui.outputState.setTextColor(getColor(R.color.success))
             }
             OutputImageState.Saving -> {
@@ -530,7 +658,8 @@ class MainActivity : AppCompatActivity() {
         if (state.cardCount !in 1..27) return
         val level = levels[ui.level.selectedItemPosition]
         val snapshot = state.hand.toList()
-        setState(state.copy(score = ScoreState.Running))
+        outputBitmap = null
+        setState(state.copy(score = ScoreState.Running, outputImage = OutputImageState.None))
         worker.execute {
             try {
                 val result = HandScorer(level).score(snapshot)
@@ -694,17 +823,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun generateSortedImage() {
-        val result = (state.score as? ScoreState.Success)?.result ?: return
+        val current = state.score as? ScoreState.Success ?: return
+        val result = current.result
         if (state.cardCount != 27) return
+        val label = ScoreText.imageLabel(current.origin)
         setState(state.copy(outputImage = OutputImageState.Generating))
         val snapshot = state.hand.toList()
         worker.execute {
             try {
-                val bitmap = imageRenderer.render(snapshot, "最优拆牌排序", result.melds.sortedByDescending { it.score })
+                val bitmap = imageRenderer.render(snapshot, label, result.melds.sortedByDescending { it.score })
                 runOnUiThread {
                     outputBitmap = bitmap
                     setState(state.copy(outputImage = OutputImageState.Generated))
-                    saveToGallery(bitmap, "最优拆牌")
+                    saveToGallery(bitmap, label)
                 }
             } catch (e: Exception) {
                 runOnUiThread { setState(state.copy(outputImage = OutputImageState.Failed(e.localizedMessage ?: "生成失败"))) }
@@ -734,14 +865,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------------------- 杂项
-
-    private fun cardAccessibleName(card: Card): String = when (card.suit) {
-        Suit.JOKER -> card.rank.label
-        Suit.SPADE -> "黑桃${card.rank.label}"
-        Suit.HEART -> "红心${card.rank.label}"
-        Suit.CLUB -> "梅花${card.rank.label}"
-        Suit.DIAMOND -> "方块${card.rank.label}"
-    }
 
     private fun ImageSource.label(): String = when (this) {
         ImageSource.PHOTO -> "拍照"

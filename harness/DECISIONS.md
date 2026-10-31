@@ -235,15 +235,17 @@
 
 ---
 
-## ADR-0020 · 2026-10-30 · 手动拆牌复用评分层，结果带来源标记
+## ADR-0020 · 2026-10-30 · 手工拆牌复用评分层，最优结果只读对照
 
-**决策**：新增拆牌调整页（`doc/patterns_design.md`）。分区用 `MeldGroup(indices, type)` 表示，分值由 `MeldEvaluator` 从 `HandScorer.candidates()` 抽出后统一生成，`PartitionEvaluator.summarize` 与优化器共用 `controlWeight`/`isLowWaste`/α/惩罚口径；`ScoreState.Success` 增加 `ScoreOrigin`（`Optimal` / `Adjusted(base)`）。
+**决策**：新增手工拆牌页（`doc/patterns_design.md`，原「拆牌结果调整」）。**修订（2026-10-31）**：UI 文案统一为「手工拆牌」；`Adjusted.base` 改为完整 `HandResult`，恢复最优不重跑搜索。分区用 `MeldGroup(indices, type)` 表示，分值由 `MeldEvaluator` 从 `HandScorer.candidates()` 抽出后统一生成，`PartitionEvaluator.summarize` 与优化器共用 `controlPercent`/`isLowWaste`/α/惩罚口径；`ScoreState.Success` 增加 `ScoreOrigin`（`Optimal` / `Adjusted(base)`）。页面固定两列：左侧「最优拆牌」只读（评级/SPI/NSPI/分子/轮数），右侧「手工拆牌」实时计算；应用后主界面来源行保留 `手工拆牌 · 最优 X → Y（差值）`，最优分值不被覆盖。
 
-**理由**：同一手牌存在多种拆法，用户需要可对比的 SPI，而不是改手牌绕过。若在 UI 或新文件里重写牌型公式，两条路径必然漂移，且无法解释「为什么手调结果与重算结果不一致」。把评分集中在 `scoring` 层，UI 只提交分区、只渲染 `HandResult`。
+**理由**：同一手牌存在多种拆法，用户需要可对比的 SPI，而不是改手牌绕过。若在 UI 或新文件里重写牌型公式，两条路径必然漂移，且无法解释「为什么手工结果与重算结果不一致」。把评分集中在 `scoring` 层，UI 只提交分区、只渲染 `HandResult`。
 
-**约束**：手牌或级牌变化时 `Adjusted` 与 `Optimal` 一样变为 `Stale`；手动结果不持久化（仅 `onSaveInstanceState` 抗重建）；不新增依赖（不引入 RecyclerView/Compose/拖拽库）；优化器默认 15 秒 / 15 万状态（ADR-0025 已取代本条原「3 秒上限」），未穷举时结果是近似最优，手动方案可能更高，UI 如实显示而不是钳制。
+**约束**：手牌或级牌变化时 `Adjusted` 与 `Optimal` 一样变为 `Stale`；手工结果不持久化（仅 `onSaveInstanceState` 抗重建）；不新增依赖（不引入 RecyclerView/Compose/拖拽库）；优化器默认 15 秒 / 15 万状态（ADR-0025 已取代本条原「3 秒上限」），未穷举时结果是近似最优，手工方案可能更高，UI 如实显示而不是钳制；最优摘要只由主界面投影，子页面不得重算或改写。`PartitionEvaluator.resolve` 对同一物理牌组的同类型多条解释必须取最高分（例如 5 张自然 A 必须解析为 5 炸，不得退化为 4 炸）；这是手工复算与最优结果等价的硬条件。
 
-**状态**：Proposed（设计完成，P0 未实施）
+**修订（2026-10-31，真机）**：返回确认的「保留并返回」不是「关掉弹窗继续编辑」，而是应用当前分区后返回（`RESULT_OK` + `groups`）；架构没有跨页面草稿，否则该按钮会静默丢弃用户修改。手工页的勾选只由 `state.selection` 维护，组行 CheckBox 必须关闭 View 状态保存（`isSaveEnabled = false`），否则 Activity 重建时框架会在 `onCreate` 之后用旧 View 状态覆盖刚恢复的选择。`ScoreState.None/Running/Failed` 必须隐藏结果卡里的手工入口，不能沿用上一次成功状态的可见性。
+
+**状态**：Active（2026-10-31 真机验收：MP-035 ①–⑥ 全通过，MP-036 ⑦⑧⑨⑩ 通过；MP-019/022 已补验；任务清单 37/37，见 `doc/patterns_tasks.md`）
 
 ---
 

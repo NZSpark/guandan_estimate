@@ -1,8 +1,6 @@
 package nz.org.aotearoa.guandanscore.scoring
 
 import nz.org.aotearoa.guandanscore.model.*
-import kotlin.math.ln
-import kotlin.math.roundToInt
 
 enum class MeldType(val title: String) { SINGLE("单张"), PAIR("对子"), TRIPLE("三张"), STRAIGHT("顺子"), FULL_HOUSE("三带二"), TRACTOR("连对"), PLATE("钢板"), BOMB("炸弹"), STRAIGHT_FLUSH("同花顺"), ROCKET("火箭") }
 data class Meld(val mask: Int, val cards: List<Card>, val type: MeldType, val score: Int) {
@@ -50,35 +48,6 @@ data class HandResult(
     }
 }
 
-/** V4.1 普通牌型线性映射：原始分从 rawMin..rawMax 线性映射到 finalMin..191（普通牌型最高 191）。 */
-internal fun ordinaryMappedScore(raw: Int, rawMin: Int, finalMin: Int, rawMax: Int): Int =
-    (finalMin + (raw - rawMin).toDouble() * (191 - finalMin) / (rawMax - rawMin))
-        .roundToInt()
-
-/** V4.1 高阶炸弹对数平滑项：floor(multiplier × log₂(1 + delta/100))。 */
-private const val LN_2 = 0.6931471805599453
-private fun logScale(multiplier: Int, delta: Int): Int =
-    (multiplier * ln(1.0 + delta / 100.0) / LN_2).toInt()
-
-/**
- * V4.1 炸弹分值，严格按评分方案 §四：
- * 4/5 炸为线性式，6~10 炸为 offset + floor(系数 × log₂(1 + delta/100))。
- * [value] 为炸弹点数（级牌为 15）；[count] 为总张数（逢人配已并入）。
- */
-internal fun bombScore(count: Int, value: Int): Int {
-    val sum = count * value
-    return when (count) {
-        4 -> sum + 180 + 2 * value
-        5 -> sum + 280 + 4 * value
-        6 -> 523 + logScale(55, sum + 5 * value)
-        7 -> 577 + logScale(73, sum + 6 * value)
-        8 -> 672 + logScale(75, sum + 7 * value)
-        9 -> 784 + logScale(66, sum + 7 * value)
-        10 -> 890 + logScale(60, sum + 5 * value)
-        else -> throw IllegalArgumentException("炸弹张数必须为 4 至 10：$count")
-    }
-}
-
 /**
  * 最优拆牌：多策略贪心保底 + 逐层束搜索 + 可中断的精确覆盖 DP。
  *
@@ -108,9 +77,9 @@ class HandScorer(
         require(cards.size in 1..27) { "请确认 1 至 27 张牌" }
         require(cards.groupingBy { it.rank to it.suit }.eachCount().values.all { it <= 2 }) { "两副牌中同一张牌最多出现 2 次，请检查识别结果" }
         val n = cards.size
-        val candidates = candidates(cards)
+        val candidates = MeldEvaluator.candidates(cards, level, considerSuits)
         // 分子用「1 = 0.01」的整数累计：α∈{1.00,1.15} 与 P=15 都落在百分位上。
-        val net = IntArray(candidates.size) { netValue100(candidates[it], n) }
+        val net = IntArray(candidates.size) { netValue100(candidates[it], n, level) }
         val byCard = Array(n) { i ->
             val bit = 1 shl i
             candidates.indices.filter { candidates[it].mask and bit != 0 }
@@ -445,8 +414,7 @@ class HandScorer(
             }
         }
 
-        val rounds = bestRounds
-        check(rounds > 0) { "拆牌失败：没有可用的分区" }
+        check(bestRounds > 0) { "拆牌失败：没有可用的分区" }
         val melds = bestPicks!!.map { candidates[it] }
         lastStats = SearchStats(
             states = dpStates,
@@ -455,179 +423,16 @@ class HandScorer(
             dpMs = dpMs,
             beamMs = beamMs,
         )
-        val waste = if (n >= 10) melds.count { it.isLowWaste() } else 0
-        return HandResult(
-            spi = bestNum / 100.0 / rounds,
-            total = melds.sumOf(Meld::score),
-            rounds = rounds,
-            melds = melds,
-            cardCount = n,
-            numerator = bestNum / 100.0,
-            waste = waste,
-            exhaustive = exact,
-        )
+        return PartitionEvaluator.summarize(n, level, melds, exhaustive = exact)
     }
-
-    // ---- V4.1 牌权控制力系数 α 与散牌惩罚 P ----
-
-    /** α 的百分数形式：控制型牌型（炸弹、同花顺、火箭、单张大王、单张级牌）115，其余 100。 */
-    private fun controlPercent(m: Meld): Int = when (m.type) {
-        MeldType.BOMB, MeldType.STRAIGHT_FLUSH, MeldType.ROCKET -> 115
-        MeldType.SINGLE -> {
-            val rank = m.cards.single().rank
-            if (rank == Rank.BIG_JOKER || rank == level) 115 else 100
-        }
-        else -> 100
-    }
-
-    /** 是否属于“点数<10且无法组成有效套牌”的孤立单张/小对子（N_waste 计数对象）。级牌/大小王计点≥15，不算散牌。 */
-    private fun Meld.isLowWaste(): Boolean {
-        if (type != MeldType.SINGLE && type != MeldType.PAIR) return false
-        val natural = cards.firstOrNull { !(it.rank == level && it.suit == Suit.HEART) }
-        val point = when {
-            natural == null -> 15
-            natural.rank == level -> 15
-            else -> natural.rank.value
-        }
-        return point < 10
-    }
-
-    /** V4.1 该拆牌单元对 SPI 分子的贡献（百分位整数）：F×α，孤立散牌另扣 15（残局 N<10 张不扣）。 */
-    private fun netValue100(m: Meld, handSize: Int): Int =
-        m.score * controlPercent(m) - if (handSize >= 10 && m.isLowWaste()) 1500 else 0
-
-    private fun candidates(cards: List<Card>): List<Meld> {
-        // For a fixed physical-card mask only the highest-scoring interpretation can ever be optimal.
-        val out = LinkedHashMap<Int, Meld>()
-        fun add(indices: List<Int>, type: MeldType, score: Int) {
-            val mask = indices.fold(0) { a, i -> a or (1 shl i) }
-            val meld = Meld(mask, indices.map(cards::get), type, score)
-            if (score > (out[mask]?.score ?: -1)) out[mask] = meld
-        }
-        cards.indices.forEach {
-            val raw = if (cards[it].rank == level) 15 else cards[it].rank.value
-            add(listOf(it), MeldType.SINGLE, ordinaryMappedScore(raw, 2, 10, 17))
-        }
-        val wild = cards.indices.filter { cards[it].isWild(level) }
-        val normalRanks = cards.indices.filterNot { cards[it].rank.value > 14 || cards[it].isWild(level) }.groupBy { cards[it].rank }
-        val allRanks = cards.indices.filter { cards[it].rank.value <= 14 }.groupBy { cards[it].rank }
-
-        fun assignments(spec: List<Pair<Int, Int>>, suit: Suit? = null, emit: (List<Int>) -> Unit) {
-            fun walk(pos: Int, chosen: List<Int>, missing: Int) {
-                if (missing > wild.size) return
-                if (pos == spec.size) {
-                    combinations(wild.filterNot(chosen::contains), missing).forEach { emit(chosen + it) }
-                    return
-                }
-                val (value, need) = spec[pos]
-                val pool = cards.indices.filter { i -> cards[i].rank.value == value && !cards[i].isWild(level) && (suit == null || cards[i].suit == suit) }
-                for (take in 0..minOf(need, pool.size)) combinations(pool, take).forEach { walk(pos + 1, chosen + it, missing + need - take) }
-            }
-            walk(0, emptyList(), 0)
-        }
-
-        cards.indices.groupBy { cards[it].rank }.forEach { (rank, ids) ->
-            combinations(ids, 2).forEach { add(it, MeldType.PAIR, pairScore(rank.value)) }
-            combinations(ids, 3).forEach { add(it, MeldType.TRIPLE, tripleScore(rank.value)) }
-        }
-        (2..14).forEach { v ->
-            // 级牌对子/三张（含用于级牌自身的逢人配）按 15 计，不能走 3v/5v。
-            assignments(listOf(v to 2)) { add(it, MeldType.PAIR, pairScore(v)) }
-            assignments(listOf(v to 3)) { add(it, MeldType.TRIPLE, tripleScore(v)) }
-        }
-        // Bombs: natural cards plus zero or more wild hearts, never double-counting the level's wild cards.
-        normalRanks.forEach { (rank, ids) ->
-            for (naturalCount in 2..minOf(8, ids.size)) for (wc in 0..minOf(wild.size, 10 - naturalCount)) {
-                val n = naturalCount + wc
-                if (n < 4) continue
-                combinations(ids, naturalCount).forEach { ns -> combinations(wild, wc).forEach { ws ->
-                    // 逢人配按替代点数计入 Sum：三张5+配与四张5同分，不得越过四张6。
-                    // V4.1：6~9 炸常数按方案 B 重标定，4/5/10 炸不变。
-                    add(ns + ws, MeldType.BOMB, bombScore(n, base(rank)))
-                } }
-            }
-        }
-        // Four jokers.
-        val jokers = cards.indices.filter { cards[it].rank.value > 14 }
-        if (jokers.size == 4 && jokers.count { cards[it].rank == Rank.SMALL_JOKER } == 2) add(jokers, MeldType.ROCKET, 1000)
-
-        // Straights and straight flushes, including A2345.
-        // V_max 按顺子中的实际点数计（A2345 的 A 记 1；逢人配按填补点），不按级牌的 15。
-        val windows = listOf(listOf(14,2,3,4,5)) + (2..10).map { s -> (s until s+5).toList() }
-        windows.forEach { values ->
-            val pools = values.map { v -> cards.indices.filter { cards[it].rank.value == v && !cards[it].isWild(level) } }
-            cartesian(pools).forEach { ids ->
-                val vals = values.map { if (it == 14 && values[1] == 2) 1 else it }
-                val sum = vals.sum(); val vmax = vals.max()
-                add(ids, MeldType.STRAIGHT, ordinaryMappedScore(sum + vmax, 20, 40, 74))
-                if (considerSuits && ids.map { cards[it].suit }.distinct().size == 1) add(ids, MeldType.STRAIGHT_FLUSH, sum + 400 + 3*vmax)
-            }
-            val vals = values.map { if (it == 14 && values[1] == 2) 1 else it }
-            assignments(values.map { it to 1 }) { add(it, MeldType.STRAIGHT, ordinaryMappedScore(vals.sum() + vals.max(), 20, 40, 74)) }
-            if (considerSuits) Suit.entries.filter { it != Suit.JOKER }.forEach { suit ->
-                assignments(values.map { it to 1 }, suit) { add(it, MeldType.STRAIGHT_FLUSH, vals.sum() + 400 + 3*vals.max()) }
-            }
-        }
-        // Full houses: natural level cards count 15; a wild heart substituting a
-        // non-level rank still counts the represented rank.
-        allRanks.forEach { (tr, tids) -> allRanks.filterKeys { it != tr }.forEach { (pair, pids) ->
-            val score = fullHouseScore(tr.value, pair.value)
-            combinations(tids, 3).forEach { t -> combinations(pids, 2).forEach { p ->
-                add(t+p, MeldType.FULL_HOUSE, score)
-            } }
-        } }
-        for (tr in 2..14) for (pair in 2..14) if (tr != pair) assignments(listOf(tr to 3, pair to 2)) {
-            add(it, MeldType.FULL_HOUSE, fullHouseScore(tr, pair))
-        }
-        // Exactly three consecutive pairs and exactly two consecutive triples.
-        val seqRanks = listOf(14,2,3,4,5,6,7,8,9,10,11,12,13,14)
-        for (len in 3..3) for (start in 0..seqRanks.size-len) {
-            val vals = seqRanks.subList(start, start+len); if (vals.distinct().size != vals.size) continue
-            val pairPools = vals.map { v -> combinations(cards.indices.filter { cards[it].rank.value == v }, 2) }
-            cartesianLists(pairPools).forEach { groups ->
-                val ids = groups.flatten(); val numeric = vals.mapIndexed { i,v -> if (i==0 && v==14) 1 else v }
-                add(ids, MeldType.TRACTOR, ordinaryMappedScore(2*numeric.sum() + 2*numeric.max(), 18, 50, 106))
-            }
-            val numeric = vals.mapIndexed { i,v -> if (i==0 && v==14) 1 else v }
-            assignments(vals.map { it to 2 }) { add(it, MeldType.TRACTOR, ordinaryMappedScore(2*numeric.sum() + 2*numeric.max(), 18, 50, 106)) }
-        }
-        for (start in 0 until seqRanks.size-1) {
-            val vals = seqRanks.subList(start,start+2); if (vals.distinct().size < 2) continue
-            val pools = vals.map { v -> combinations(cards.indices.filter { cards[it].rank.value == v }, 3) }
-            cartesianLists(pools).forEach { g ->
-                val numeric = vals.mapIndexed { i,v -> if (i==0 && v==14) 1 else v }
-                add(g.flatten(), MeldType.PLATE, ordinaryMappedScore(3*numeric.sum() + 3*numeric.max(), 15, 60, 123))
-            }
-            val numeric = vals.mapIndexed { i,v -> if (i==0 && v==14) 1 else v }
-            assignments(vals.map { it to 3 }) { add(it, MeldType.PLATE, ordinaryMappedScore(3*numeric.sum() + 3*numeric.max(), 15, 60, 123)) }
-        }
-        return out.values.toList()
-    }
-
-    private fun base(rank: Rank) = if (rank == level) 15 else rank.value
 
     /** 对子候选分：级牌（含用于级牌自身的逢人配）按 15 计，其余按所代表点数。 */
-    internal fun pairScore(value: Int): Int =
-        ordinaryMappedScore(3 * baseValue(value), 6, 20, 51)
+    internal fun pairScore(value: Int): Int = MeldEvaluator.pairScore(value, level)
 
     /** 三张候选分：级牌（含用于级牌自身的逢人配）按 15 计，其余按所代表点数。 */
-    internal fun tripleScore(value: Int): Int =
-        ordinaryMappedScore(5 * baseValue(value), 10, 30, 75)
+    internal fun tripleScore(value: Int): Int = MeldEvaluator.tripleScore(value, level)
 
-    /** 三带二候选分：级牌（含用于级牌自身的逢人配）为 15，其余为所代表点数。 */
-    internal fun fullHouseScore(triple: Int, pair: Int): Int =
-        ordinaryMappedScore(5 * baseValue(triple) + 2 * baseValue(pair), 16, 50, 103)
+    /** 三带二候选分：级牌（用于级牌自身或替代非级牌）按规则计分，其余按所代表点数。 */
+    internal fun fullHouseScore(triple: Int, pair: Int): Int = MeldEvaluator.fullHouseScore(triple, pair, level)
 
-    private fun baseValue(value: Int) = if (value == level.value) 15 else value
-    private fun <T> combinations(items: List<T>, n: Int): List<List<T>> {
-        if (n == 0) return listOf(emptyList()); if (items.size < n) return emptyList()
-        val out = mutableListOf<List<T>>()
-        fun go(at: Int, chosen: MutableList<T>) { if (chosen.size == n) { out += chosen.toList(); return }; for (i in at..items.size-(n-chosen.size)) { chosen += items[i]; go(i+1, chosen); chosen.removeAt(chosen.lastIndex) } }
-        go(0, mutableListOf()); return out
-    }
-    private fun cartesian(pools: List<List<Int>>): List<List<Int>> = cartesianLists(pools.map { it.map(::listOf) }).map { it.flatten() }
-    private fun <T> cartesianLists(pools: List<List<List<T>>>): List<List<List<T>>> {
-        if (pools.any { it.isEmpty() }) return emptyList(); var acc = listOf(emptyList<List<T>>())
-        pools.forEach { pool -> acc = acc.flatMap { a -> pool.map { a + listOf(it) } } }; return acc
-    }
 }
