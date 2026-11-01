@@ -368,3 +368,26 @@
 **约束**：① 191/192 与 600/601 两处 1 分红线不变，单测必须覆盖；② 王对不得由红心配补齐；③ `R_control` 只在 `T_plan≥2` 时计算，`T_plan=1` 返回 `null` 并在 UI 标注单次出牌方案；④ 19~26 与 10~12 张不得输出正式评级、不得外推相邻区间；⑤ 9/10 炸最小值断言须写明所设级牌（级牌为 2 时 821/922）。
 
 **状态**：Active（代码、测试、README、CRITICAL 已同步）
+
+---
+
+## ADR-0031 · 2026-11-02 · 删除 licenses.json 与 dataset-license 门禁
+
+**决策**：按用户要求删除 `model_training/datasets/licenses.json` 与 `model_training/approvals/dataset-license.json`，并移除 `dataset-license` 在 T1.1/T1.4/T1.5/X1 与 `gate.py` 中的阻断逻辑。任何外部数据都可以加入本项目，许可字段只做登记。
+
+**理由**：用户明确要求取消数据准入的许可门禁，保留登记是为了让来源可追溯，而不是作为准入条件。
+
+**约束**：① `license_audit.py`（X1）仍记录来源与许可，缺字段只告警，不再 `BLOCKED`；② Ultralytics AGPL 权重仍不随 APK 分发（分发约束保留）；③ `golden-definition` 等其他签核不受影响。
+
+**状态**：Active（脚本、run_all、文档已同步；未 commit）
+---
+
+## ADR-0032 · 2026-11-02 · 真机照片评估以 App 的 18-pass 配方为准
+
+**决策**：离线评估真机照片统一使用 `model_training/draft_labels.py --pass-plan app`：原图 + 8 个整图旋转（-60/-40/-20/20/40/60/90/180）+ 3×3 个 55% 切片（小图 2.4×、大图 1.8×），分类 0°/180° TTA；阈值扫描用 `--conf-sweep`/`--gate-sweep`，检测只跑一次最低阈值。
+
+**理由**：旧离线配方（0°/90°、单切片）与 App 实际 18 个 pass 不一致，系统性低估召回。同分类器、同门控（det 0.6 / cls 0.5）下 T2.2v2@960 从 11/242 升到 35/242，最优工作点 84/242。
+
+**约束**：① golden 只用于评估，不得用于调参；阈值写回 manifest 必须在独立 calibration 集上标定；② App 仍使用 T2.2（640 训练、960 导出），换用 T2.2v2 属于发布变更，T4.7 真机验证仍 NOT_RUN。
+
+**状态**：Active（工具、四组 sweep 与基线已落盘；App 资产未改）

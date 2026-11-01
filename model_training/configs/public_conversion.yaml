@@ -1,0 +1,63 @@
+# T1.2 公开标注转换配置
+corner_fraction: 0.35
+split_by_scene: true
+drop_invisible: true
+# 公开数据集类别名 → 项目 rank/suit（JackFurby/playing-cards 的 classes.txt 命名风格：<点数><花色首字母>）
+label_map:
+  "2C": {rank: "2", suit: CLUB}
+  "2D": {rank: "2", suit: DIAMOND}
+  "2H": {rank: "2", suit: HEART}
+  "2S": {rank: "2", suit: SPADE}
+  "3C": {rank: "3", suit: CLUB}
+  "3D": {rank: "3", suit: DIAMOND}
+  "3H": {rank: "3", suit: HEART}
+  "3S": {rank: "3", suit: SPADE}
+  "4C": {rank: "4", suit: CLUB}
+  "4D": {rank: "4", suit: DIAMOND}
+  "4H": {rank: "4", suit: HEART}
+  "4S": {rank: "4", suit: SPADE}
+  "5C": {rank: "5", suit: CLUB}
+  "5D": {rank: "5", suit: DIAMOND}
+  "5H": {rank: "5", suit: HEART}
+  "5S": {rank: "5", suit: SPADE}
+  "6C": {rank: "6", suit: CLUB}
+  "6D": {rank: "6", suit: DIAMOND}
+  "6H": {rank: "6", suit: HEART}
+  "6S": {rank: "6", suit: SPADE}
+  "7C": {rank: "7", suit: CLUB}
+  "7D": {rank: "7", suit: DIAMOND}
+  "7H": {rank: "7", suit: HEART}
+  "7S": {rank: "7", suit: SPADE}
+  "8C": {rank: "8", suit: CLUB}
+  "8D": {rank: "8", suit: DIAMOND}
+  "8H": {rank: "8", suit: HEART}
+  "8S": {rank: "8", suit: SPADE}
+  "9C": {rank: "9", suit: CLUB}
+  "9D": {rank: "9", suit: DIAMOND}
+  "9H": {rank: "9", suit: HEART}
+  "9S": {rank: "9", suit: SPADE}
+  "10C": {rank: "10", suit: CLUB}
+  "10D": {rank: "10", suit: DIAMOND}
+  "10H": {rank: "10", suit: HEART}
+  "10S": {rank: "10", suit: SPADE}
+  "JC": {rank: J, suit: CLUB}
+  "JD": {rank: J, suit: DIAMOND}
+  "JH": {rank: J, suit: HEART}
+  "JS": {rank: J, suit: SPADE}
+  "QC": {rank: Q, suit: CLUB}
+  "QD": {rank: Q, suit: DIAMOND}
+  "QH": {rank: Q, suit: HEART}
+  "QS": {rank: Q, suit: SPADE}
+  "KC": {rank: K, suit: CLUB}
+  "KD": {rank: K, suit: DIAMOND}
+  "KH": {rank: K, suit: HEART}
+  "KS": {rank: K, suit: SPADE}
+  "AC": {rank: A, suit: CLUB}
+  "AD": {rank: A, suit: DIAMOND}
+  "AH": {rank: A, suit: HEART}
+  "AS": {rank: A, suit: SPADE}
+  "joker": {rank: BJ, suit: JOKER}
+notes:
+  - 未在 label_map 中的类别一律记为非法样本，不猜测。
+  - 大小王只能映射到 SJ/BJ + JOKER。
+  - 该公开集没有 Joker 类别；Joker 覆盖仍由合成数据（T1.3）提供。

@@ -1,0 +1,1111 @@
+{
+  "_说明": "机器已填好图片 hash / scene_id / 牌面；请只填 reviewer、reviewed_at、decision，再另存为 golden-definition.json",
+  "version": 2,
+  "decision": "accepted",
+  "reviewer": "Spark",
+  "reviewed_at": "2026-11-01T12:00:00Z",
+  "images": [
+    {
+      "path": "testcases/case4.jpg",
+      "sha256": "2666b7b7149caf1c0814d468bd5c859d0f87553a241a7c5420ee170e2b839109",
+      "scene_id": "golden-case4",
+      "cards": 26,
+      "cards_detail": [
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "A",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "5",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "Q",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "4",
+          "suit": "HEART"
+        },
+        {
+          "rank": "4",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "9",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        },
+        {
+          "rank": "J",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "J",
+          "suit": "HEART"
+        },
+        {
+          "rank": "K",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "K",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "8",
+          "suit": "HEART"
+        },
+        {
+          "rank": "8",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "已经人工确认"
+      ],
+      "confirmed": "true"
+    },
+    {
+      "path": "testcases/case14.jpg",
+      "sha256": "615ff1c568246d397066e80e1af5a16de1b6a91b2806d6ae13b3529dbfe7a25b",
+      "scene_id": "golden-case14",
+      "cards": 27,
+      "cards_detail": [
+        {
+          "rank": "A",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "A",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "A",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "A",
+          "suit": "HEART"
+        },
+        {
+          "rank": "K",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "K",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "K",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "K",
+          "suit": "HEART"
+        },
+        {
+          "rank": "K",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "Q",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "Q",
+          "suit": "HEART"
+        },
+        {
+          "rank": "J",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "9",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "8",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "7",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 27 张（含 2♥、Q♠ 与两张 Joker）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T09:31:07Z"
+    },
+    {
+      "path": "testcases/case19.jpg",
+      "sha256": "bd23ab94c9aa22691604fb48fb2edd419284453c5816ed138539031be33f438b",
+      "scene_id": "golden-case19",
+      "cards": 27,
+      "cards_detail": [
+        {
+          "rank": "K",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "8",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "A",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "5",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "3",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "3",
+          "suit": "HEART"
+        },
+        {
+          "rank": "Q",
+          "suit": "HEART"
+        },
+        {
+          "rank": "Q",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "Q",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "Q",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "7",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "8",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "J",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "9",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "10",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 27 张（含 4 张 JOKER、四个 Q、四个 2、两张 10♦）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T09:40:24Z"
+    },
+    {
+      "path": "testcases/case18.jpg",
+      "sha256": "c617f68c0e43691bc0f70973fc550d0c28ad8095d10197588bd575dd9cebbfc4",
+      "scene_id": "golden-case18",
+      "cards": 27,
+      "cards_detail": [
+        {
+          "rank": "10",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "J",
+          "suit": "HEART"
+        },
+        {
+          "rank": "J",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "J",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "J",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "6",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "6",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "5",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "5",
+          "suit": "HEART"
+        },
+        {
+          "rank": "4",
+          "suit": "HEART"
+        },
+        {
+          "rank": "4",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "9",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "8",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "7",
+          "suit": "DIAMOND"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 27 张（10♥×2、四个 J、四个 2、四张王）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T09:46:57Z"
+    },
+    {
+      "path": "testcases/case21.jpg",
+      "sha256": "ba0c8df3b454e2ca23cd1a60a73bc6847ee0cf57b60a078e7dda6f22c3cd840f",
+      "scene_id": "golden-case21",
+      "cards": 28,
+      "cards_detail": [
+        {
+          "rank": "A",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "A",
+          "suit": "HEART"
+        },
+        {
+          "rank": "A",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "A",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "A",
+          "suit": "HEART"
+        },
+        {
+          "rank": "A",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "A",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "A",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "K",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "Q",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "J",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "8",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "J",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "6",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "3",
+          "suit": "SPADE"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 28 张（A 8 张、2 8 张、王 4 张，另 K♦ Q♦ J♦ 10♦ 8♦ J♠ 6♦ 3♠）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T09:54:07Z"
+    },
+    {
+      "path": "testcases/case10.jpg",
+      "sha256": "77c8d4e21ada35e55733306b748a5415a85d913994f613bd91f7676311d4ae3d",
+      "scene_id": "golden-case10",
+      "cards": 27,
+      "cards_detail": [
+        {
+          "rank": "A",
+          "suit": "HEART"
+        },
+        {
+          "rank": "K",
+          "suit": "HEART"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "J",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        },
+        {
+          "rank": "8",
+          "suit": "HEART"
+        },
+        {
+          "rank": "7",
+          "suit": "HEART"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "5",
+          "suit": "HEART"
+        },
+        {
+          "rank": "4",
+          "suit": "HEART"
+        },
+        {
+          "rank": "4",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "4",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "J",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "A",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "K",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "Q",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "J",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "Q",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "J",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "8",
+          "suit": "SPADE"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 27 张（红桃 10 张含 2♥×2；补录 7♥ 与 5♥ 之间的 2♥）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T10:02:23Z"
+    },
+    {
+      "path": "testcases/case12.jpg",
+      "sha256": "b05b9f5a21febacfa05f47e1a019e9b1015693302dad2889f81c675e06a21d67",
+      "scene_id": "golden-case12",
+      "cards": 27,
+      "cards_detail": [
+        {
+          "rank": "4",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "K",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "K",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "Q",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "J",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        },
+        {
+          "rank": "9",
+          "suit": "HEART"
+        },
+        {
+          "rank": "9",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "8",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "8",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "7",
+          "suit": "HEART"
+        },
+        {
+          "rank": "7",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "7",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "7",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "6",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "6",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "6",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "3",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "3",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "3",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 27 张（K♠、7 共四张、2 共三张）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T10:15:43Z"
+    },
+    {
+      "path": "testcases/case13.jpg",
+      "sha256": "a6ff56d5446c8699b94bdb72fd60b6137dda58ca48350de0751436eac4f11f06",
+      "scene_id": "golden-case13",
+      "cards": 27,
+      "cards_detail": [
+        {
+          "rank": "9",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "9",
+          "suit": "HEART"
+        },
+        {
+          "rank": "8",
+          "suit": "HEART"
+        },
+        {
+          "rank": "8",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "8",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "7",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "7",
+          "suit": "HEART"
+        },
+        {
+          "rank": "5",
+          "suit": "HEART"
+        },
+        {
+          "rank": "5",
+          "suit": "HEART"
+        },
+        {
+          "rank": "5",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "3",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "J",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "SJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "A",
+          "suit": "HEART"
+        },
+        {
+          "rank": "A",
+          "suit": "HEART"
+        },
+        {
+          "rank": "A",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "K",
+          "suit": "HEART"
+        },
+        {
+          "rank": "Q",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "Q",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 27 张（上排 9♠ 9♥ 8♥…，中排 J♣ 小王 大王）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T10:40:47Z"
+    },
+    {
+      "path": "testcases/case116.jpg",
+      "sha256": "1759252a8b95749dad5904b9423ab9437293cf8d8000f52b33a10fc35fd9bcad",
+      "scene_id": "golden-case116",
+      "cards": 26,
+      "cards_detail": [
+        {
+          "rank": "K",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "K",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "8",
+          "suit": "HEART"
+        },
+        {
+          "rank": "8",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "2",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "2",
+          "suit": "HEART"
+        },
+        {
+          "rank": "J",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "J",
+          "suit": "HEART"
+        },
+        {
+          "rank": "A",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "5",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "Q",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "4",
+          "suit": "HEART"
+        },
+        {
+          "rank": "4",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "10",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "9",
+          "suit": "HEART"
+        },
+        {
+          "rank": "10",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "10",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "2",
+          "suit": "CLUB"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "4",
+          "suit": "SPADE"
+        },
+        {
+          "rank": "BJ",
+          "suit": "JOKER"
+        },
+        {
+          "rank": "9",
+          "suit": "DIAMOND"
+        },
+        {
+          "rank": "10",
+          "suit": "HEART"
+        }
+      ],
+      "fully_occluded": [],
+      "pending_human_items": [
+        "由 Spark 人工核对整张图，确认 26 张（两张彩色 JOKER 记 BJ）"
+      ],
+      "confirmed": "true",
+      "reviewer": "Spark",
+      "reviewed_at": "2026-11-01T11:00:05Z"
+    }
+  ],
+  "notes": "testcases/ 现存 9 张全部人工签核：case4/10/12/13/14/18/19/21/116；case2/11/17/115 图片已删除并按用户决定剔除；case3 因单张平铺摆放、非真实扇形堆叠，按用户决定删除。"
+}

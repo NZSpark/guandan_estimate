@@ -1,0 +1,22 @@
+# T3.2 分类器训练配置（MobileNetV3Small 双头，96×128）
+input_width: 96
+input_height: 128
+backbone: MobileNetV3Small
+epochs: 60
+batch_size: 24
+learning_rate: 0.0002
+dropout: 0.25
+seed: 20260810
+# prepare_crops.py 同时产出 0°/180° 两个 crop 且标签相同，180° 牌面是倒的（"6"↔"9"
+# 直接矛盾），所以只用 0° 训练；朝向由 predict.py 的 0°/180° 取较优兜底。
+orientations: [0]
+augmentation:
+  rotation_deg: 3.5
+  translation: 0.05
+  zoom: 0.08
+  contrast: 0.18
+  horizontal_flip: false
+labels:
+  ranks: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "SJ", "BJ"]
+  suits: ["CLUB", "DIAMOND", "HEART", "SPADE", "JOKER"]
+class_weights: balanced

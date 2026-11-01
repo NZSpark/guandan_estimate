@@ -1,7 +1,7 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-11-01（本地识图引擎自动化管线落地并跑通 35 项任务入口；V4.2 评分已落地；图文用户手册 `doc/usermanual.md` 已补齐 AI 源登录、配置、校验与退出保护截图，并新增本地识图引擎分析 `doc/local_engine.md`。更早的 AI 阶段记录见 [`archive/state-2026-10-31.md`](archive/state-2026-10-31.md)）。
+> 最后更新：2026-11-02（本地识图引擎自动化管线落地并跑通 35 项任务入口；V4.2 评分已落地；图文用户手册 `doc/usermanual.md` 已补齐 AI 源登录、配置、校验与退出保护截图，并新增本地识图引擎分析 `doc/local_engine.md`。更早的 AI 阶段记录见 [`archive/state-2026-10-31.md`](archive/state-2026-10-31.md)）。
 
 ## 当前分支
 
@@ -68,7 +68,7 @@
 - 结果：**34 PASS / 3 NOT_RUN / 2 BLOCKED / 0 FAIL**（39 份报告，另一份 BLOCKED 为门禁自身 X3）；门禁 33 任务 = 29 PASS / 0 FAIL / 1 BLOCKED / 3 NOT_RUN，无缺失，退出码 **4**（仅因未解决的 BLOCKED）。
 - 第八轮（2026-11-02）：T2.8 全角度+透视数据重训**仍在跑**——`output/runs/20261102/` 有 T0.1/T0.2/synth-v2 报告，`T2.8/card_corner_obb_train` 已到 epoch 7/8（`best.pt` 27.2 MB，2026-11-01 23:28），但 `report.json` 未落盘，`run-all.log` 只记录到 T0.4 就中断，接续链进程已不在（`ps 11575` 空）。**不要重复启动**：先等/确认训练进程状态，再补 T2.8 报告、复测 case3/case4、按需重导 LiteRT。
 - 关键坑：ultralytics `export(format='litert')` 与本进程内 `litert_torch.convert` 在本机必 SIGSEGV(139)（子进程隔离后 8 秒导出）；litert 不支持 FP16，需显式降级 FP32 并记录；TF 2.19 `from_saved_model().convert()` 原生崩溃（改 `from_keras_model`）；Robolectric 默认 LEGACY 图形模式导致 Canvas 空绘制。
-- 许可政策变更（经授权）：`datasets/licenses.json` 升 schema 2，`unknown` 从 blocked 移入 train_allowed，仍不在 release_allowed（发布需另签 release-qa）。
+- 许可门禁已于 2026-11-02 按用户要求整体移除：删除 `datasets/licenses.json` 与 `dataset-license` 签核，任何外部数据可直接加入（X1 只登记不阻断）。
 - 结果：**11 PASS / 9 FAIL / 15 NOT_RUN / 0 BLOCKED**（M1 全线通过）。真值按签核同步：case3 Joker → 小王，case4 → 26 张；`golden.py` 新增 `signed_match_*` 交叉校验。
 - 数据：2000 个合成场景 / 26947 张牌 / 54 类全覆盖；`model_training/datasets/dataset_manifest.json` 指向本次运行目录。
 
@@ -88,8 +88,8 @@ model_training/run_all.sh 20261101
 ## 阻塞
 
 - `MeldAdjustActivity` 锁定竖屏，旋转验收以 `font_scale` 配置变更替代（同一 `onSaveInstanceState` 路径）。
-- 本地引擎自动化剩余项：T0.5 验证集 10 张**全部签核**（case3 27、case4 26、case10/12/13/14/18/19 各 27、case21 28、case116 26，合计 **269 张牌**），`golden.py --cases all` 已转 **PASS**（exit 0）；case2/case11/case17/case115 的图片已删除，按用户决定从 golden 集剔除；T5.1 仅 calibration 干跑（2 个候选），缺真机 inbox 与重训前后对照；T4.7/X2/T5.3 以及 T4.2–T4.6 的 `connectedAndroidTest` 缺 API 29 真机。真机照片识别（召回约 50%）按用户要求暂停，等重训提升后再做。
-- 签核待复核：`reviewed_at` 已改为真实审核时间；`dataset-license.json` 对 6 个 `license=unknown` 来源给 allow，已同步到 `licenses.json` 策略（train_allowed 含 unknown，release_allowed 不含）。
+- 本地引擎自动化剩余项：T0.5 验证集 9 张**全部签核**（case4 26、case10/12/13/14/18/19 各 27、case21 28、case116 26，合计 **242 张牌**；case3 因单张平铺摆放、非真实扇形堆叠，按用户决定删除），`golden.py --cases all` 已转 **PASS**（exit 0）；case2/case11/case17/case115 的图片已删除，按用户决定从 golden 集剔除；T5.1 仅 calibration 干跑（2 个候选），缺真机 inbox 与重训前后对照；T4.7/X2/T5.3 以及 T4.2–T4.6 的 `connectedAndroidTest` 缺 API 29 真机。真机照片识别（召回约 50%）按用户要求暂停，等重训提升后再做。
+- 签核待复核：`reviewed_at` 已改为真实审核时间；许可门禁已按用户要求删除，历史签核记录不再参与判定。
 - `app/src/main/assets/models/` 为 960 版检测器（`20261101.2`，10,869,952 B）+ 1.92 MB 分类器，合计 12.8 MB；默认引擎仍是 `HEURISTIC`（模型未过 §5.10 门槛），只有显式传 `RecognitionEngine.LEARNED` 才走模型；`min_confidence=0.5` / `min_margin=0.02` 是暂定值，装机前需重标。**960 推理耗时尚未在真机验证**，T4.7 必须补。
 - V4.2 改动目前只有 JVM 证据，未装机复测；装机前先 `clean assembleDebug`（gradle 增量可能漏编）。
 
@@ -121,15 +121,32 @@ model_training/run_all.sh 20261101
 ## 2026-11-02 全量重跑（run `20261102`）
 
 - 入口 `model_training/run_all.sh 20261102`（T0.5 改 `--cases all`；补齐 T1.2 的 `--format hf-json`；T2.4/T2.5/T3.3/T3.5/T5.1 新增 `predict.py` 前置）。
-- 门禁：**29 PASS / 2 FAIL / 3 NOT_RUN**，X3 退出码 1。逐项见 `output/runs/20261102/X3/gate-summary.md`。
+- 门禁：**30 PASS / 1 FAIL / 3 NOT_RUN**，X3 退出码 1。逐项见 `output/runs/20261102/X3/gate-summary.md`。
 - T0.5 已 PASS：`--cases all` = 10 张 / 269 张牌 / unsigned 0。
-- **T2.4 FAIL**：960 输入、conf 0.6（T2.5 从 calibration 选定）：recall **0.9897**（门槛 0.99）、误检 0.0223/图、IoU 0.9281；640 输入 recall 只有 0.9881。
+- **T2.4 PASS**：960 输入、conf 0.6：recall **0.991057**（门槛 0.99）、误检 **0.017857**/图、IoU **0.950055**。此前 0.9897 的漏检是 640 训练 / 960 推理的尺度不一致导致的定位误差，改为 960 续训后修复。
 - **T3.5 FAIL（已从 0.0201 优化到 0.9926，未过 0.995）**：塌陷根因是两点叠加——(1) `prepare_crops.py` 每张牌同时出 0°/180° 两个 crop 却共用同一标签，180° 牌面是倒的（"6"↔"9" 直接矛盾）；(2) `--no-imagenet` 从零训练。改为只用 0° crop + imagenet 微调 + cosine 衰减后，test exact 0.9926、Joker 1.0、ECE 0.0468；剩下 7 个错例全部是裁剪本身不可读（运动模糊 / 邻牌遮挡角标 / 极端透视只剩白边），不是模型能力问题。
 - T4.7 / X2 / T5.3 = NOT_RUN：仍缺 API 29 真机。
 - 已修：`train.py` 增加 `--orientations`（默认取 config `orientations: [0]`）；学习率改 cosine 衰减；config `epochs: 60`（实际早停在第 14 epoch）；`run_all.sh` 去掉 `--no-imagenet --epochs 12`。
+
+## 2026-11-02 testcases 对比（App 资产 vs 新训练模型）
+
+- 方法：`draft_labels.py`，10 张已签核 case（269 张牌；case3 事后按用户决定剔除，产物仅作历史记录），检测 conf 0.6、旋转 TTA 0°/90°，分类 0°/180° TTA（T=2.0）；产物在 `output/runs/20261102/compare/`。
+- App 资产同源已核：`assets/models/card_corner.tflite` = `20261101/T2.3/export/`（源权重 `20261101/T2.2`），`classifier.tflite` = `20261101/T3.4/export/`，两者 sha256 与 `model_manifest.json` 一致。
+- 结果（imgsz 640，检测 conf 0.6）：App 资产命中 **9/269**（精确率 0.750）；新模型（T2.2v2 + T3.2）命中 **19/269**（精确率 0.929）。
+- imgsz 960（App 现行输入尺寸）：App 资产 3/269、新模型 6/269——真机照片上 640 反而优于 960。
+- 召回优先（检测 conf 0.05）：旧 60/269（22.3%）、新 90/269（33.5%）；分类器精确率旧 0.35 / 新 0.52。
+- 结论：新模型在两个阈值下都更好，但都不足以在真机照片上使用；瓶颈是纯合成训练与真机照片的域差距（光照/透视/牌背/密集叠牌），不是分类器。T5.3 仍 NOT_RUN（缺真机），不得据此宣称设备端效果。
+- 顺带修复 `draft_labels.py`：Keras 动态 batch 维为 `None`，`int(None)` 崩溃，改为按 1 处理。
 - 已修：`calibrate.py` 分类器分支读顶层 `confidence`（恒 0），实际在 `predicted.confidence`，T3.3 阈值表此前全是 `kept=0`；修后温度 0.5、NLL 0.0099、阈值表正常。
 - T2.4 漏检性质已定位：漏掉的牌角置信度 0.87–0.94，是被 IoU 0.4–0.5 的定位误差卡掉，**不是阈值问题**，调低 conf 无效，只能延长检测器训练。
-- T2.4 优化进行中（后台）：`configs/detector.yaml` 训练尺寸 640 → **960**（与 T2.4 推理尺寸一致）、epochs 8 → 20、patience 6；从旧 8-epoch 权重热启动微调，输出 `output/runs/20261102/T2.2v2/`。第 1 个 epoch 验证 P 0.999 / R 0.989 / mAP50-95 0.964。
+- T2.4 优化已完成（T2.2v2）：`configs/detector.yaml` 训练尺寸 640 → **960**（与 T2.4 推理尺寸一致）、epochs 8 → 20、patience 6；从旧 8-epoch 权重热启动微调，20 epoch 跑满 3.278 h，validation recall **0.9905**、mAP50-95 **0.9907**（旧 640/8：0.9876 / 0.9674），输出 `output/runs/20261102/T2.2v2/`。
 - 已修：`train_detector.py` 的 `mosaic`/`hsv_h`/`hsv_v` 此前只写在 config 里、从未传给 ultralytics（实际用默认 mosaic=1.0），配置与真实训练不一致；现已显式传入。
 - 已修：`train_detector.py` 现在把生效的 epochs/imgsz/batch/patience 与 `init_weights` 写进 `report.parameters`，CLI 覆盖 config 时审计可追溯。
-- 训练结束会自动串跑 T2.5v2（重新标定）与 T2.4v2（复评），日志 `output/runs/20261102/post-t2.2v2.log`。
+- T2.4/T2.5 已用 T2.2v2 权重重跑进正式目录（`revalidate.log`），`.sh` 里新增 `T2.2v2` 步骤并把 T2.4/T2.5 的 `--weights` 指向它。
+
+## 2026-11-02 P1/P2：App 配方离线基线
+
+- `draft_labels.py` 新增 `--pass-plan app`（原图 + 8 旋转 + 3×3 55% 切片）、`--evaluate`（卡片级多重集指标）和 `--conf-sweep`/`--gate-sweep`（检测阈值 + 分类门控扫描，检测只跑一次最低阈值）；默认 `simple` 配方保持原行为。
+- 9 张真机照片（242 张牌）结果：T2.2v2@960 最优 **84/242（召回 0.347、精度 0.357、F1 0.352）**，现行 App 阈值（det 0.6 / cls 0.5）下 35/242；T2.2 资产@960 最优 40/242（F1 0.200）、@640 64/242（F1 0.283）——部署资产是 640 训练却按 960 导出，尺寸不一致。
+- 旧离线配方对照（同分类器、同门控 det 0.6 / cls 0.5）：T2.2v2@960 只有 11/242，App 18-pass 配方 35/242；P1 证明此前低估了真机配方。
+- 未改 `model_manifest.json`：golden 只用于评估、不得调参；换用 T2.2v2 或按 640 重导出属于发布变更，T4.7 真机仍 NOT_RUN。证据：`output/runs/20261102/p1p2/`（含 `summary.md`、四组 `sweep.json`）。

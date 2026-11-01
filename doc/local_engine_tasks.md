@@ -69,13 +69,13 @@
 
 ### M1 数据自动化
 
-#### T1.1 公开数据登记与许可白名单
+#### T1.1 公开数据登记
 
 - **目标**：建立公开数据/权重的来源、许可、hash 和用途记录。
 - **依赖**：无。
-- **涉及**：新增 `model_training/datasets/README.md`、`licenses.json`。
+- **涉及**：新增 `model_training/datasets/README.md`、`sources.json`。
 - **步骤**：登记 Kaggle `andy8744`、Hugging Face `JackFurby/playing-cards`、TeogopK、Complete、PD-Mera；标注 CC0/MIT/Unknown；记录下载 URL、版本、hash；确认 Ultralytics AGPL 影响。
-- **验收/证据**：每个来源都有许可字段；`Unknown` 明确禁止进入 train；发布清单中没有许可不明权重。
+- **验收/证据**：每个来源记录 URL、版本与许可字段；许可只登记不阻断（2026-11-02 起删除 `licenses.json` 与 `dataset-license` 门禁）。
 
 #### T1.2 公开标注转换
 
@@ -291,8 +291,8 @@
 
 - **目标**：数据、代码、预训练权重、最终模型四层许可清晰。
 - **依赖**：贯穿 M1–M5。
-- **涉及**：`licenses.json`、NOTICE、发布清单。
-- **验收/证据**：CC0/MIT/自有可发布；Unknown 不进入发布产物；Ultralytics AGPL 已确认；无许可不明权重。
+- **涉及**：NOTICE、发布清单（`licenses.json` 已删除）。
+- **验收/证据**：来源与许可字段登记完整；Ultralytics AGPL 不随 APK 分发；不因许可阻断训练或发布。
 
 #### X2 隐私与离线约束
 
@@ -463,11 +463,11 @@ T0.5 的审核记录必须包含图片 SHA-256、scene_id、可见牌角清单�
 
 | 任务 | 自动化执行入口 | 必须归档的证据和判定 |
 | --- | --- | --- |
-| T1.1 | `python model_training/fetch_public_data.py --sources model_training/datasets/sources.json --license-policy model_training/datasets/licenses.json --output-dir RUN_DIR`；`python model_training/validate_dataset.py --check-licenses --manifest RUN_DIR/dataset_manifest.json --output-dir RUN_DIR/audit` | 来源、URL、版本、下载文件 hash、许可和用途限制报告。Unknown 许可不得进入训练；法律许可结论必须人工签核。下载不完整或 hash 不匹配为 `FAIL`。 |
+| T1.1 | `python model_training/fetch_public_data.py --sources model_training/datasets/sources.json --output-dir RUN_DIR` | 来源、URL、版本、下载文件 hash、许可和用途限制报告。许可只登记不阻断。下载不完整或 hash 不匹配为 `FAIL`。 |
 | T1.2 | `python model_training/convert_public_annotations.py --config model_training/configs/public_conversion.yaml --input RUN_DIR/raw --output-dir RUN_DIR/converted` | 标签转换统计、映射表、非法样本列表、四点/OBB 标签和抽样可视化。自动检查点序、越界、重复、54 个有效组合和 Joker 映射；需要人工视觉确认但未签核时为 `BLOCKED`。 |
 | T1.3 | `python model_training/generate_synthetic.py --cards app/src/main/assets --backgrounds model_training/datasets/backgrounds --count 20000 --seed SEED --output-dir RUN_DIR/synthetic` | 合成图片、seed、scene_id、渲染参数、实例标签、四点/牌角标签及 hash。验证复现性、两副牌重复实例、1–27 张场景、负样本和大小王覆盖。背景许可不明为 `BLOCKED`。 |
-| T1.4 | `python model_training/validate_dataset.py --manifest model_training/datasets/dataset_manifest.json --check-files --check-hashes --check-labels --check-classes --check-scene-splits --check-leakage --output-dir RUN_DIR` | split 统计、54 类覆盖、scene_id 交集、重复图片 hash、派生关系、许可统计、两副牌实例统计和错误样本列表。按 scene_id 分组后划分 train/val/calibration/test；数据泄漏为 `FAIL`，许可问题为 `BLOCKED`。 |
-| T1.5 | `python model_training/validate_dataset.py --manifest model_training/datasets/dataset_manifest.json --audit --check-golden-exclusion --output-dir RUN_DIR`；`python model_training/gate.py --task T1.5 --require-approval dataset-license --require-approval golden-definition --report RUN_DIR/report.json` | 类别分布、遮挡比例、背景、重复图、标签越界、case3/case4 排除情况、manifest hash 和冻结数据版本。许可及 Golden 签核缺失或版本不一致为 `BLOCKED`。 |
+| T1.4 | `python model_training/validate_dataset.py --manifest model_training/datasets/dataset_manifest.json --check-files --check-hashes --check-labels --check-classes --check-scene-splits --check-leakage --output-dir RUN_DIR` | split 统计、54 类覆盖、scene_id 交集、重复图片 hash、派生关系、两副牌实例统计和错误样本列表。按 scene_id 分组后划分 train/val/calibration/test；数据泄漏为 `FAIL`；许可问题不再阻断。 |
+| T1.5 | `python model_training/validate_dataset.py --manifest model_training/datasets/dataset_manifest.json --audit --check-golden-exclusion --output-dir RUN_DIR`；`python model_training/gate.py --task T1.5 --require-approval golden-definition --report RUN_DIR/report.json` | 类别分布、遮挡比例、背景、重复图、标签越界、case4 等 golden 图排除情况、manifest hash 和冻结数据版本。Golden 签核缺失或版本不一致为 `BLOCKED`；许可只登记不阻断。 |
 
 #### M2 牌角检测器
 
@@ -516,7 +516,7 @@ T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API
 
 | 任务 | 自动化执行入口 | 必须归档的证据和判定 |
 | --- | --- | --- |
-| X1 许可与来源审查 | `python model_training/license_audit.py --sources model_training/datasets/sources.json --licenses model_training/datasets/licenses.json --artifacts RUN_DIR/package --output-dir RUN_DIR/license-audit` | 数据、代码、预训练权重、最终模型逐层记录来源、版本、许可、NOTICE、分发限制和 hash。未知或不兼容许可阻断训练/发布；人工法律审查未签核为 `BLOCKED`。 |
+| X1 许可与来源审查 | `python model_training/license_audit.py --sources model_training/datasets/sources.json --artifacts RUN_DIR/package --output-dir RUN_DIR/license-audit` | 数据、代码、预训练权重、最终模型逐层记录来源、版本、许可、NOTICE、分发限制和 hash。许可只登记，不阻断训练/发布。 |
 | X2 隐私与离线约束 | `python model_training/offline_audit.py --apk app/build/outputs/apk/debug/app-debug.apk --source app/src/main --assets app/src/main/assets/models --output-dir RUN_DIR`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.OfflineRecognitionTest` | 静态扫描网络调用/模型下载；禁网条件下执行本地识别；检查图片未上传、日志未包含图片内容、模型只从 assets 加载。没有禁网设备测试时为 `NOT_RUN`。 |
 | X3 状态与决策记录 | `python model_training/gate.py --milestone all --reports output/runs --state harness/state.md --decisions harness/DECISIONS.md --output-dir RUN_DIR` | 汇总任务状态、依赖链、报告/hash、未完成项和阻断原因；生成 state 更新建议。不得覆盖既有决策，不得把 `NOT_RUN`/`BLOCKED` 自动转成完成。架构决策须经人工批准后才追加 DECISIONS。 |
 

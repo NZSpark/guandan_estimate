@@ -1,5 +1,8 @@
 # 独立牌角模型训练工具
 
+> 自动化入口与门禁约定见本文末「6. 自动化流水线」一节（对应 `doc/local_engine_tasks.md` §7）。
+> 一键执行全部任务：`model_training/run_all.sh [SEED]`，结果在 `output/runs/<SEED>/`。
+
 该目录与 Android 构建环境解耦，用真实手牌照片训练离线“点数 + 花色”双输出分类模型，并导出 Android 可使用的 LiteRT/TensorFlow Lite 文件。训练不会调用联网识图 API；首次使用 ImageNet 初始化权重时，TensorFlow 可能下载公开预训练权重，可用 `--no-imagenet` 禁止。
 
 ## 1. 准备环境
@@ -83,3 +86,33 @@ python train.py --epochs 35
 - 在目标 API 29 手机上验证耗时、内存和稳定性。
 
 当前 Android App 继续使用 ML Kit OCR、标准牌角模板及规则约束。训练并验收出第一个 `.tflite` 后，再启用 App 内的 LiteRT 推理路径，避免把未经验证的模型用于正式识别。
+
+## 6. 自动化流水线
+
+所有脚本共用 `model_training/_cli.py`：`--help`、`--version`、`--repo-root`、`--output-dir`、`--run-id`、`--config`、`--json`、`--strict`、`--seed`，
+每次运行写入独立目录（默认 `output/runs/<run_id>/<task_id>/`），并输出 `report.json`。
+
+退出码：`0` PASS、`1` FAIL、`2` 参数/输入错误、`3` 环境不可用（NOT_RUN）、`4` 缺人工签核（BLOCKED）。
+
+| 任务 | 入口 | 说明 |
+| --- | --- | --- |
+| T0.1–T0.4 | `run_gradle_task.py --task T0.1 --tests '*ImagePreprocessorTest'` | 包装 gradle 单测并解析 JUnit XML |
+| T0.5 | `golden.py prepare --cases case3,case4` | 绑定 golden 图片 hash，缺签核为 BLOCKED |
+| T1.1 | `fetch_public_data.py` | 来源/许可登记，默认不联网 |
+| T1.2 | `convert_public_annotations.py --input …` | 公开四点 → 项目 OBB/牌角 |
+| T1.3 | `generate_backgrounds.py`、`generate_synthetic.py --count N --seed S` | 程序化背景 + 两副牌合成场景 |
+| T1.4/T1.5 | `validate_dataset.py` | 文件/hash/标签/类别/划分/泄漏/许可/golden 排除 |
+| T2.1/T2.2/T2.3 | `train_detector.py --mode baseline\|train\|export` | 单类 `card_corner` OBB |
+| T2.4/T3.5/T5.3 | `evaluate.py --stage detector\|classifier\|e2e` | 逐样本指标 + 失败清单 |
+| T2.5/T3.3 | `calibrate.py` | 只用 calibration split |
+| T3.1 | `prepare_crops.py` | 96×128 透视拉正，0°/180° |
+| T3.2/T3.4 | `train.py --mode train\|export` | MobileNetV3Small 双头；`--smoke` 只是链路冒烟 |
+| T4.7 | `device_benchmark.py --api 29` | 无真机为 NOT_RUN |
+| T5.1 | `active_learning.py`、`import_corrections.py` | 可疑样本队列与人工修正导入 |
+| T5.2 | `package_model.py`、`rollback_test.py` | 版本包与回滚演练 |
+| T5.4 | `validate_docs.py --check-commands --check-task-coverage --check-links` | 文档/命令一致性 |
+| X1/X2/X3 | `license_audit.py`、`offline_audit.py`、`gate.py` | 许可、离线约束、总门禁 |
+
+人工签核统一放 `model_training/approvals/<type>.json`（字段见 `doc/local_engine_tasks.md` §7.6）：
+`golden-definition`、`photo-visibility`、`correction-approval`、`release-qa`（`dataset-license` 已于 2026-11-02 移除）。
+缺失时相关任务为 `BLOCKED`，脚本不会代签。

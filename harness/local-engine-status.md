@@ -15,7 +15,7 @@
 | T0.2 | PASS | `RecognitionWorkerTest` + `ImageMemoryTest`（12 tests）：纯函数 pass 计划、并发上限、逐张回收、27 张提前停；`CardRecognizer` 已改懒加载 |
 | T0.3 | PASS | `RecognitionCoordinatorTest` |
 | T0.4 | PASS | `VisualCardCodecTest`（10 tests，Robolectric NATIVE）：往返 100 次、缩放 0.5/0.75/1.5/2×、JPEG 95/85/70、保留条码裁切、50 张噪声零误命中、校验位损坏拒绝 |
-| T0.5 | **BLOCKED** | 验证集已扩到 `testcases/` 全部 **14 张**（hash 全部冻结）；但只有 case3（27 张）/case4（26 张）有人工真值并签核，其余 **12 张缺真值**，状态按规范记 BLOCKED |
+| T0.5 | **PASS** | `testcases/` 现存 **9 张全部人工签核**（242 张牌，hash 冻结）；`golden.py --cases all` exit 0。case3 因单张平铺摆放、非真实扇形堆叠，按用户决定删除 |
 | T1.1–T1.5 | PASS | 9 来源 + 300 张公开图；293 张四点转换；2000 合成场景；54 类；审计与双签核 |
 | T2.1 | PASS | YOLO11n-OBB baseline（1136/264 场景、18977 牌角标签） |
 | T2.2 | PASS | 8 epoch 正式训练：val **P=0.9999 / R=0.9868 / mAP50=0.985 / mAP50-95=0.968** |
@@ -44,11 +44,10 @@
 
 ## 验证集（testcases 全量）
 
-`model_training/datasets/golden_truth.json` v3 登记了 `testcases/` 下全部 14 张图（`.DS_Store` 不算），`golden.py prepare --cases all` 会把它们全部写入 `golden_manifest.json`，并冻结每张图的 SHA-256。
+`model_training/datasets/golden_truth.json` 现登记 `testcases/` 现存 9 张图（case3 已按用户决定删除，`.DS_Store` 不算），`golden.py prepare --cases all` 会把它们全部写入 `golden_manifest.json`，并冻结每张图的 SHA-256。
 
 | 图片 | 真值 | 状态 |
 | --- | --- | --- |
-| case3.png | 27 张（含小王） | 已签核 |
 | case4.jpg | 26 张（含 ♥4/♦9/♣10×2/大王×2） | 已签核 |
 | case10、case12、case13、case14、case18、case19 | 各 27 张 | 已签核 |
 | case21.jpg | 28 张 | 已签核 |
@@ -178,9 +177,11 @@ M1→M4 已经全部跑通并有可复现产物：数据（18000 crop / 1136 检
 
 | 结果 | 任务 |
 | --- | --- |
-| PASS（29） | T0.1–T0.5、T1.1–T1.5、T2.1、T2.2、T2.3、T2.5、T2.8、T3.1–T3.4、T4.1–T4.6、T5.1、T5.2、T5.4、X1 |
-| FAIL（2） | **T2.4** recall 0.9897（<0.99，960/conf 0.6，误检 0.0223/图）；漏检为 IoU 0.4–0.5 的定位误差，置信度 0.87–0.94，非阈值问题；**T3.5** exact 0.9926（<0.995，7 个错例均为不可读裁剪） |
+| PASS（30） | T0.1–T0.5、T1.1–T1.5、T2.1–T2.5、T2.8、T3.1–T3.4、T4.1–T4.6、T5.1、T5.2、T5.4、X1 |
+| FAIL（1） | **T3.5** exact 0.9926（<0.995，7 个错例均为不可读裁剪） |
 | NOT_RUN（3） | T4.7 / X2 / T5.3（缺 API 29 真机） |
+
+检测器已修（T2.4 0.9897 → **0.9911** PASS）：640 训练 / 960 推理的尺度不一致导致牌角定位偏，改为 960 续训（T2.2v2，20 epoch）后 recall 达标、误检降到 0.0179/图、IoU 0.950。
 
 分类器塌陷已修复（0.0201 → 0.9926）：0°/180° 同标签的标签噪声 + `--no-imagenet` 从零训练是根因，改 0° only + imagenet + cosine 后恢复正常；`calibrate.py` 分类器分支的 `confidence` 取值错误也已修（此前 T3.3 阈值表恒 `kept=0`）。
 
