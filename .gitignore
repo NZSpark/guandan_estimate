@@ -22,3 +22,8 @@ long_loop.sh
 .long_loop_logs/
 env.local.sh
 .freebuff/
+model_training/.venv/
+
+.venv*/
+/output/
+model_training/datasets/
