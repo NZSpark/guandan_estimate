@@ -117,3 +117,19 @@ model_training/run_all.sh 20261101
 - **优化器选优不等于牌型表值**：`222+AA` 的 182 是牌型候选分，整手最优可能改拆（三张级牌单张 α=1.15）；断言牌型分值要用 `fullHouseScore` / `interpretations`，不要断言最优分区。
 - **gradle 增量可能漏编**：`assembleDebug` 全 up-to-date 但 APK 时间戳未变时，用 `clean assembleDebug` 强制重编再装机。
 - 子页面未导出（`exported=false`）时，`adb shell am start` 无法注入测试分区；验证要走主界面真实入口。
+
+## 2026-11-02 全量重跑（run `20261102`）
+
+- 入口 `model_training/run_all.sh 20261102`（T0.5 改 `--cases all`；补齐 T1.2 的 `--format hf-json`；T2.4/T2.5/T3.3/T3.5/T5.1 新增 `predict.py` 前置）。
+- 门禁：**29 PASS / 2 FAIL / 3 NOT_RUN**，X3 退出码 1。逐项见 `output/runs/20261102/X3/gate-summary.md`。
+- T0.5 已 PASS：`--cases all` = 10 张 / 269 张牌 / unsigned 0。
+- **T2.4 FAIL**：960 输入、conf 0.6（T2.5 从 calibration 选定）：recall **0.9897**（门槛 0.99）、误检 0.0223/图、IoU 0.9281；640 输入 recall 只有 0.9881。
+- **T3.5 FAIL（已从 0.0201 优化到 0.9926，未过 0.995）**：塌陷根因是两点叠加——(1) `prepare_crops.py` 每张牌同时出 0°/180° 两个 crop 却共用同一标签，180° 牌面是倒的（"6"↔"9" 直接矛盾）；(2) `--no-imagenet` 从零训练。改为只用 0° crop + imagenet 微调 + cosine 衰减后，test exact 0.9926、Joker 1.0、ECE 0.0468；剩下 7 个错例全部是裁剪本身不可读（运动模糊 / 邻牌遮挡角标 / 极端透视只剩白边），不是模型能力问题。
+- T4.7 / X2 / T5.3 = NOT_RUN：仍缺 API 29 真机。
+- 已修：`train.py` 增加 `--orientations`（默认取 config `orientations: [0]`）；学习率改 cosine 衰减；config `epochs: 60`（实际早停在第 14 epoch）；`run_all.sh` 去掉 `--no-imagenet --epochs 12`。
+- 已修：`calibrate.py` 分类器分支读顶层 `confidence`（恒 0），实际在 `predicted.confidence`，T3.3 阈值表此前全是 `kept=0`；修后温度 0.5、NLL 0.0099、阈值表正常。
+- T2.4 漏检性质已定位：漏掉的牌角置信度 0.87–0.94，是被 IoU 0.4–0.5 的定位误差卡掉，**不是阈值问题**，调低 conf 无效，只能延长检测器训练。
+- T2.4 优化进行中（后台）：`configs/detector.yaml` 训练尺寸 640 → **960**（与 T2.4 推理尺寸一致）、epochs 8 → 20、patience 6；从旧 8-epoch 权重热启动微调，输出 `output/runs/20261102/T2.2v2/`。第 1 个 epoch 验证 P 0.999 / R 0.989 / mAP50-95 0.964。
+- 已修：`train_detector.py` 的 `mosaic`/`hsv_h`/`hsv_v` 此前只写在 config 里、从未传给 ultralytics（实际用默认 mosaic=1.0），配置与真实训练不一致；现已显式传入。
+- 已修：`train_detector.py` 现在把生效的 epochs/imgsz/batch/patience 与 `init_weights` 写进 `report.parameters`，CLI 覆盖 config 时审计可追溯。
+- 训练结束会自动串跑 T2.5v2（重新标定）与 T2.4v2（复评），日志 `output/runs/20261102/post-t2.2v2.log`。
