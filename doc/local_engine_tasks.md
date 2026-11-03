@@ -1,8 +1,18 @@
 # 本地识图引擎任务分解
 
 > 依据：`doc/local_engine.md` §5–§7。
-> 状态：规划，所有任务待开始。
-> 原则：先做管线安全垫，再建数据和模型；模型未过 §5.10 门槛不得设为默认；始终保留人工核对和启发式回退。
+> 状态：执行中，**未达发布门槛**；2026-11-02 自动化门禁 30 PASS / 1 FAIL（X3 自身）/ 3 NOT_RUN（T4.7/X2/T5.3）。T3.5 的 1.0 仅是合成 crop 回归，真实 test 尚未建立。
+> 发布结论（2026-11-03 用户决策，ADR-0044）：learned 已改为默认识别引擎；T5.3 仍是未完成的质量证据，但不再是默认启用门禁。模型加载/推理失败必须回退 heuristic。
+> 自动化边界：真实 test 的拍摄/逐牌角签核/发布 QA 不是 agent 能完成的工作；缺失时只能 `BLOCKED`，不能用合成集冒充真实证据。
+> 原则：先做管线安全垫，再建数据和模型；默认 learned 必须保留人工核对和启发式回退；真实 test/签核仍是发布质量项。
+
+## 0. 测试执行位置（2026-11-02 用户约束）
+
+1. 所有准确率、真实 test、回归、端到端评估、性能基准都在电脑上运行；输入是导出的 TFLite/YOLO/Python 管线，不依赖手机。
+2. 手机只安装最终优化后的 APK/模型；不运行 instrumentation、`connectedAndroidTest`、手机性能/内存/禁网测试。
+3. T4.2/T4.3/T4.4/T4.6 只保留 JVM 测试；T4.7 改为桌面导出模型兼容性；X2 只保留电脑静态离线审计；T5.3 只做电脑端 learned 真实 test，不做手机 heuristic A/B。
+4. 手机 p95/内存/OOM/ANR、运行期禁网、手机 heuristic A/B 不再作为自动化门禁，属于未验证风险，不得写成 PASS。
+5. 若这些手机指标仍是发布硬门槛，则与“所有 test 在电脑”冲突，必须先改发布定义；当前发布结论仍为未达。
 
 ## 1. 里程碑与依赖
 
@@ -10,10 +20,10 @@
 | --- | --- | --- | --- |
 | M0 管线安全与基线 | §5.3、§6、§7.2 | 降内存、去主线程、可取消、可回归 | case3 27/27；case4 可见牌 ≥95%；无旧结果覆盖；有性能基线 |
 | M1 数据自动化 | §5.5 | 公开数据 + 合成数据 + manifest | 54 类覆盖；两副牌重复场景；无 unknown 许可进入 train |
-| M2 牌角检测器 | §5.6.1 | 单类 OBB 检测 `card_corner` | recall ≥99%；误检 ≤0.1/图；角点 IoU ≥0.8 |
-| M3 点数/花色分类器 | §5.6.2 | 15×5 双头分类，有效组合 54 | 真实留出集 exact ≥99.5%；大小王 ≥99%；ECE ≤0.05 |
-| M4 Android 灰度 | §5.7、§5.8 | LiteRT 接入、shadow、fallback | 模型 ≤15MB；p95 ≤3s；峰值 <150MB；可回退 |
-| M5 主动学习与发布 | §5.9、§5.10 | 真实校正闭环、版本化、灰度 | 端到端每张 ≥99.5%；27 张全对 ≥85%（发布 ≥90%）；复核率 ≤5% |
+| M2 牌角检测器 | §5.6.1 | 单类 OBB 检测 `card_corner` | 合成 test 与独立真实 test 均 recall ≥99%；误检 ≤0.1/图；角点 IoU ≥0.8 |
+| M3 点数/花色分类器 | §5.6.2 | 15×5 双头分类，有效组合 54 | 真实留出集 exact ≥99.5%；大小王 ≥99%；ECE ≤0.05；合成 crop 只做回归，不能替代真实 test |
+| M4 Android 灰度 | §5.7、§5.8 | LiteRT 接入、fallback | 模型 ≤15MB；桌面 TFLite 兼容/哈希通过；可回退；手机 p95/内存不测（风险未验证） |
+| M5 主动学习与发布 | §5.9、§5.10 | 真实校正闭环、版本化、灰度 | 真实 test 端到端每张 ≥99.5%；27 张全对 ≥85%（发布 ≥90%）；复核率 ≤5%；`release-qa` 签核 |
 
 依赖关系：
 
@@ -141,15 +151,15 @@
 - **依赖**：T2.3、T1.5。
 - **涉及**：新增 `evaluate.py`、检测报告。
 - **步骤**：按场景/光照/遮挡分层；统计可见牌角 recall、误检/图、IoU、漏检原因；单独统计大小王和重叠牌。
-- **验收/证据**：门槛达标；失败样本进入主动学习队列；报告含样本数量和置信区间。
+- **验收/证据**：合成 test 与独立 `real-test` 均达标；发布判定只认 `real-test`。命中率/误检/IoU 按角度、透视、遮挡、光照分层；失败样本进入主动学习队列；报告含样本数量和置信区间。合成 test 不能替代真实 test。
 
 #### T2.5 阈值、NMS 与输入尺寸标定
 
 - **目标**：只在 baseline 稳定后调整检测后处理。
 - **依赖**：T2.4。
 - **涉及**：manifest、`CardCornerDetector` 规划接口。
-- **步骤**：网格搜索 score threshold、NMS IoU、640/960；每次只改一个变量；记录对 recall/FP/耗时的影响。
-- **验收/证据**：选定参数写入 manifest；不出现“提高阈值导致大量缺牌”；性能仍满足 M4 门槛。
+- **步骤**：网格搜索 score threshold、NMS IoU、640/960；每次只改一个变量；只在独立 `calibration` 上调参，`real-test` 只评一次；记录对 recall/FP/耗时的影响。
+- **验收/证据**：选定参数写入 manifest；不出现“提高阈值导致大量缺牌”；性能仍满足 M4 门槛；参数必须绑定最终部署模型 hash。
 
 ### M3 点数/花色分类器
 
@@ -176,6 +186,7 @@
 - **涉及**：新增 `calibrate.py`、manifest 阈值。
 - **步骤**：验证集 temperature scaling；计算 ECE；0°/180° 两次推理取联合概率更高者；定义 top-1 和 margin 阈值。
 - **验收/证据**：ECE ≤0.05；低 margin 样本标记 `UNKNOWN`；阈值写入 manifest，Android 不硬编码。
+- **模型身份约束**：温度/阈值必须与最终部署的 classifier hash 绑定；20261102 候选的 T=0.5 不能套到 20261101 资产的 T=2.0；真实 calibration 未建立前，ECE 只能算合成域证据。
 
 #### T3.4 分类器导出
 
@@ -192,6 +203,7 @@
 - **涉及**：`evaluate.py`、分类报告。
 - **步骤**：按牌面样式/光照/角度/遮挡分层；输出 exact、Joker、ECE、未知率、混淆矩阵；单独检查 6/9、10/J。
 - **验收/证据**：exact ≥99.5%；Joker ≥99%；ECE ≤0.05；失败样本进入主动学习队列。
+- **2026-11-02 证据边界**：T3.5c 的 exact 1.0 / 2,674 crop 全部来自合成 test，只证明遮挡标签修复后的合成域回归；**不能**当作真实留出集证据，T5.3 不得因此通过。真实逐牌角 test + `photo-visibility` 签核完成前，本任务只能算“合成回归通过”，发布判定保持未满足。
 
 ### M4 Android 灰度
 
@@ -243,13 +255,14 @@
 - **步骤**：覆盖模型缺失、校验失败、加载异常、超时、有效牌角过少；保留旧模型资产；模型更新可切回；条码路径始终优先。
 - **验收/证据**：故障注入测试全部回退；回滚不需要发新 APK；无崩溃/ANR。
 
-#### T4.7 真机性能与手工 QA
+#### T4.7 桌面导出模型兼容性（手机测试策略外）
 
-- **目标**：验证 API 29 真机的耗时、内存和交互。
+- **目标**：在电脑上确认最终导出的 detector/classifier TFLite 可加载、输入输出正确、固定样本输出有限且模型尺寸合规；手机只安装最终资产，不跑性能测试。
 - **依赖**：T4.5、T4.6。
-- **涉及**：instrumentation、性能报告。
-- **步骤**：固定图片重复 10 次；记录 p50/p95；用 `Debug.MemoryInfo`/`dumpsys meminfo` 记录峰值；连续 20 次导入；覆盖换图/随机/联网。
-- **验收/证据**：p95 ≤3s；峰值 <150MB；模型资产 ≤15MB；无 OOM/ANR；连续 20 次无旧结果覆盖。
+- **涉及**：`verify_models.py`、桌面 TFLite 推理、桌面报告。
+- **步骤**：加载 assets；校验 shape/labels/hash/尺寸；对固定样本跑 detector+classifier；记录桌面兼容性和失败项；不得调用 adb/instrumentation。
+- **验收/证据**：模型可加载、hash/形状一致、输出有限、资产 ≤15MB；桌面报告。手机 p95/内存/OOM/ANR **不在测试范围**，不得声称通过。
+- **2026-11-02 状态**：原真机 runner 卡死，已停止；按新策略不再执行手机测试，T4.7 需按桌面兼容性重跑。
 
 ### M5 主动学习与发布
 
@@ -260,6 +273,7 @@
 - **涉及**：新增 `active_learning.py`、`annotate.py`、manifest。
 - **步骤**：按低置信度、低 margin、贴边、张数不符、两副牌冲突排序；导出 crop；人工校正；合并回 manifest；下一轮训练。
 - **验收/证据**：失败样本可追溯；成功样本不重复标注；case3/case4 不进入训练；每轮有 before/after 指标。
+- **当前边界**：只有 calibration 2 个低 margin 候选的干跑，没有人工修正、重训和 before/after；桌面失败样本 inbox 需真实 test 后建立。
 
 #### T5.2 模型版本化与回滚
 
@@ -269,13 +283,15 @@
 - **步骤**：记录数据版本、训练命令、随机种子、模型 hash、评估报告；保留上一版资产；设置版本切换开关。
 - **验收/证据**：任意版本可定位来源；回滚流程演练通过；manifest 与资产一致。
 
-#### T5.3 Shadow/A-B 与默认切换
+#### T5.3 电脑端真实 test（不做手机 shadow）
 
-- **目标**：用真实差异决定是否把 learned 设为默认。
-- **依赖**：T5.2。
-- **涉及**：设置/构建开关、评估报告。
-- **步骤**：shadow 对比 heuristic/learned；统计每张 exact、27 张全对、复核率、自信错误；达标后灰度；保留启发式至少一个发布周期。
-- **验收/证据**：端到端每张 ≥99.5%；27 张全对 ≥85% 起步、≥90% 发布；复核率 ≤5%；自信错误 ≤1%。
+- **目标**：在电脑上评估 learned 在独立 `real-test` 上的端到端指标；heuristic 默认不变，不做手机 A/B。
+- **依赖**：T5.2、外部 `real-test`。
+- **涉及**：桌面 e2e 预测、`evaluate.py --stage e2e`、报告。
+- **步骤**：用桌面 TFLite/YOLO 生成逐图预测；在 `real-test` 上统计每张 exact、27 张全对、复核率、自信错误；`heuristic` 仍为默认。
+- **验收/证据**：端到端每张 ≥99.5%；27 张全对 ≥85% 起步、≥90% 发布；复核率 ≤5%；自信错误 ≤1%。**手机 heuristic shadow/A-B 不在测试范围；没有电脑可运行的 heuristic baseline，不能声称 A/B。**
+- **发布证据量（建议）**：`real-test` ≥600 张真实牌，且 ≥30 个完整 27 张场景；逐牌角 `photo-visibility` 签核；报告给置信区间。样本不足不得判 `PASS`。
+- **2026-11-02 状态**：未建立 `real-test`，未跑桌面 e2e，无 `release-qa`；当前为 `NOT_RUN`。
 
 #### T5.4 文档、CI 与发布材料
 
@@ -299,7 +315,8 @@
 - **目标**：图片不上传，模型不联网下载。
 - **依赖**：贯穿 M4–M5。
 - **涉及**：网络层、assets、隐私说明。
-- **验收/证据**：识别路径无网络请求；模型只从 assets 加载；日志不记录图片内容。
+- **验收/证据**：电脑端 `offline_audit.py` 静态扫描通过；识别路径无网络请求；模型只从 assets 加载；日志不记录图片内容。
+- **当前策略**：所有测试电脑；静态审计是唯一门禁，手机运行期禁网不测；运行期离线为未验证风险。
 
 #### X3 状态与决策记录
 
@@ -312,25 +329,27 @@
 
 | 指标 | 门槛 | 适用里程碑 |
 | --- | --- | --- |
-| 可见牌角检测 recall | ≥99% | M2 |
+| 可见牌角检测 recall（合成 + 真实） | ≥99% | M2 |
 | 检测误检 | ≤0.1/图 | M2 |
 | 角点多边形 IoU | ≥0.8 | M2 |
-| 分类 exact card | ≥99.5% | M3 |
+| 分类 exact card（真实 test） | ≥99.5% | M3 |
 | 大小王分类 | ≥99% | M3 |
 | ECE | ≤0.05 | M3 |
-| 端到端每张 exact | ≥99.5% | M5 |
+| 真实 test 证据量 | ≥600 张真实牌 + ≥30 个完整 27 张场景；逐牌角签核 | M5 |
+| 端到端每张 exact（真实 test） | ≥99.5% | M5 |
 | 27 张全对 | ≥85% 起步；≥90% 发布 | M5 |
 | 人工复核率 | ≤5% | M5 |
 | 自信错误率 | ≤1% | M5 |
-| 识别 p95 | ≤3s（API 29 真机） | M4 |
-| 峰值内存 | <150MB | M4 |
+| 手机 p95 / 峰值内存 | 不在测试范围（只电脑测试） | — |
 | 模型资产 | ≤15MB | M4 |
 | 稳定性 | 无 OOM/ANR；连续 20 次无旧结果覆盖 | M0/M4 |
 | case3 | 27/27 | M0/M5 |
 | case4 可见牌 | exact ≥95% | M0/M5 |
 | 许可 | 发布产物中 unknown = 0 | X1 |
 
-以上门槛是建议值，必须用 API 29 真机和独立真实照片标定；未达标时模型保持 shadow，默认仍走启发式路径。
+以上门槛是建议值，必须在电脑上用独立真实照片标定；手机只安装最终资产，不跑测试。未达标时模型保持 shadow，默认仍走启发式路径。
+
+`real-test` 的 ≥600 张牌 / ≥30 个完整 27 张场景是发布证据量下限建议（0 错误时 95% 上限约 3/600=0.5%），不是训练标注量；样本不足时必须报告置信区间并判 `NOT_RUN`，不得用 9 张 golden、合成 test 或 `generate_synthetic.py` 自动生成的集合代替。`case3.png` 已按用户决定删除；旧 `case3 27/27` 不再是可执行门槛，改用完整 27 张场景的真实 test。
 
 ## 4. 完成定义
 
@@ -438,7 +457,7 @@
 
 - `PASS`：要求的测试真实执行，样本数足够，所有适用指标通过，输入输出 hash 完整，必需签核有效。
 - `FAIL`：测试已执行但出现失败、回归或指标未达标；不得通过降低样本数或删除失败样本制造通过。
-- `NOT_RUN`：测试没有实际执行，例如没有 API 29 真机、runner 不可用或设备断连；必须说明原因。
+- `NOT_RUN`：测试没有实际执行，例如没有可用的预测文件、桌面运行环境不完整或外部输入缺失；必须说明原因。
 - `BLOCKED`：存在尚未解决的前置条件，例如许可未知、Golden 标签未签核或人工修正未审批。
 
 缺少必需字段、NaN/Infinity、空数据集、样本数不足、manifest 与模型不匹配、hash 不一致或报告缺字段，一律不得判为 `PASS`。父级报告必须保留全部子任务状态，不得只汇总成功项。
@@ -452,7 +471,7 @@
 | 任务 | 自动化执行入口 | 必须归档的证据和判定 |
 | --- | --- | --- |
 | T0.1 | `./gradlew :app:testDebugUnitTest --tests '*ImagePreprocessorTest'` | 尺寸纯函数、EXIF、旋转、颜色测试；750×492、1440×1920、2736×3648 输入输出尺寸。长边不超过 1600px，小图不放大。 |
-| T0.2 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionWorkerTest' --tests '*ImageMemoryTest'` | 后台线程断言、Bitmap 生命周期、按需 pass 数、阶段耗时和内存报告。真实设备 OOM/内存门槛另由 T4.7 验证，JVM 测试不能替代真机证据。 |
+| T0.2 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionWorkerTest' --tests '*ImageMemoryTest'` | 后台线程断言、Bitmap 生命周期、按需 pass 数、阶段耗时和内存报告。只做 JVM 测试；手机 OOM/内存不测，T4.7 只做桌面兼容性。 |
 | T0.3 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionCoordinatorTest'` | 注入可控延迟，测试连续导入、随机、联网、取消、超时和 Activity 销毁；断言只有最新 jobToken 可以更新 UI。 |
 | T0.4 | `./gradlew :app:testDebugUnitTest --tests '*VisualCardCodecTest'` | 生成 27 张图并往返 100 次；归档缩放、JPEG、裁切变体的命中率与误命中率。仅对明确支持的变体提出通过要求。 |
 | T0.5 | `python model_training/golden.py prepare --cases case3,case4 --output-dir RUN_DIR`；`python model_training/evaluate.py --engine heuristic --split golden --manifest model_training/datasets/golden_manifest.json --output-dir RUN_DIR/evaluation` | expected JSON、逐样本预测、exact、张数、性能和失败差异报告。Golden 真值和可见牌角必须有人工签核；缺签核为 `BLOCKED`。case3/case4 不得进入训练或调参。 |
@@ -489,19 +508,21 @@ T0.5 的审核记录必须包含图片 SHA-256、scene_id、可见牌角清单�
 | T3.4 | `python model_training/train.py --mode export --weights RUN_DIR/best.keras --formats float16 --output-dir RUN_DIR/export`；`python model_training/verify_models.py --model RUN_DIR/export/classifier.tflite --manifest RUN_DIR/export/model_manifest.json --check-shape --check-labels --check-hash --output-dir RUN_DIR/verify` | float32/float16（实际启用时另含 INT8）固定样本差异、输入输出形状、量化校准数据 hash、模型大小及模型 hash。无真实校正集时不得将 INT8 标记为发布候选。 |
 | T3.5 | `python model_training/evaluate.py --stage classifier --model RUN_DIR/export/classifier.tflite --manifest model_training/datasets/dataset_manifest.json --split test --output-dir RUN_DIR/evaluation` | 逐样本 exact、rank/suit accuracy、Joker accuracy、ECE、未知率、混淆矩阵及 6/9、10/J、红黑花色专项统计。发布准确率必须来自独立真实 test。 |
 
+T2.4/T3.5 表中的 `--split test` 结果仅作合成回归；发布前必须用 `model_training/datasets/real_test_manifest.json --split real-test` 重新执行检测/分类评估，并保存独立报告。
+
 #### M4 Android 灰度
 
 | 任务 | 自动化执行入口 | 必须归档的证据和判定 |
 | --- | --- | --- |
 | T4.1 | `python model_training/verify_models.py --assets app/src/main/assets/models --manifest app/src/main/assets/models/model_manifest.json --check-shape --check-labels --check-hash --output-dir RUN_DIR`；`./gradlew :app:testDebugUnitTest --tests '*ModelManifestTest'` | LiteRT 依赖锁定、APK asset 清单、manifest schema、SHA-256、缺失/损坏资产回退测试。安装脚本先 staging、hash 校验，再原子替换，并保留上一版资产。 |
-| T4.2 | `./gradlew :app:testDebugUnitTest --tests '*CardGeometryTest' --tests '*CardCornerDetectorTest'`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.recognition.CardCornerDetectorTest` | letterbox、OBB 解码、NMS、四点排序、逆坐标映射、Python/Android 固定样本差异和 ByteBuffer 复用。JVM 测试不能替代设备推理证据。 |
-| T4.3 | `./gradlew :app:testDebugUnitTest --tests '*CardCornerClassifierTest' --tests '*CardGeometryTest'`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.recognition.CardCornerClassifierTest` | 0°/180° 一致性、透视拉正、置信度/margin 阈值、UNKNOWN 输出、buffer 复用和 Python/Android 数值差异。无实际设备执行证据时，设备集成项不得标记 `PASS`。 |
-| T4.4 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionCoordinatorTest'`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.recognition.RecognitionShadowTest` | heuristic/learned/shadow 模式、默认开关、token 竞态、模型超时和异常回退；shadow 不得写正式 UI。记录运行模式及模型 hash。 |
+| T4.2 | `./gradlew :app:testDebugUnitTest --tests '*CardGeometryTest' --tests '*CardCornerDetectorTest'` | letterbox、OBB 解码、NMS、四点排序、逆坐标映射和 ByteBuffer 复用。只做 JVM 测试；手机推理不测。 |
+| T4.3 | `./gradlew :app:testDebugUnitTest --tests '*CardCornerClassifierTest' --tests '*CardGeometryTest'` | 0°/180° 一致性、透视拉正、置信度/margin 阈值、UNKNOWN 输出和 buffer 复用。只做 JVM 测试；手机推理不测。 |
+| T4.4 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionCoordinatorTest'` | heuristic/learned/shadow 模式、默认开关、token 竞态、模型超时和异常回退；shadow 不得写正式 UI。只做 JVM 测试。 |
 | T4.5 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionResultTest' --tests '*RecognitionStateTest'` | cards/issues/stats schema、INFO/WARNING/ERROR 映射、未知牌和冲突展示、实际阶段计数及 27 张/部分结果状态测试。 |
-| T4.6 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionFallbackTest'`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.recognition.ModelFailureInjectionTest` | 模型缺失、hash 错误、manifest 非法、加载异常、超时、检测数不足、回滚和旧资产恢复测试。任一模型故障导致崩溃或阻断 heuristic 为 `FAIL`。 |
-| T4.7 | `python model_training/device_benchmark.py --serial DEVICE_SERIAL --api 29 --cases case3,case4 --repeat 10 --stress-sequence 20 --output-dir RUN_DIR`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.recognition.RealDeviceBenchmarkTest` | 设备型号、API level、build fingerprint、测试时间、APK/model/图片 hash、p50/p95、Java/native 峰值内存、模型大小、OOM/ANR 和连续 20 次竞态结果。必须确认 API=29 且是真机；无符合设备时为 `NOT_RUN`，模拟器不得代替。 |
+| T4.6 | `./gradlew :app:testDebugUnitTest --tests '*RecognitionFallbackTest'` | 模型缺失、hash 错误、manifest 非法、加载异常、超时、检测数不足、回滚和旧资产恢复测试。任一模型故障导致崩溃或阻断 heuristic 为 `FAIL`。只做 JVM 测试。 |
+| T4.7 | `python model_training/verify_models.py --task T4.7 --assets app/src/main/assets/models --check-shape --check-labels --check-hash --output-dir RUN_DIR` | 桌面加载最终 TFLite、shape/labels/hash、固定样本输出有限、模型尺寸；手机 p95/内存/OOM/ANR 不在测试范围，不得声称通过。 |
 
-T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API level 和存储空间。采集失败不能使用旧报告或其他设备数据补齐。设备报告必须绑定测试时的 APK hash、模型 hash 和输入图片 hash。
+T4.7 只检查桌面加载/形状/hash/输出有限性和模型尺寸；不调用 adb、不跑 instrumentation、不采手机性能数据。桌面报告绑定模型 hash 与 assets 清单。
 
 #### M5 主动学习与发布
 
@@ -509,7 +530,7 @@ T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API
 | --- | --- | --- |
 | T5.1 | `python model_training/active_learning.py --model RUN_DIR/model.tflite --manifest model_training/datasets/dataset_manifest.json --input model_training/inbox --sort-by confidence,margin,border,count,duplicate --output-dir RUN_DIR/queue`；审核后 `python model_training/import_corrections.py --annotations RUN_DIR/approved/annotations.json --manifest model_training/datasets/dataset_manifest.json --output-dir RUN_DIR/import` | 低置信候选、crop、源图片 hash、模型版本、修正前后标签和导入记录。人工修正必须带审核人、时间和样本 hash；未审批修正不得进入训练。case3/case4 永远不得导入 train。 |
 | T5.2 | `python model_training/package_model.py --model RUN_DIR/model.tflite --manifest RUN_DIR/model_manifest.json --previous app/src/main/assets/models --output-dir RUN_DIR/package`；`python model_training/verify_models.py --assets RUN_DIR/package --check-hash --check-manifest --output-dir RUN_DIR/verify`；`python model_training/rollback_test.py --current RUN_DIR/package --previous app/src/main/assets/models/previous --output-dir RUN_DIR/rollback` | 版本清单、数据/模型 hash、训练命令、seed、依赖版本、评估报告引用、上一版本备份和回滚演练。manifest 与资产不一致为 `FAIL`。 |
-| T5.3 | `python model_training/evaluate.py --stage e2e --mode shadow --model RUN_DIR/model.tflite --baseline heuristic --split real-test --manifest model_training/datasets/dataset_manifest.json --output-dir RUN_DIR/shadow`；`python model_training/gate.py --task T5.3 --milestone M5 --report RUN_DIR/shadow/report.json --require-device-api 29 --require-approval release-qa` | 逐张模型/启发式差异、每张 exact、27 张全对率、复核率、自信错误率、失败样本、真实 test 样本数、设备证据和发布 gate。test 不可用于调参；不达门槛时 heuristic 继续作为默认。 |
+| T5.3 | `python model_training/evaluate.py --stage e2e --mode shadow --model RUN_DIR/model.tflite --split real-test --manifest model_training/datasets/real_test_manifest.json --predictions RUN_DIR/predictions.jsonl --output-dir RUN_DIR/shadow`；`python model_training/gate.py --task T5.3 --milestone M5 --report RUN_DIR/shadow/report.json --require-approval release-qa` | 电脑端 learned 逐张 exact、27 张全对率、复核率、自信错误率、失败样本和真实 test 样本数；不做手机 heuristic A/B。test 不可用于调参；T5.3 不再是默认启用门禁（ADR-0044），但未完成时仍须如实标记。 |
 | T5.4 | `python model_training/validate_docs.py --check-commands --check-task-coverage --check-links --output-dir RUN_DIR`；`python model_training/gate.py --task T5.4 --milestone M5 --ci-report RUN_DIR/ci/report.json --output-dir RUN_DIR/gate`；`./gradlew test` | README/NOTICE、CI 配置、文档链接、任务覆盖率、训练/导出/评估复现命令、Gradle 与 Python 检查报告。每个任务 ID 必须出现在任务映射表中，入口必须可由 CLI `--help` 或静态检查验证。 |
 
 #### 横切任务
@@ -517,18 +538,19 @@ T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API
 | 任务 | 自动化执行入口 | 必须归档的证据和判定 |
 | --- | --- | --- |
 | X1 许可与来源审查 | `python model_training/license_audit.py --sources model_training/datasets/sources.json --artifacts RUN_DIR/package --output-dir RUN_DIR/license-audit` | 数据、代码、预训练权重、最终模型逐层记录来源、版本、许可、NOTICE、分发限制和 hash。许可只登记，不阻断训练/发布。 |
-| X2 隐私与离线约束 | `python model_training/offline_audit.py --apk app/build/outputs/apk/debug/app-debug.apk --source app/src/main --assets app/src/main/assets/models --output-dir RUN_DIR`；`./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=nz.org.aotearoa.guandanscore.OfflineRecognitionTest` | 静态扫描网络调用/模型下载；禁网条件下执行本地识别；检查图片未上传、日志未包含图片内容、模型只从 assets 加载。没有禁网设备测试时为 `NOT_RUN`。 |
+| X2 隐私与离线约束 | `python model_training/offline_audit.py --apk app/build/outputs/apk/debug/app-debug.apk --source app/src/main --assets app/src/main/assets/models --output-dir RUN_DIR` | 电脑端静态扫描网络调用/模型下载；检查图片未上传、日志未包含图片内容、模型只从 assets 加载。手机运行期禁网不测，为未验证风险。 |
 | X3 状态与决策记录 | `python model_training/gate.py --milestone all --reports output/runs --state harness/state.md --decisions harness/DECISIONS.md --output-dir RUN_DIR` | 汇总任务状态、依赖链、报告/hash、未完成项和阻断原因；生成 state 更新建议。不得覆盖既有决策，不得把 `NOT_RUN`/`BLOCKED` 自动转成完成。架构决策须经人工批准后才追加 DECISIONS。 |
 
 ### 7.5 数据集划分、真实性与防泄漏
 
-1. 正式 split 固定为 `train`、`val`、`calibration`、`test`；golden 使用独立 manifest 或独立标识。先按 `scene_id` 分组再划分，同一照片、连拍、增强图、裁剪图及同一合成场景的派生图不得跨集合。
+1. 正式训练 split 固定为 `train`、`val`、`calibration`、`test`；`real-test` 是独立真实照片评估清单，不参与训练、校准或阈值选择，不能与 test/golden 混用。golden 使用独立 manifest 或独立标识。先按 `scene_id` 分组再划分，同一照片、连拍、增强图、裁剪图及同一合成场景的派生图不得跨集合。
 2. 每个输入记录 SHA-256；同图异名、重复文件、裁剪派生关系和 scene_id 均纳入泄漏检查。来源关系不明的样本不得默认视为独立样本。
 3. 训练只读 train；早停和模型选择只读 val；温度、阈值、NMS 和后处理标定只读 calibration；最终指标只读 test；golden 只用于固定回归，不得参与训练、校准和反复调参。
 4. test/golden 真值文件必须与训练入口隔离。`evaluate.py` 记录阶段、split、manifest hash；检测到 test/golden 被用于训练或 calibration 时立即 `BLOCKED`。
 5. `license=unknown`、来源缺失、许可不在白名单、图片 hash 缺失或签核失效的样本不得进入正式训练。下载脚本可以登记许可资料，不能自动批准许可证。
 6. 合成数据必须记录 seed、scene_id、牌面素材版本、背景许可、布局和增强参数。同 seed、相同配置及素材版本应能复现图像标签；seed 缺失为 `FAIL`。
 7. 评估报告必须保留逐样本预测和失败项，不能在统计前删除 UNKNOWN、漏检、无牌照片或困难样本。
+8. `real-test` 必须记录 `source=photo`、scene_id、图片/逐牌角 hash、可见性签核和真值；`evaluate.py --split real-test` 只读该清单。没有 `real-test` 时，T2.4/T3.5/T5.3 只能记 `NOT_RUN`，不能拿合成 test 或 golden 代替。
 
 ### 7.6 人工签核接口与阻断条件
 
@@ -540,7 +562,7 @@ T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API
 | Golden 真值确认 | T0.5、T1.5 | 图片 hash、scene_id、可见牌角及真值、遮挡说明、审核人、时间 | `BLOCKED` |
 | 真实照片可见性确认 | T1.2、T3.1、T5.1 | 原图 hash、crop hash、四点坐标、可见性、审核结论、审核人、时间 | `BLOCKED` |
 | 人工修正批准 | T5.1 | 修正前后标签、来源样本 hash、审核人、审核时间 | `BLOCKED` |
-| 真实设备证据 | T4.7、T5.3 | 设备型号、API level、build fingerprint、测试时间、APK/model hash、报告 hash | 未执行为 `NOT_RUN` |
+| 手机运行期证据 | 不适用（桌面测试策略） | 无；手机只安装最终资产 | — |
 | 最终发布 QA | T5.3、T5.4 | 候选版本、test 报告、设备报告、许可报告、回滚结果、批准人、时间 | `BLOCKED` |
 
 签核文件统一放在 `model_training/approvals/`，采用 JSON schema 校验。每条签核绑定数据/模型/样本 hash 与版本；签核撤销、过期或 hash 不一致时门禁失效。自动化只检查签核存在、格式和绑定关系，不伪造签名、不自动勾选批准。
@@ -549,10 +571,10 @@ T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API
 
 | 流水线 | 自动执行 | 不能代替的内容 |
 | --- | --- | --- |
-| Pull Request | Python lint/type check、CLI/schema、标签与几何单测、manifest 校验、数据泄漏检查、模型形状冒烟、Gradle JVM 单测、离线静态扫描 | 真实照片最终准确率、API 29 真机性能、许可批准、golden 真值签核 |
-| Nightly | 固定 seed 合成小数据、训练冒烟、完整 golden 回归、模型导出、Python/Android 固定样本一致性、故障注入 | 无真实设备时不能产生真机证据；合成验证不能代替真实 test |
-| Manual/Release | 完整训练和导出、独立真实 test、shadow/A-B、发布 gate、许可和签核核验 | 人工签核须由指定审核人完成 |
-| API 29 Device Runner | 真机 instrumentation、连续导入/换图/随机竞态、性能/内存、OOM/ANR、离线网络测试 | runner 不可用或设备不符合要求时为 `NOT_RUN`，不得用模拟器冒充 |
+| Pull Request | Python lint/type check、CLI/schema、标签与几何单测、manifest 校验、数据泄漏检查、模型形状冒烟、Gradle JVM 单测、离线静态扫描 | 真实照片最终准确率、手机运行期性能（未验证）、许可批准、golden 真值签核 |
+| Nightly | 固定 seed 合成小数据、训练冒烟、完整 golden 回归、模型导出、Python/Android 固定样本一致性、故障注入 | 手机不跑测试；合成验证不能代替真实 test |
+| Manual/Release | 完整训练和导出、电脑端独立真实 test、发布 gate、许可和签核核验 | 人工签核须由指定审核人完成 |
+| 手机运行期 | 不执行（桌面测试策略） | 手机只安装最终资产；性能/禁网为未验证风险 |
 
 每个 CI job 必须上传 `report.json`、原始日志、测试结果、输入/输出 hash 和 runner 环境。Nightly 失败不能被后续成功 job 覆盖；Release gate 必须引用确定的 run_id 和报告 hash。
 
@@ -564,7 +586,7 @@ T4.7 必须在执行前检查设备连接、授权、包名、应用版本、API
 - 自动化测试/评估真实执行，原始结果、`report.json` 和输入输出 hash 已归档；
 - 适用指标达到原任务验收门槛，样本数足够且 split 正确；
 - 依赖任务为 `PASS`，适用许可、golden、真实照片和发布签核有效；
-- 需要 API 29 证据的任务引用真实设备报告，设备型号、系统版本、APK/model hash 一致；
+- 手机运行期不纳入门禁；桌面任务引用模型/资产 hash 与电脑端真实 test 报告；
 - 代码、配置、文档和 `harness/state.md` 与实现一致。
 
 每项任务状态必须明确标为 `PASS`、`FAIL`、`NOT_RUN` 或 `BLOCKED`。不得只用勾选框表示，也不能把“脚本存在”或“命令启动成功”算作完成。
@@ -578,8 +600,187 @@ python model_training/gate.py \
   --require-all-tasks \
   --require-artifact-hashes \
   --require-valid-approvals \
-  --require-device-api 29 \
+  --require-approval photo-visibility \
+  --require-approval release-qa \
   --output-dir output/runs/release-gate
 ```
 
 该命令必须按依赖关系汇总 T0.1–T5.4 和 X1–X3，检查每项任务是否有可执行入口、执行报告、样本数、指标、版本/hash、设备证据和签核。没有真实 API 29 证据时不得通过 M4/M5 发布门禁；许可或人工批准缺失时为 `BLOCKED`；测试未实际运行时为 `NOT_RUN`；指标失败时为 `FAIL`。全部必需门禁通过后才允许生成发布候选，不能自动改变 learned/heuristic 默认开关。
+
+## 8. 发布差距评估（2026-11-02）
+
+### 8.1 结论
+
+截至 2026-11-02 的评估不具备把 learned 设为默认的条件；2026-11-03 用户已取消该默认门禁（ADR-0044），App 默认 learned 并保留 heuristic 回退。T5.3 仍未完成，不能因此把质量结论写成通过。
+
+缺口不是“再调一个阈值”：
+
+- `model_training/datasets/dataset_manifest.json` 的 2,000 张图全部 `source=synthetic`，`photo=0`；没有 `real-test` split。
+- T2.4 的 recall 0.9911 来自 224 张合成 test；真实照片 9 张 / 242 牌在放宽阈值下最好 **84/242（R 0.347 / P 0.357 / F1 0.352）**，现行 App 阈值 **35/242（R 0.145）**。
+- T3.5c 的 exact 1.0 来自 2,674 个合成 crop；没有真实逐牌角 test，也没有 `photo-visibility` 签核。
+- T4.7 手机 runner 已停止；X2 只有电脑静态审计；T5.3 无电脑端 e2e、无 `release-qa`。
+- X3 的 FAIL 是这些未完成项的真实汇总，不是统计错误。
+
+### 8.2 当前证据 vs 发布门槛
+
+| 门槛 | 要求 | 当前证据 | 判定 |
+| --- | --- | --- | --- |
+| 检测 recall / 误检 / IoU | 真实 test 也达到 99% / 0.1 每图 / 0.8 | T2.4 只在 224 张合成 test 上 0.9911 / 0.0179 / 0.9501；真实检测无独立报告 | **未证明** |
+| 分类 exact / Joker / ECE | 真实 test exact ≥99.5%、Joker ≥99%、ECE ≤0.05 | T3.5c 2,674 个合成 crop：1.0 / 1.0 / 0.0121 | **仅合成域通过** |
+| 端到端每张 exact | ≥99.5% | 真实照片最好 84/242 匹配（F1 0.352）；现行阈值 35/242 | **未达标** |
+| 27 张全对 | 发布 ≥90% | 9 张 golden / 242 牌，无完整 27 张真实 shadow 报告 | **未测** |
+| 人工复核率 | ≤5% | 无真实 shadow 报告 | **未测** |
+| 自信错误率 | ≤1% | 无真实 shadow 报告 | **未测** |
+| 手机 p95 / 峰值内存 | 不在测试范围（只电脑测试） | 无手机测试 | **未验证风险** |
+| 模型资产 | ≤15MB | 现 assets 合计 12.8MB | **PASS（非最终候选）** |
+| 手机运行期 | 不执行 instrumentation/性能/禁网 | 手机只安装最终资产 | **策略外** |
+| 运行期离线 | 手机不测；电脑静态审计 | 静态扫描通过 | **未验证风险** |
+| 发布 QA | `release-qa` 绑定候选/test/device/license/rollback | `model_training/approvals/` 只有 `golden-definition.json` | **BLOCKED** |
+| 发布证据量 | ≥600 张真实牌 + ≥30 个完整 27 张场景（外部提供） | 9 张 golden / 242 牌，且 golden 只做回归 | **不足/外部前置** |
+
+### 8.3 自动化边界
+
+按“所有建议都必须可自动化”的前提，把工作分三类：
+
+| 类型 | 工作 | 结论 |
+| --- | --- | --- |
+| A 纯自动化 | 合成验收集；模型评估/校准；T4.7 桌面兼容；T5.1 队列/导入/重训；T5.3 电脑端真实 test；T5.2 打包/回滚；X2 静态审计；文档校验 | 可由脚本/CI 完成 |
+| B 自动化执行但依赖外部输入 | 真实 test 上的检测/分类评估；真实失败样本重训；真机性能、禁网测试 | 代码可自动执行；缺真实数据/设备/签核时只能 `BLOCKED`/`NOT_RUN` |
+| C 不可自动化 | 拍摄 600 张真实牌/30 个完整场景、逐牌角真值/可见性确认、`photo-visibility`/`release-qa` 签核、USB 设备接入 | 不能写成 agent 任务；只能由人或运维提供 |
+
+**结论**：原来的“建立独立 real-test（600 张真实牌、30 个场景）”不是自动化任务，是 C 类外部前置。可以自动生成同规模的 **synthetic acceptance set**，但它只能做回归和鲁棒性，不能当 real-test 或发布证据。若要求连真实 test 也自动生成，就必须修改 §5.10 的发布定义，不能继续声称“真实域发布”。
+
+### 8.3.1 可下载真实数据替代（2026-11-02 搜索）
+
+| 来源 | 规模/标注 | 可替代 | 缺口/许可 |
+| --- | --- | --- | --- |
+| [Roboflow 100 Poker Cards（HF 镜像）](https://huggingface.co/datasets/Francesco/poker-cards-cxcvz) | 1,285 张 640×640 真实场景，53 类 bbox | 真实桌面检测/分类预检；HF 直接下载 | 无大小王、无牌角关键点、无 27 张手牌；CC BY 4.0 |
+| [TeogopK Real 100](https://github.com/TeogopK/Playing-Cards-Object-Detection) | 100 张实拍，YOLOv8 框，13 类 | 真实域检测预检；GitHub 直接下载 | 类别不全、无大小王/牌角；CC0 |
+| [French Playing Cards](https://huggingface.co/datasets/drFarid/French-Playing-Cards) | 1,875 张真实单牌，52 类 imagefolder | 真实单牌分类训练候选；MIT | 无大小王/多牌/牌角真值；抽样自动检测+模板配准失败（SIFT 0 inliers），不能直接裁角 |
+| [EdgeFirst Playing Cards](https://doc.edgefirst.ai/saas/datasets/playingcards/) | 1,476 张，13 类 bbox | 真实室内检测预检 | 非商业 CC BY-NC-SA 4.0；不能直接用于商业发布 |
+| [The Complete Playing Card Dataset](https://www.kaggle.com/datasets/jaypradipshah/the-complete-playing-card-dataset) | 53 类、每类约 50 张单牌，VOC/COCO/YOLO | 真实单牌分类预检 | 单牌、无多牌/牌角/可见性；许可 unknown，Kaggle 凭据 |
+| [Cards Image Dataset-Classification](https://www.kaggle.com/datasets/gpiosenka/cards-image-datasetclassification) | 7,624/265/265，224×224，53 类分类 | 真实单牌分类预检 | 无多牌/牌角；许可 unknown，Kaggle 凭据 |
+| [Cards Corner Detection](https://universe.roboflow.com/cursedsheep-xed3h/cards-corner-detection) | 129 张牌角检测 | 仅可作牌角线索 | 页面 403，真实性/许可未核实；数量不足，不能发布 |
+
+结论：
+
+- **能自动下载并替代“部分真实采集”**：RF100 Poker Cards + TeogopK 可覆盖真实桌面、多牌、整牌框；Complete/gpiosenka 可覆盖真实单牌分类。它们不需要拍摄，也不需要人工重标。
+- **不能替代的部分**：大小王、两副牌、完整 27 张手牌、逐牌角真值、遮挡可见性、掼蛋牌面样式。公开数据没有同时满足这些条件的数据集。
+- **Corner 数据仍缺**：129 张的 Cards Corner Detection 页面不可读、许可未核实且数量太小；不能据此关闭 T2.4/T3.5 的真实牌角 test。
+- **推荐用途**：RF100 + TeogopK 作为真实域 **预检/回归**；Complete/gpiosenka 作为真实分类预检；T5.3 发布判定仍需外部 54 类、多牌、牌角可见性 test，不能用这些数据冒充。
+
+**2026-11-02 实测（T3.5r，非发布证据）**
+
+- 已下载 RF100 test（128 图 / 544 牌）与 TeogopK real（93 图有标签 / 324 牌；仓库实有 98 图），`real_pretest.py` 生成 **868 牌 / 6,944 个候选 crop**；类别并集 51，Joker 0。
+- 每张整牌框取四个 bbox 角候选；分类器只看自身置信度选择，不读真值；`0°/180°` TTA，已部署 `classifier.tflite`（T=2.0）。
+- 结果：exact **0.104839（91/868）**，RF100 **0.125**、TeogopK **0.071**，ECE **0.097854**；大量样本被推向 `3/HEART`。
+- 解释边界：整牌框不是牌角真值，四角候选可能裁到牌面中央/空白；这个 10.48% 是真实域**下限诊断**，不是 T3.5 回退，也不能据此关闭 T5.3。
+- 证据：`output/runs/20261102/T3.5r/`（构建 PASS）、`T3.5r-predict/`、`T3.5r-eval/`（模型评估 FAIL）。
+- 自动化命令：`real_pretest.py --sources rf100,teogopk` → `predict.py --stage classifier` → `evaluate.py --stage classifier --task T3.5r`。
+- 补充尝试：`drFarid/French-Playing-Cards`（52 类 / 1,875 张真实单牌 / MIT）。抽样 4 张做 bbox/阈值定位 + 项目牌面 SIFT 配准，只有 1–3 个好匹配、RANSAC **0 inliers**；无法稳定生成真实牌角 crop。该集只能作为后续人工/更强配准的素材，不能直接升级为 T3.5 真实 test。
+
+### 8.3.2 testcases 8 张训练 / case13 唯一校验（T3.6，非发布）
+
+- **用户决定**：`testcases/` 的 8 张转为训练数据，只保留 `case13` 作为校验实例；切分固定在 `model_training/datasets/testcases_split.json`。其余 8 张在 `golden_truth.json` 中标记为 `role=training`，不再进入 `golden.py --cases all`。
+- **生成样本**：2026-11-02 新增 `testcases/auto_case2.jpg`（上排 14 + 下排 13，共 27 张，seed `20261102`）；牌面已写入 `golden_truth.json` v15 与 `golden-definition.json` v3，但 `confirmed=false`、未加入 `testcases_split.json`。不改变“case13 唯一校验”，也不作为 T5.3/真实域证据。
+- **生成样本 2**：2026-11-02 新增 `testcases/auto_case3.jpg`（上排 14 张宽扇 + 下排 13 张窄扇，共 27 张，seed `20261103`）；牌面已写入 `golden_truth.json` v16 与 `golden-definition.json` v4，`role=training`、`confirmed=false`，未加入 `testcases_split.json`；不改变 T0.5/T5.3 口径。
+- **生成样本 3**：2026-11-02 新增 `testcases/auto_case4.jpg`（上排 14 张宽扇 + 下排 13 张窄扇，共 27 张，seed `20261104`）；牌面已写入 `golden_truth.json` v17 与 `golden-definition.json` v5，`role=training`、`confirmed=false`，未加入 `testcases_split.json`；不改变 T0.5/T5.3 口径。
+- **生成样本 4（左→右扇形）**：2026-11-02 重生成 `testcases/auto_case5.jpg`：三排均从左向右展开，右牌压左牌并露出左牌左上角点数/花色，右侧牌相对左侧逐张向右多倾斜；上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261109`，`case14` 绿色牌桌），下排覆盖上排约 60%、上宽下窄。牌面与 hash 写入 `golden_truth.json` v25、`golden-definition.json` v13，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 5（左→右扇形）**：2026-11-02 重生成 `testcases/auto_case6.jpg`：三排均从左向右展开，右牌压左牌并露出左牌左上角点数/花色；上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261108`，`case14` 绿色牌桌），下排覆盖上排约 60%、上宽下窄。牌面与 hash 写入 `golden_truth.json` v24、`golden-definition.json` v12，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 6（case14 参考扇形）**：2026-11-02 新增 `testcases/auto_case7.jpg`：参考 `case14` 的三排左→右牌扇，右牌压左牌并露出左牌左上角点数/花色；左侧牌轻向左、右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261110`，绿色牌桌），下排覆盖上排约 60%、上宽下窄。牌面与 hash 写入 `golden_truth.json` v26、`golden-definition.json` v14，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 7（case14 参考扇形）**：2026-11-02 新增 `testcases/auto_case8.jpg`：参考 `case14` 的三排左→右牌扇，右牌压左牌并露出左牌左上角点数/花色；左侧牌轻向左、右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261111`，绿色牌桌），下排覆盖上排约 60%、上宽下窄。牌面与 hash 写入 `golden_truth.json` v27、`golden-definition.json` v15，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 8（case14 参考扇形）**：2026-11-02 新增 `testcases/auto_case9.jpg`：参考 `case14` 的三排左→右牌扇，右牌压左牌并露出左牌左上角点数/花色；左侧牌轻向左、右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261112`，绿色牌桌），下排覆盖上排约 60%、上宽下窄。牌面与 hash 写入 `golden_truth.json` v27、`golden-definition.json` v15，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 9（case14 参考扇形）**：2026-11-02 新增 `testcases/auto_case10.jpg`：参考 `case14` 的三排左→右牌扇，右牌压左牌并露出左牌左上角点数/花色；左侧牌轻向左、右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261113`，绿色牌桌），下排覆盖上排约 60%、上宽下窄。牌面与 hash 写入 `golden_truth.json` v27、`golden-definition.json` v15，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 10（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case11.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261120`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 11（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case12.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261121`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 12（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case13.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261122`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 13（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case14.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261123`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 14（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case15.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261124`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 15（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case16.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261125`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 16（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case17.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261126`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 17（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case18.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261127`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 18（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case19.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261128`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 19（case19 参考扇形）**：2026-11-02 新增 `testcases/auto_case20.jpg`：参考 `case19` 的红色桌布与三排左→右牌扇，右牌压左牌并露出左牌点数/花色；右侧牌逐张向右倾斜，上排 9 + 中排 9 + 下排 9 = 27 张（seed `20261129`），下排覆盖上排一多半、左手持牌。牌面与 hash 写入 `golden_truth.json` v28、`golden-definition.json` v16，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 20（case14 参考扇形 + 逐牌角）**：2026-11-02 新增 `testcases/auto_case21.jpg`：27 张三排左→右牌扇（seed `20261131`）；每张牌写入整牌 `quad` 与左上 35% `corner_quad` 四点，27/27 可见并带 `visible`/`occlusion`/`rotation`；hash 写入 `golden_truth.json` v29、`golden-definition.json` v17，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 21（case18 随机参考扇形 + 逐牌角）**：2026-11-02 新增 `testcases/auto_case22.jpg`：随机参考 `case18` 的木质桌面、分层牌扇和左手持牌风格，三排左→右共 27 张（seed `20261132`）；每张写入整牌 `quad` 和左上 35% `corner_quad`，27/27 可见；hash 写入 `golden_truth.json` v30、`golden-definition.json` v18，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。
+- **生成样本 22–51（随机参考 case*.jpg + 逐牌角，批量 30 张）**：2026-11-02 新增 `testcases/auto_case23.jpg`～`auto_case52.jpg`；独立 seed `20261201`～`20261230`，每张随机参考 `case*.jpg`，27 张三排左→右牌扇，下方覆盖上方 58–64%；逐牌 `quad`/`corner_quad`、27/27 可见；写入 `golden_truth.json`（批次 v31–v60）与 `golden-definition.json` v48，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。总览 `output/runs/20261102/auto23-52-batch/auto23-52-contact-sheet.jpg`。
+- **生成样本 52–81（随机参考 case*.jpg + 逐牌角，批量 30 张）**：2026-11-03 新增 `testcases/auto_case53.jpg`～`auto_case82.jpg`；独立 seed `20261231`～`20261260`，每张随机参考 `case*.jpg`，27 张三排左→右牌扇，下方覆盖上方 58–64%；逐牌 `quad`/`corner_quad`、27/27 可见；写入 `golden_truth.json`（批次 v61–v90）与 `golden-definition.json` v78，`role=training`、`confirmed=false`，未加入 `testcases_split.json`。总览 `output/runs/20261103/auto53-82-batch/auto53-82-contact-sheet.jpg`。
+- **伪框转换**：`draft_labels.py --pass-plan app` 以 T2.2v2@960 跑 8 张训练图，得到 344 个候选；`pseudo_from_testcases.py` 只保留检测分/分类置信度达标、且人工牌面清单中仍有剩余同类标签的框，并做 IoU 去重。最终 **55 个 crop / 29 类**，81 个框因标签不匹配被丢弃；`case13` 为 **0 条训练记录**。
+- **训练**：合成 5,104 条（54 类）+ 55 个真实伪 crop 过采样 10× 组成 5,654 条记录；按 0° 训练后为 2,641 train / 461 val。T3.6 报告 PASS，合成 val exact **0.993492**；这是混合域回归，不是真实发布指标。
+- **case13 对照**：同一个 T2.2v2 检测器/18-pass，只替换分类器。新模型最佳 F1 **0.5000**（recall 0.5185 / precision 0.4828，14/27）；旧模型 F1 **0.4643**（13/27）。但在 App 现行门控 `det=0.6 / cls=0.5 / margin=0.02` 下两者都是 **5/27**（新模型 7 框、旧模型 6 框），新模型合成 val 还从 0.995766 降到 0.993492。
+- **边界**：伪框不是人工四点真值；`case13` 仅 1 个场景、27 张牌，远少于 T5.3 的 600 牌/30 场景；因此 T3.6 只能做真实域预检/候选诊断，**不得替换 App 资产、不得关闭 T5.3、不得计入 X3 门禁**。
+- **证据**：`output/runs/20261102/T3.6-pseudo/`、`T3.6-real-mix/`、`T3.6-real-mix-export/`、`T3.6-case13-new/`、`T3.6-case13-old/`、`T0.5-case13-only/`。
+
+### 8.3.3 2026-11-03 牌角候选自动排序回归（非门禁）
+
+- **数据**：使用 `testcases/auto_case53~82` 的 30 张生成图 / 810 张牌及逐牌 `corner_quad`，并只用已签核 `case18/19/21`（82 框）做真实图护栏；不把生成图当真实 test。
+- **诊断**：默认 `max_corners=80`、25px NMS、top-27 的几何命中是 **393/810**；候选点本身在 25px 内约占 75%，主要损失在候选排序，而不是 LSD 完全漏检。
+- **规则**：保留 80 候选和 top-27；默认仍按 `ink, white, score`。仅当整张图至少有 **15** 个候选的顶边、左边都 `>=50px` 时，改用 `ink + 0.25*white + 0.5*normalized_edge`，否则完全退回默认排序。阈值由真实三图护栏确定，不对真实图启用边长奖励。
+- **结果**：生成 30 张 **393/810 → 471/810（+78）**；已签核 `case18/19/21` 保持 **32/82（11/8/13）**。
+- **负结果**：无条件边长排序把真实三图降到 **26/82**；80 候选下 `min>=50` 单候选门控降到 **29/82**，均未采用。
+- **边界**：只改 Python 离线参考实现的候选排序和单测（不参与 Kotlin/Android App 运行时），不改 Android 资产、T5.3 或发布口径；默认引擎状态见 ADR-0044。证据：`output/runs/20261103/corner-ranking/report.json`、`auto_case53-overlay.jpg`；单测 28/28 PASS。
+
+### 8.3.4 2026-11-03 桌面 learned 牌角 benchmark（非门禁）
+
+- **目的**：在电脑上直接复用 Android 已部署的 `card_corner.tflite` + `classifier.tflite`，用 `auto_case23~82` 的逐牌 `corner_quad` 评估 learned 路径，不启动手机、不改 APK。
+- **入口**：`PYTHONPATH=model_training python model_training/learned_benchmark.py --cases generated --adaptive --classify`；`--cases tune`（53–82）与 `--cases holdout`（23–52）可分开复测。
+- **固定阈值 0.6**：几何命中 **1609/1620**，0 误检；最终策略保留 0.6 作为基础阈值，并在 manifest `20261102.4` 写入 `fallback_score_threshold=0.3`。
+- **最终补漏策略**：已固化为 Kotlin `AdaptiveCornerPolicy`——仅当基础检测数少于 27 时执行 0.3 检测；低阈值候选先与现有框按 IoU 0.5 去重，再分类，只有 known 才接纳，最终候选上限 27。生成域 **1615/1620、0 误检**；留出 **807/810**、调参 **808/810**，分类 exact **1.0**，端到端 **99.63%/99.75%**。
+- **边界**：全部是生成域；真实 case18/19/21 没有逐牌角 quad，不能用这份结果替代真实 test/T5.3。`auto_case34` 在 0.3 的额外检测是 unknown，因此被 known 过滤拒绝。本条记录的是 2026-11-03 benchmark 当时的默认状态；同日 ADR-0044 已把默认改为 `LEARNED` 并接入 `ModelAssets`。证据：`output/runs/20261103/learned-benchmark-adaptive/report.json`、`...-holdout-adaptive/report.json`、`...-tune-adaptive/report.json`。
+- **2026-11-03 优化冻结**：生成域已饱和、真实域数据不足，停止继续调阈值/TTA/候选排序；本策略是最终策略。`model_training/annotations.json` 已清理 15 个无图片的旧 key，仅保留 9 图/242 框；旧 T3.1c/T3.5c、T5.3p 候选和临时 run 已清理。
+
+### 8.4 可自动化执行的工作
+
+| 优先级 | 工作 | 自动化范围与完成判定 |
+| --- | --- | --- |
+| P0-0 | 冻结唯一候选 | 用固定规则从评测结果选择候选；manifest/温度/模型 hash 自动校验。选择规则可自动执行，但最终发布仍需 review。 |
+| P0-1 | 合成验收集（非 real-test） | `generate_synthetic.py` 生成 600 张牌 / 30 个完整 27 张场景，自动标签、seed、scene_id、hash、零泄漏检查；用于回归/鲁棒性，**不计入真实发布证据**。 |
+| P0-2 | 真实域检测器 | 外部提供 `real-test` 后，自动跑分层评估、错误归因、训练、真实 calibration、导出；门槛 recall ≥99%、FP ≤0.1/图、IoU ≥0.8。无 `real-test` 时 `BLOCKED`。 |
+| P0-3 | 真实域分类器 | 外部提供真实牌角 test 后，自动评估/温度/阈值/导出；门槛 exact ≥99.5%、Joker ≥99%、ECE ≤0.05。`T3.5r` 的整牌框预检只能诊断域差距，不能关闭本项。 |
+| P0-4 | T4.7 桌面兼容 | 电脑加载 TFLite、shape/hash/尺寸、固定样本输出；手机不测，性能风险显式记录。 |
+| P0-5 | T5.3 shadow | 有 `real-test` 后自动对比 heuristic/learned，出每张 exact、27 张全对、复核率、自信错误；`release-qa` 仍为外部签核。 |
+| P0-6 | T5.1 闭环 | 队列/低 margin 排序/导入/重训/before-after 自动执行；人工修正与批准是外部输入。 |
+| P1-1 | X2 静态离线 | 电脑端 `offline_audit.py` + 日志归档；运行期禁网不测，风险显式记录。 |
+| P1-2 | 打包/回滚/文档 | T5.2 package/rollback、T5.4 validate_docs/gate 自动执行；最终 QA 签核外部。 |
+
+**按“全部自动化”前提，当前可立即推进的是：P0-1 合成验收集、P0-4 T4.7 桌面兼容、P0-0 候选自动校验、T5.1 队列/导入链路、T5.2/T5.4 校验。P0-2/P0-3/P0-5 及发布候选必须等待 C 类外部数据/签核。**
+
+**2026-11-02 T5.3p 自动真实图回归（非发布）**
+
+- 新增 `public_benchmark.py`：确定性构建公开真实图 manifest，RF100 train/valid/test 分别映射到 train/calibration/test，TeogopK 全部作 test；记录图片/标注 hash、scene_id、license、整牌 bbox。
+- 新增 `public_e2e.py`：部署版 TFLite 检测器 → 牌角四点半透视拉正 → 分类器 → 与公开整牌框的牌面多重集比较；不读取 `annotations.json`/`needs_review`，不做人工签核。
+- 冻结结果：**221 个 test 场景 / 868 张牌**；test 与 train/calibration 图片 hash 无重叠；Joker 真值 0，因此 `joker_exact=null`。
+- 全量基线：per-card exact **0.192483**、full-scene exact **0.00905**、review rate **0.27765**、confident error **0.451299**；报告 `output/runs/20261102/T5.3p-test/report.json`，判 **FAIL**。这是真实域差距，不是 T5.3 通过证据。
+- 同时修正一个真实部署错误：App 旧 detector 资产是 640 训练版的陈旧导出，且 OBB 通道被按 `angle,score` 解码；实际 LiteRT 输出是 `cx,cy,w,h,score,angle`。已用 T2.2v2/960 重新导出并替换资产（`a17d8e10…`，10,869,952 B），manifest 升为 `20261102.3`，默认引擎仍为 `HEURISTIC`。
+- 自动微调候选（**未发布**）：`public_crops.py` 从 RF100 train 的 320 图生成 **915 个**伪角 crop（检测框与整牌 bbox 一对一匹配），用 `train.py --init-weights` 从 `T3.6-real-mix/best.keras` 低学习率微调 12 epoch；默认门（0.5/0.02）calibration per-card **0.114078**、unknown 81.9%，旧分类器同 split **0.221698**、unknown 44.9%。随后仅在 calibration 扫描门控，选中 **0.1/0.005**：calibration per-card **0.273553**；同一个门原样应用到 test 得 per-card **0.242358**（旧模型 calibration 选门 0.3/0.02 的 test 为 **0.221239**）。但 full-scene、review **12.788%**、confident error **49.315%** 仍远未达 T5.3；**不跑 test 调参、不替换 App 分类器**，仅保留候选与 `public_gate.py` 工具。联合扫描 detector score 仍以 **0.6** 最优；`testcases/case13` 肉眼 sanity check 只有 **4 个检测 / 门控后 1 个 known**。进一步确认 T2.2v2 只训练于 **2,000 张合成图**；四向+翻转 TTA 在 0.6 仅 4→8，降到 0.1 才有 15 但伴随 4 个蓝底假框且顶部仍漏检。结论：阈值/TTA 不能弥补真实密集手牌域缺口，不接 App；下一步需要真实手牌训练数据。
+- 边界：T5.3p 是自动回归/优化入口，不改变发布定义；正式 T5.3 仍需外部真实 27 张场景、逐牌角可见性真值与 `release-qa` 签核。
+
+### 8.5 推荐执行顺序
+
+1. **先冻结候选与 `real-test`**：没有独立真实 test，后面的调参和验收都会污染证据。
+2. **并行做 T4.7 桌面兼容**：不依赖真实 test，但必须在最终模型冻结后重跑。
+3. **检测器 → 分类器 → 真实 calibration**：每次只改一个变量；test 只评一次。
+4. **T5.1 主动学习**：用真实失败样本补数据，直到真实 test 达标；不要用 test 反向调参。
+5. **最终 T4.7 桌面兼容 + X2 静态审计 + T5.3 电脑端真实 test**：全部通过后，才生成 `release-qa` 和候选发布包。
+6. **默认切换**：保留 heuristic 至少一个发布周期；任何指标回退立即回滚。
+
+### 8.6 不能作为发布证据的材料
+
+- 2,674 个合成 crop 的 exact 1.0（T3.5c）；它只证明遮挡标签修复后的合成域回归。
+- 224 张合成 test 的 recall 0.9911（T2.4）；不能证明真实照片检测。
+- 9 张 golden / 242 牌；样本量不足以证明 99.5%，且 golden 只用于固定回归。
+- 放宽阈值后的 84/242；当前 App 阈值只有 35/242，不能把“最优阈值”当发布结果。
+- 桌面推理、模拟器、旧模型报告、未绑定 hash 的耗时数据。
+- 没有 `release-qa`、`photo-visibility` 或真实 test 的“PASS”。
+- `T3.5r` 的 868 张整牌框预检（exact 0.104839）；它是 bbox 角候选，不是逐牌角真值。
+
+### 8.7 发布候选检查清单
+
+- [ ] 候选检测器/分类器/manifest 三者 hash 一致，T3.3 温度与 manifest 一致。
+- [ ] `real-test` 冻结、逐牌角签核、与训练/校准/golden 零重叠。
+- [ ] T2.4 真实 test 达标；T3.5 真实 test 达标；T5.1 before/after 可追溯。
+- [ ] T4.7 桌面 TFLite 兼容报告通过；手机性能/内存风险已记录。
+- [ ] X2 电脑静态离线审计通过；运行期禁网未验证风险已记录。
+- [ ] T5.3 shadow 达到每张 ≥99.5%、27 张全对 ≥90%、复核 ≤5%、自信错误 ≤1%。
+- [ ] T5.2 打包/回滚演练通过；T5.4 文档和许可材料更新。
+- [ ] `release-qa` 签核完成；否则保持 heuristic，不生成发布候选。

@@ -5,6 +5,7 @@ fun detectorManifest(
     anchors: Int = 4,
     channelStride: Int = 6,
     scoreThreshold: Float = 0.4f,
+    fallbackScoreThreshold: Float? = null,
     nmsIou: Float = 0.5f,
     minCornerPx: Float = 4f,
     edgeMarginPx: Int = 1,
@@ -18,9 +19,11 @@ fun detectorManifest(
     inputWidth = inputWidth,
     inputHeight = inputHeight,
     inputLayout = inputLayout,
+    outputOrder = "cx,cy,w,h,score,angle",
     channelStride = channelStride,
     anchors = anchors,
     scoreThreshold = scoreThreshold,
+    fallbackScoreThreshold = fallbackScoreThreshold,
     nmsIou = nmsIou,
     minCornerPx = minCornerPx,
     edgeMarginPx = edgeMarginPx,
@@ -49,6 +52,7 @@ fun classifierManifest(
 
 fun validManifestJson(
     detectorScoreThreshold: String = "0.4",
+    detectorFallbackThreshold: String = "null",
     schemaVersion: Int = 1,
     classifierSuitLabels: String = "[\"CLUB\",\"DIAMOND\",\"HEART\",\"SPADE\",\"JOKER\"]",
 ): String = """
@@ -65,6 +69,7 @@ fun validManifestJson(
     "channel_stride": 6,
     "anchors": 8400,
     "score_threshold": $detectorScoreThreshold,
+    "fallback_score_threshold": $detectorFallbackThreshold,
     "nms_iou": 0.5,
     "min_corner_px": 8.0,
     "edge_margin_px": 2,
@@ -97,8 +102,8 @@ fun obbRaw(
         raw[1 * anchors + index] = box[1]
         raw[2 * anchors + index] = box[2]
         raw[3 * anchors + index] = box[3]
-        raw[4 * anchors + index] = box.getOrElse(4) { 0f }
-        raw[5 * anchors + index] = score
+        raw[4 * anchors + index] = score
+        raw[5 * anchors + index] = box.getOrElse(4) { 0f }
     }
     return raw
 }

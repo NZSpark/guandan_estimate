@@ -23,7 +23,13 @@ class CardCornerDetector(
     private val runner: ModelRunner,
     private val manifest: DetectorManifest,
 ) {
-    fun detect(bitmap: Bitmap): List<Detection> {
+    /** 基础阈值；manifest 未配置补漏阈值时为 null，行为与旧版一致。 */
+    val fallbackScoreThreshold: Float? get() = manifest.fallbackScoreThreshold
+
+    fun detect(bitmap: Bitmap): List<Detection> = detect(bitmap, manifest.scoreThreshold)
+
+    /** 显式阈值入口，供短场景补漏复用同一次位图预处理。 */
+    fun detect(bitmap: Bitmap, scoreThreshold: Float): List<Detection> {
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return emptyList()
         val box = CardGeometry.letterbox(
             bitmap.width,
@@ -41,12 +47,21 @@ class CardCornerDetector(
         }
         val raw = runner.run(CardGeometry.toInputTensor(pixels, manifest.inputLayout)).firstOrNull()
             ?: return emptyList()
-        return decode(raw, box, bitmap.width, bitmap.height)
+        return decode(raw, box, bitmap.width, bitmap.height, scoreThreshold)
     }
 
     /** 纯函数部分：原始输出 → 原图坐标下的检测框，可脱离解释器单测。 */
-    fun decode(raw: FloatArray, box: Letterbox, sourceWidth: Int, sourceHeight: Int): List<Detection> {
-        val mapped = CardGeometry.decodeObb(raw, manifest.anchors, manifest.channelStride, manifest.scoreThreshold)
+    fun decode(raw: FloatArray, box: Letterbox, sourceWidth: Int, sourceHeight: Int): List<Detection> =
+        decode(raw, box, sourceWidth, sourceHeight, manifest.scoreThreshold)
+
+    fun decode(
+        raw: FloatArray,
+        box: Letterbox,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        scoreThreshold: Float,
+    ): List<Detection> {
+        val mapped = CardGeometry.decodeObb(raw, manifest.anchors, manifest.channelStride, scoreThreshold)
             .mapNotNull { detection ->
                 val quad = CardGeometry.orderQuad(
                     detection.quad.points.map { box.toSource(it.x, it.y) },

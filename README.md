@@ -181,7 +181,7 @@ adb install -r -t app/build/outputs/apk/debug/app-debug.apk
 ├── card_picture/
 │   ├── card_png/                         # 54 张标准牌面 + 背景（打包为 assets）
 │   └── card_gif/                         # 同套牌面 GIF 版（备用）
-├── testcases/                            # 真实手牌照片验证集
+├── testcases/                            # 8 张训练 + case13 唯一校验（T3.6 伪框）
 ├── model_training/                       # 独立标注 / 训练 / TFLite 导出工具链
 ├── doc/                                  # 评分规则、AI 迁移、UI 设计、任务清单
 ├── harness/  skills/  AGENTS.md          # AI 协作 Harness（见文末）
@@ -235,9 +235,10 @@ adb shell am start -n nz.org.aotearoa.guandanscore/.probe.AiProbeActivity \
 | [doc/tasks.md](./doc/tasks.md) | 任务总索引、当前进度、真机基线 |
 | [doc/ai_tasks.md](./doc/ai_tasks.md) | AI 识牌迁移与多源 WebView 任务（阶段 0～8、验收清单） |
 | [doc/ui_design.md](./doc/ui_design.md) | 主工作台与 AI 源管理的 UI 规格 |
-| [doc/usermanual.md](./doc/usermanual.md) | 用户手册：安装、拍照识牌、核对、计算、手工拆牌、AI 源配置与常见问题（含真机截图） |
+| [doc/usermanual.md](./doc/usermanual.md) | 用户手册：安装、拍照识牌、核对、计算、手工拆牌、AI 源配置与常见问题（含真机截图，图片位于 [doc/pic/](./doc/pic/)） |
 | [doc/multi_ai_update.md](./doc/multi_ai_update.md) | 多 AI 源架构设计 |
 | [model_training/README.md](./model_training/README.md) | 标注、训练、导出与接入流程 |
+| [release/](./release/) | 发布产物：`GuanDanScore-1.0-release.apk`（debug keystore 签名）及其 v4 签名文件 |
 
 代码与规则文档冲突时以文档为唯一真源：先确认哪边是需求，不允许静默修改公式；改动分值或系数必须同步文档、单测与本文件的指标说明。
 

@@ -98,6 +98,56 @@ class RecognitionFallbackTest {
     }
 
     @Test
+    fun short_scene_uses_manifest_fallback_and_keeps_known_cards() {
+        val detector = CardCornerDetector(
+            runner = detectorRunner(
+                floatArrayOf(100f, 300f, 20f, 20f, 0f) to 0.9f,
+                floatArrayOf(500f, 300f, 20f, 20f, 0f) to 0.4f,
+            ),
+            manifest = detectorManifest(
+                anchors = 8,
+                scoreThreshold = 0.6f,
+                fallbackScoreThreshold = 0.3f,
+            ),
+        )
+        val classifier = CardCornerClassifier(steadyClassifierRunner(), classifierManifest(temperature = 1f))
+        val outcome = LearnedCardRecognizer(detector, classifier, minCards = 1).recognize(bitmap())
+
+        val success = outcome as LearnedOutcome.Success
+        assertEquals(2, success.cards.size)
+        assertEquals(2, success.detections)
+    }
+
+    @Test
+    fun adaptive_policy_rejects_duplicate_and_unknown_low_detections() {
+        fun classification(unknown: Boolean) = Classification(
+            rankIndex = 12,
+            suitIndex = 3,
+            rank = nz.org.aotearoa.guandanscore.model.Rank.ACE,
+            suit = nz.org.aotearoa.guandanscore.model.Suit.SPADE,
+            confidence = if (unknown) 0.2f else 0.9f,
+            margin = if (unknown) 0.01f else 0.5f,
+            unknown = unknown,
+        )
+        val baseDetection = Detection(CardGeometry.obbQuad(100f, 100f, 20f, 20f, 0f), 0.9f)
+        val duplicate = Detection(CardGeometry.obbQuad(100f, 100f, 20f, 20f, 0f), 0.4f)
+        val added = Detection(CardGeometry.obbQuad(300f, 100f, 20f, 20f, 0f), 0.35f)
+        val rejected = Detection(CardGeometry.obbQuad(500f, 100f, 20f, 20f, 0f), 0.3f)
+
+        val selected = AdaptiveCornerPolicy.supplement(
+            base = listOf(baseDetection to classification(unknown = false)),
+            low = listOf(duplicate, added, rejected),
+            total = 27,
+            iouThreshold = LearnedCardRecognizer.MERGE_IOU,
+            classify = { candidate -> classification(unknown = candidate === rejected) },
+        )
+
+        assertEquals(2, selected.size)
+        assertEquals(0.9f, selected[0].first.score, 1e-6f)
+        assertEquals(0.35f, selected[1].first.score, 1e-6f)
+    }
+
+    @Test
     fun duplicate_detections_are_merged_instead_of_double_counted() {
         val detector = CardCornerDetector(
             runner = detectorRunner(

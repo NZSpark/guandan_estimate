@@ -64,6 +64,15 @@ class CardCornerDetectorTest {
     }
 
     @Test
+    fun decode_accepts_an_explicit_fallback_threshold() {
+        val box = CardGeometry.letterbox(1280, 720, 640, 640)
+        val raw = obbRaw(anchors = 4, boxes = listOf(floatArrayOf(320f, 320f, 20f, 20f, 0f) to 0.4f))
+
+        assertTrue(detector(scoreThreshold = 0.5f).decode(raw, box, 1280, 720).isEmpty())
+        assertEquals(1, detector(scoreThreshold = 0.5f).decode(raw, box, 1280, 720, 0.3f).size)
+    }
+
+    @Test
     fun decode_is_empty_when_threshold_filters_everything() {
         val box = CardGeometry.letterbox(1280, 720, 640, 640)
         val raw = obbRaw(anchors = 4, boxes = listOf(floatArrayOf(320f, 320f, 20f, 20f, 0f) to 0.3f))

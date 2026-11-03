@@ -33,6 +33,8 @@ android {
         freeCompilerArgs += "-Xskip-metadata-version-check"
     }
     sourceSets["main"].assets.srcDir(rootProject.file("card_picture/card_png"))
+    // T4.7: real-device benchmark reads the signed-off golden images as test assets.
+    sourceSets["androidTest"].assets.srcDir(rootProject.file("testcases"))
 }
 
 dependencies {
@@ -49,4 +51,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.14.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

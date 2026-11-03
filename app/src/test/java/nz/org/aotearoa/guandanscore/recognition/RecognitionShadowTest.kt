@@ -63,7 +63,8 @@ class RecognitionShadowTest {
     }
 
     @Test
-    fun default_engine_stays_heuristic_until_the_model_passes_its_gate() {
-        assertEquals(RecognitionEngine.HEURISTIC, RecognitionEngine.entries.first())
+    fun default_engine_is_learned() {
+        assertEquals(RecognitionEngine.LEARNED, RecognitionEngine.DEFAULT)
+        assertEquals(RecognitionEngine.LEARNED, RecognitionStats().engine)
     }
 }

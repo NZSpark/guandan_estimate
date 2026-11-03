@@ -21,7 +21,7 @@ data class RecognitionIssue(val level: IssueLevel, val text: String)
 
 /** T4.5: 分阶段计数，供 UI 显示“待核对数量”而不是只给一句模糊提醒。 */
 data class RecognitionStats(
-    val engine: RecognitionEngine = RecognitionEngine.HEURISTIC,
+    val engine: RecognitionEngine = RecognitionEngine.DEFAULT,
     val detected: Int = 0,
     val classified: Int = 0,
     val unknown: Int = 0,
@@ -73,20 +73,52 @@ fun RecognitionResult.summary(): RecognitionSummary {
 /** 模型路径的决策记录，写进 [RecognitionStats] 便于现场排查。 */
 internal data class LearnedTrace(val status: String, val reason: String?, val outcome: LearnedOutcome? = null)
 
+/** 方案 A：learned 为主，heuristic 只补 learned 尚未产出的牌面副本。 */
+internal data class MissingCardFill(
+    val cards: List<Card>,
+    val added: List<Card>,
+)
+
+internal fun fillMissingCards(
+    primary: List<Card>,
+    secondary: List<Card>,
+    maxCards: Int = 27,
+): MissingCardFill {
+    val limit = maxCards.coerceAtLeast(0)
+    val cards = primary.take(limit).toMutableList()
+    val counts = cards.groupingBy { it.rank to it.suit }.eachCount().toMutableMap()
+    val available = secondary.groupingBy { it.rank to it.suit }.eachCount()
+    val added = mutableListOf<Card>()
+    for (candidate in secondary) {
+        if (cards.size >= limit) break
+        val key = candidate.rank to candidate.suit
+        val have = counts[key] ?: 0
+        val canAdd = minOf(2, available[key] ?: 0)
+        if (have >= canAdd) continue
+        val filled = candidate.copy(id = cards.size, needsReview = true)
+        cards += filled
+        added += filled
+        counts[key] = have + 1
+    }
+    return MissingCardFill(cards, added)
+}
+
 /**
  * T4.4: 识别入口。
  *
  * - 条码路径永远最优先，命中即结束；
- * - [engine] 默认 [RecognitionEngine.HEURISTIC]，模型未过门槛前不得设为默认；
- * - LEARNED 时模型失败/超时/牌角不足都会回退到启发式并记录原因；
+ * - [engine] 默认 [RecognitionEngine.DEFAULT]（当前为 LEARNED）；
+ * - LEARNED 时模型加载失败/推理超时/牌角不足都会回退到启发式并记录原因；
  * - SHADOW 只跑模型做对照，正式结果仍走启发式，不改变 UI。
  */
 class CardRecognizer(
     context: Context,
-    private val engine: RecognitionEngine = RecognitionEngine.HEURISTIC,
+    private val engine: RecognitionEngine = RecognitionEngine.DEFAULT,
     private val learned: LearnedCardRecognizer? = null,
     private val modelVersion: String? = null,
     private val learnedTimeoutMillis: Long = 3_000L,
+    /** 模型加载失败原因；learned 为 null 时写入回退提示和统计。 */
+    private val learnedUnavailableReason: String? = null,
 ) {
     private val client = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val templates = CardTemplateMatcher(context)
@@ -128,8 +160,17 @@ class CardRecognizer(
             )
             return
         }
-        if (!EnginePolicy.runsModel(engine) || learned == null) {
+        if (!EnginePolicy.runsModel(engine)) {
             heuristic(bitmap, done, failed, emptyList(), LearnedTrace("off", "启发式路径"))
+            return
+        }
+        if (learned == null) {
+            val reason = learnedUnavailableReason ?: "模型未加载"
+            heuristic(
+                bitmap, done, failed,
+                listOf(RecognitionIssue(IssueLevel.WARNING, "模型路径回退：$reason")),
+                LearnedTrace("fallback", reason),
+            )
             return
         }
         dispatch.execute {
@@ -140,6 +181,9 @@ class CardRecognizer(
                     listOf(RecognitionIssue(IssueLevel.INFO, "shadow：${describe(outcome)}")),
                     LearnedTrace("shadow", describe(outcome), outcome),
                 )
+
+                outcome is LearnedOutcome.Success && outcome.cards.size < 27 ->
+                    fillFromHeuristic(bitmap, outcome, done)
 
                 outcome is LearnedOutcome.Success -> done(learnedResult(outcome))
 
@@ -152,6 +196,58 @@ class CardRecognizer(
                 else -> heuristic(bitmap, done, failed, emptyList(), LearnedTrace("off", "启发式路径"))
             }
         }
+    }
+
+    /** 方案 A：模型结果不足 27 张时，用 heuristic 只补缺，不替换 learned 牌。 */
+    private fun fillFromHeuristic(
+        bitmap: Bitmap,
+        outcome: LearnedOutcome.Success,
+        done: (RecognitionResult) -> Unit,
+    ) {
+        heuristic(
+            bitmap,
+            { heuristicResult ->
+                val fill = fillMissingCards(outcome.cards, heuristicResult.cards)
+                val addedLabels = fill.added.take(8).joinToString("、") { it.display }
+                val addedText = if (fill.added.size > 8) "$addedLabels 等 ${fill.added.size} 张" else addedLabels
+                val extraWarnings = if (fill.added.isEmpty()) emptyList() else listOf(
+                    "heuristic 补入 ${fill.added.size} 张需核对：$addedText"
+                )
+                val extraIssues = buildList {
+                    add(RecognitionIssue(IssueLevel.INFO, "模型识别 ${outcome.cards.size}/27，尝试 heuristic 补缺"))
+                    if (fill.added.isNotEmpty()) add(RecognitionIssue(IssueLevel.WARNING, extraWarnings.single()))
+                }
+                done(
+                    learnedResult(
+                        outcome,
+                        cards = fill.cards,
+                        extraWarnings = extraWarnings,
+                        extraIssues = extraIssues,
+                        unknownExtra = fill.added.size,
+                        mergedExtra = heuristicResult.stats.merged,
+                        elapsedExtra = heuristicResult.stats.elapsedMillis,
+                        learnedStatus = "used+heuristic_fill",
+                        learnedReason = "补入 ${fill.added.size} 张",
+                    )
+                )
+            },
+            { error ->
+                val reason = error.localizedMessage ?: error.javaClass.simpleName
+                done(
+                    learnedResult(
+                        outcome,
+                        extraWarnings = listOf("heuristic 补缺失败：$reason；仅保留模型结果"),
+                        extraIssues = listOf(
+                            RecognitionIssue(IssueLevel.WARNING, "heuristic 补缺失败：$reason；仅保留模型结果")
+                        ),
+                        learnedStatus = "used+heuristic_fill_failed",
+                        learnedReason = reason,
+                    )
+                )
+            },
+            listOf(RecognitionIssue(IssueLevel.INFO, "模型识别 ${outcome.cards.size}/27，尝试 heuristic 补缺")),
+            LearnedTrace("fill", "模型识别 ${outcome.cards.size}/27，尝试补缺", outcome),
+        )
     }
 
     /** T4.6: 启发式路径（原有 OCR + 模板匹配），模型任何故障都回到这里。 */
@@ -333,26 +429,38 @@ class CardRecognizer(
         is LearnedOutcome.Unavailable -> outcome.reason
     }
 
-    private fun learnedResult(outcome: LearnedOutcome.Success): RecognitionResult {
+    private fun learnedResult(
+        outcome: LearnedOutcome.Success,
+        cards: List<Card> = outcome.cards,
+        extraWarnings: List<String> = emptyList(),
+        extraIssues: List<RecognitionIssue> = emptyList(),
+        unknownExtra: Int = 0,
+        mergedExtra: Int = 0,
+        elapsedExtra: Long = 0,
+        learnedStatus: String = "used",
+        learnedReason: String? = null,
+    ): RecognitionResult {
         val headline = "模型识别：${outcome.cards.size} 张（检测 ${outcome.detections}，分类 ${outcome.classified}）"
         val actionable = buildList {
             if (outcome.unknown > 0) add("${outcome.unknown} 张置信度低需核对")
             if (outcome.merged > 0) add("合并 ${outcome.merged} 个重复检测")
         }
+        val warnings = actionable + extraWarnings
         return RecognitionResult(
-            cards = outcome.cards,
-            warnings = actionable,
+            cards = cards,
+            warnings = warnings,
             issues = listOf(RecognitionIssue(IssueLevel.INFO, headline)) +
-                actionable.map { RecognitionIssue(IssueLevel.WARNING, it) },
+                actionable.map { RecognitionIssue(IssueLevel.WARNING, it) } + extraIssues,
             stats = RecognitionStats(
                 engine = engine,
                 detected = outcome.detections,
-                classified = outcome.cards.size,
-                unknown = outcome.unknown,
-                merged = outcome.merged,
-                elapsedMillis = outcome.elapsedMillis,
+                classified = cards.size,
+                unknown = outcome.unknown + unknownExtra,
+                merged = outcome.merged + mergedExtra,
+                elapsedMillis = outcome.elapsedMillis + elapsedExtra,
                 modelVersion = modelVersion,
-                learnedStatus = "used",
+                learnedStatus = learnedStatus,
+                learnedReason = learnedReason,
             ),
         )
     }

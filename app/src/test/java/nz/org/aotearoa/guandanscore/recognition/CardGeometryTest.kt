@@ -107,6 +107,20 @@ class CardGeometryTest {
     }
 
     @Test
+    fun decodeObb_reads_angle_after_score_channel() {
+        val raw = obbRaw(
+            anchors = 1,
+            boxes = listOf(floatArrayOf(100f, 50f, 20f, 10f, (PI / 2).toFloat()) to 0.9f),
+        )
+        val detections = CardGeometry.decodeObb(raw, anchors = 1, stride = 6, scoreThreshold = 0.4f)
+        assertEquals(1, detections.size)
+        assertEquals(0.9f, detections[0].score, 1e-6f)
+        assertTrue(
+            detections[0].quad.points.any { kotlin.math.abs(it.x - 105f) < 1e-3f && kotlin.math.abs(it.y - 40f) < 1e-3f },
+        )
+    }
+
+    @Test
     fun decodeObb_ignores_non_positive_extent() {
         val raw = obbRaw(anchors = 1, boxes = listOf(floatArrayOf(10f, 10f, 0f, 0f, 0f) to 0.9f))
         assertTrue(CardGeometry.decodeObb(raw, anchors = 1, stride = 6, scoreThreshold = 0.1f).isEmpty())

@@ -31,6 +31,9 @@ import nz.org.aotearoa.guandanscore.recognition.AiRecognitionClient
 import nz.org.aotearoa.guandanscore.recognition.AiSettings
 import nz.org.aotearoa.guandanscore.recognition.AiSettingsStore
 import nz.org.aotearoa.guandanscore.recognition.CardRecognizer
+import nz.org.aotearoa.guandanscore.recognition.ModelAssets
+import nz.org.aotearoa.guandanscore.recognition.ModelAvailability
+import nz.org.aotearoa.guandanscore.recognition.RecognitionEngine
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceError
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourcePresets
 import nz.org.aotearoa.guandanscore.recognition.source.AiSourceRegistry
@@ -74,7 +77,27 @@ import java.util.concurrent.Executors
  */
 class MainActivity : AppCompatActivity() {
     private lateinit var ui: ActivityMainBinding
-    private val recognizer by lazy { CardRecognizer(this) }
+
+    /**
+     * ADR-0044：正式路径默认使用 learned。模型只在首次识别时加载一次；加载失败仍由
+     * [CardRecognizer] 回退启发式，并把原因显示在本地识牌状态里。
+     */
+    private val modelAvailability by lazy { ModelAssets.load(this) }
+    private val recognizer by lazy {
+        when (val models = modelAvailability) {
+            is ModelAvailability.Ready -> CardRecognizer(
+                this,
+                engine = RecognitionEngine.LEARNED,
+                learned = models.recognizer,
+                modelVersion = models.version,
+            )
+            is ModelAvailability.Unavailable -> CardRecognizer(
+                this,
+                engine = RecognitionEngine.LEARNED,
+                learnedUnavailableReason = models.reason,
+            )
+        }
+    }
     private val webHost by lazy { WebViewHost.get(this) }
     private lateinit var aiSettingsStore: AiSettingsStore
     private val imageRenderer by lazy { HandImageRenderer(this) }
@@ -319,11 +342,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildCardChip(card: Card, index: Int): Chip = Chip(this).apply {
-        text = card.display
+        text = if (card.needsReview) "${card.display} · 需核对" else card.display
         isCloseIconVisible = true
         setTextColor(
-            if (card.suit == Suit.HEART || card.suit == Suit.DIAMOND) getColor(R.color.card_red)
-            else getColor(R.color.card_black)
+            when {
+                card.needsReview -> getColor(R.color.gold)
+                card.suit == Suit.HEART || card.suit == Suit.DIAMOND -> getColor(R.color.card_red)
+                else -> getColor(R.color.card_black)
+            }
         )
         setOnClickListener { editCard(index) }
         setOnCloseIconClickListener {
@@ -660,7 +686,7 @@ class MainActivity : AppCompatActivity() {
                     if (hand.size >= 27) return@setPositiveButton toast("已有 27 张牌")
                     hand += Card(hand.size, rank, suit)
                 } else {
-                    hand[index] = hand[index].copy(rank = rank, suit = suit)
+                    hand[index] = hand[index].copy(rank = rank, suit = suit, needsReview = false)
                 }
                 setState(state.withHand(hand))
             }

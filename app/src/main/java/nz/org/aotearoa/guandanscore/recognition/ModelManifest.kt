@@ -21,11 +21,18 @@ data class DetectorManifest(
     val inputWidth: Int,
     val inputHeight: Int,
     val inputLayout: TensorLayout,
-    /** 输出通道数：cx,cy,w,h,angle,score = 6。 */
+    /** 导出张量的通道顺序；当前固定为 cx,cy,w,h,score,angle。 */
+    val outputOrder: String,
+    /** 输出通道数：cx,cy,w,h,score,angle = 6。 */
     val channelStride: Int,
     /** 输出锚点数（`[1,6,8400]` 里的 8400）。 */
     val anchors: Int,
     val scoreThreshold: Float,
+    /**
+     * 短场景补漏阈值；null 表示关闭。只有基础阈值检测数少于 27 时才使用，
+     * 且补入候选仍必须通过分类器 known 过滤。
+     */
+    val fallbackScoreThreshold: Float?,
     val nmsIou: Float,
     val minCornerPx: Float,
     val edgeMarginPx: Int,
@@ -74,6 +81,18 @@ data class ModelManifest(
             val classifierJson = root.optJSONObject("classifier")
                 ?: throw ManifestException("缺少 classifier 段")
 
+            val detectorScoreThreshold = probability(detectorJson, "score_threshold", "detector", allowOne = false)
+            val detectorFallbackThreshold = optionalProbability(
+                detectorJson,
+                "fallback_score_threshold",
+                "detector",
+            )
+            if (detectorFallbackThreshold != null && detectorFallbackThreshold >= detectorScoreThreshold) {
+                throw ManifestException(
+                    "detector.fallback_score_threshold 必须低于 score_threshold" +
+                        "（$detectorFallbackThreshold >= $detectorScoreThreshold）",
+                )
+            }
             val detector = DetectorManifest(
                 asset = assetPath(detectorJson, "detector"),
                 sha256 = hash(detectorJson, "detector"),
@@ -87,11 +106,17 @@ data class ModelManifest(
                     "NHWC" -> TensorLayout.NHWC
                     else -> throw ManifestException("detector.input_layout 只支持 NCHW/NHWC")
                 },
+                outputOrder = detectorJson.optString("output_order", "cx,cy,w,h,score,angle").replace(" ", "").also {
+                    if (it != "cx,cy,w,h,score,angle") {
+                        throw ManifestException("detector.output_order 必须为 cx,cy,w,h,score,angle")
+                    }
+                },
                 channelStride = positive(detectorJson, "channel_stride", "detector").also {
                     if (it < 6) throw ManifestException("detector.channel_stride 至少 6（4 框 + angle + score）")
                 },
                 anchors = positive(detectorJson, "anchors", "detector"),
-                scoreThreshold = probability(detectorJson, "score_threshold", "detector", allowOne = false),
+                scoreThreshold = detectorScoreThreshold,
+                fallbackScoreThreshold = detectorFallbackThreshold,
                 nmsIou = probability(detectorJson, "nms_iou", "detector", allowOne = false),
                 minCornerPx = detectorJson.optDouble("min_corner_px", 8.0).toFloat().also {
                     if (!(it > 0f)) throw ManifestException("detector.min_corner_px 必须 > 0")
@@ -148,6 +173,16 @@ data class ModelManifest(
             val value = json.optDouble(key, -1.0).toFloat()
             val upperOk = if (allowOne) value <= 1f else value < 1f
             if (!(value > 0f && upperOk)) throw ManifestException("$section.$key 必须在 (0,1${if (allowOne) "]" else ")"})")
+            return value
+        }
+
+        /** 可选概率字段；JSON null 与字段缺失等价。 */
+        private fun optionalProbability(json: JSONObject, key: String, section: String): Float? {
+            if (!json.has(key) || json.isNull(key)) return null
+            val value = json.optDouble(key, Double.NaN).toFloat()
+            if (!(value > 0f && value < 1f)) {
+                throw ManifestException("$section.$key 必须在 (0,1)")
+            }
             return value
         }
 

@@ -157,21 +157,22 @@ object CardGeometry {
         }
 
     /**
-     * 解码 `[stride][anchors]` 的原始输出：前 4 项 cx,cy,w,h，第 5 项 angle，第 6 项置信度。
-     * 通道优先（`raw[channel * anchors + anchor]`），与导出形状 `[1,6,8400]` 一致。
+     * 解码 `[stride][anchors]` 的原始输出：前 4 项 cx,cy,w,h，第 5 项 score，第 6 项 angle。
+     * 通道优先（`raw[channel * anchors + anchor]`），与 LiteRT 导出的 `[1,6,18900]` 一致。
+     * 注意：导出顺序是 score 在 angle 前；把两者对调会把角度当置信度，产生大量误检。
      */
     fun decodeObb(raw: FloatArray, anchors: Int, stride: Int, scoreThreshold: Float): List<Detection> {
         if (anchors <= 0 || stride < 6) return emptyList()
         if (raw.size < anchors * stride) return emptyList()
         val results = mutableListOf<Detection>()
         for (anchor in 0 until anchors) {
-            val score = raw[(stride - 1) * anchors + anchor]
+            val score = raw[4 * anchors + anchor]
             if (!(score >= scoreThreshold)) continue
             val cx = raw[anchor]
             val cy = raw[anchors + anchor]
             val width = raw[2 * anchors + anchor]
             val height = raw[3 * anchors + anchor]
-            val angle = raw[4 * anchors + anchor]
+            val angle = raw[5 * anchors + anchor]
             if (!(width > 0f) || !(height > 0f)) continue
             results.add(Detection(obbQuad(cx, cy, width, height, angle), score))
         }

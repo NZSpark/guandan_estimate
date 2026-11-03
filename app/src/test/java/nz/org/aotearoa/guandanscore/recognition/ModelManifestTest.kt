@@ -22,9 +22,22 @@ class ModelManifestTest {
         assertEquals(6, manifest.detector.channelStride)
         assertEquals(TensorLayout.NCHW, manifest.detector.inputLayout)
         assertEquals(0.4f, manifest.detector.scoreThreshold, 1e-6f)
+        assertNull(manifest.detector.fallbackScoreThreshold)
         assertEquals(15, manifest.classifier.rankLabels.size)
         assertEquals(5, manifest.classifier.suitLabels.size)
         assertEquals(96, manifest.classifier.cropWidth)
+    }
+
+    @Test
+    fun parse_reads_optional_fallback_threshold() {
+        val manifest = ModelManifest.parse(validManifestJson(detectorFallbackThreshold = "0.3"))
+        assertEquals(0.3f, manifest.detector.fallbackScoreThreshold!!, 1e-6f)
+    }
+
+    @Test
+    fun parse_rejects_fallback_not_below_base_threshold() {
+        val text = validManifestJson(detectorFallbackThreshold = "0.4")
+        assertThrows(ManifestException::class.java) { ModelManifest.parse(text) }
     }
 
     @Test
@@ -53,6 +66,15 @@ class ModelManifestTest {
     }
 
     @Test
+    fun parse_rejects_wrong_detector_output_order() {
+        val text = validManifestJson().replace(
+            "\"channel_stride\": 6,",
+            "\"channel_stride\": 6, \"output_order\": \"cx,cy,w,h,angle,score\",",
+        )
+        assertThrows(ManifestException::class.java) { ModelManifest.parse(text) }
+    }
+
+    @Test
     fun parse_rejects_non_json() {
         assertThrows(ManifestException::class.java) { ModelManifest.parse("{} nope") }
     }
@@ -64,6 +86,8 @@ class ModelManifestTest {
             context.assets.open(ModelAssets.MANIFEST_ASSET).use { it.readBytes().toString(Charsets.UTF_8) },
         )
         assertNull(ModelAssets.verify(context, manifest))
+        assertEquals(0.6f, manifest.detector.scoreThreshold, 1e-6f)
+        assertEquals(0.3f, manifest.detector.fallbackScoreThreshold!!, 1e-6f)
 
         val detector = context.assets.open(manifest.detector.asset).use { it.readBytes() }
         val classifier = context.assets.open(manifest.classifier.asset).use { it.readBytes() }

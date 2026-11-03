@@ -14,7 +14,13 @@ enum class Rank(val label: String, val value: Int) {
     }
 }
 
-data class Card(val id: Int, val rank: Rank, val suit: Suit) {
+data class Card(
+    val id: Int,
+    val rank: Rank,
+    val suit: Suit,
+    /** 由 heuristic 补缺补入的牌；UI 需提示人工核对，手工校正后清除。 */
+    val needsReview: Boolean = false,
+) {
     val display: String get() = if (suit == Suit.JOKER) rank.label else "${suit.symbol}${rank.label}"
     fun isWild(level: Rank) = suit == Suit.HEART && rank == level
 }

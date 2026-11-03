@@ -20,7 +20,7 @@
 
 9. 构建基线：JDK 17 / Gradle 8.9 / AGP 8.7.3 / compileSdk 35 / minSdk 26。不要随意升级。
 10. 提交前必须 `./gradlew testDebugUnitTest` 通过；影响 UI/识别路径时再跑 `assembleDebug`。
-11. `model_training/` 与 Android 构建解耦，其依赖不得进入 APK；未验收的 `.tflite` 不得接入正式识别路径。
+11. `model_training/` 与 Android 构建解耦，其依赖不得进入 APK；模型资产接入正式识别前必须通过 manifest/size/SHA-256 校验，加载或推理失败必须回退启发式。T5.3 仍是质量证据，但不再是 learned 默认启用的前置门禁（ADR-0044）。
 12. 单牌型分值/拆牌算法改动必须补对应单元测试（`app/src/test/.../scoring/`）。
 
 ## Harness 自身

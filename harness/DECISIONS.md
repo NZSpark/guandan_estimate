@@ -391,3 +391,183 @@
 **约束**：① golden 只用于评估，不得用于调参；阈值写回 manifest 必须在独立 calibration 集上标定；② App 仍使用 T2.2（640 训练、960 导出），换用 T2.2v2 属于发布变更，T4.7 真机验证仍 NOT_RUN。
 
 **状态**：Active（工具、四组 sweep 与基线已落盘；App 资产未改）
+## ADR-0033 · 2026-11-02 · 牌角 crop 以整牌几何遮挡过滤，不用牌角框 IoU
+
+**决策**：`prepare_crops.py` 按绘制顺序计算后画整牌对当前牌角四边形的多边形覆盖比例，默认过滤覆盖 >0.2 的样本；`visible` 不再只依赖牌角框 IoU。
+
+**理由**：T3.5 旧 946 组 test 的 7 个“错例”中，6 个（已部署模型）的牌角被后画整牌覆盖 49%–78%，crop 实际显示覆盖牌；标签继承正确但可见性错误。这是数据定义 bug，不是分类器回退，也不能靠调阈值修复。
+
+**约束**：① 过滤阈值 0.2 是几何规则，未用 test 结果调参；② 旧 FAIL 报告保留，新 PASS 在 `T3.5c`；③ test 仍全部为合成 crop，真实照片逐牌角 test 仍缺，T5.3 不得因此算通过。
+
+## ADR-0034 · 2026-11-02 · 公开整牌框只能做 T3.5r 真实域预检，不能替代 T3.5/T5.3
+
+**决策**：新增 `model_training/real_pretest.py`，从 RF100 Poker Cards 与 TeogopK real 的整牌 bbox 为每张牌生成四个角候选 crop，`predict.py` 按 `group` 合并同一张牌的候选，分类器只按置信度选择；报告固定为 `T3.5r`，明确 `release_eligible=false`、`corner_truth=false`。
+
+**理由**：公开数据可以自动替代“拍摄 + 整牌框标注”的一部分，但没有逐牌角/可见性真值；如果直接把 bbox 当牌角真值，会把裁剪错误伪装成模型错误，也可能被误用为发布证据。T3.5r 用来量化真实域差距，而不是替代发布 test。
+
+**约束**：① 不得读取 expected label 选择候选；② 不得用 T3.5r test 调分类器阈值；③ 不得把 T3.5r 计入 X3 门禁或声称 T5.3 通过；④ 数据来源、许可、bbox 派生标记写入 manifest；⑤ 已部署资产不变。
+
+**结果（2026-11-02）**：868 牌 / 6,944 crop，已部署分类器 exact 0.104839（RF100 0.125、TeogopK 0.071），ECE 0.097854；模型评估 FAIL，保留为真实域下限诊断。
+
+**状态**：Active（脚本、文档、状态已落盘；未 commit）
+## ADR-0035 · 2026-11-02 · testcases 8 张转训练、case13 唯一校验；伪框不等于真值
+
+**决策**：按用户决定，`testcases/` 的 `case4/case10/case116/case12/case14/case18/case19/case21` 转为训练候选，`case13` 是唯一校验实例；切分写入 `model_training/datasets/testcases_split.json`，8 张在 `golden_truth.json` 标 `role=training`，`golden.py --cases all` 只校验 case13。训练用 `pseudo_from_testcases.py` 把检测器伪框与人工牌面清单匹配，只保留仍有剩余同类标签的框，并固定 `approval=pseudo`、`needs_review=true`。
+
+**理由**：没有逐牌角人工四点，只有牌面清单；用户选择用检测器伪框补训练数据。这样能增加真实域样本，但伪框可能跨牌/重复，不能当作检测或发布真值。把 8 张移出 golden 是为了避免训练/验证泄漏。
+
+**约束**：① `case13` 不得进入训练、校准或调参；② 伪框训练报告必须标 `NOT_RUN`/非发布，不得计入 X3 或关闭 T5.3；③ 不得用 `case13` 调阈值或选择模型；④ 55 个 crop / 29 类只是候选，真实域覆盖不足；⑤ 不替换 `app/src/main/assets/models`。
+
+**结果（2026-11-02）**：344 候选 → 55 crop / 29 类；81 个框因无剩余人工标签丢弃。合成 5,104 + 55×10 训练，val exact 0.993492。`case13` 新模型最佳 F1 0.5000（14/27），旧 0.4643（13/27）；App 门控下均 5/27。T0.5 新口径 1 图/27 牌 PASS；T5.3 仍 NOT_RUN。
+
+**状态**：Active（数据、训练、对照与 T0.5 已落盘；未 commit）
+
+---
+
+## ADR-0036 · 2026-11-02 · 三阶段单牌识别先用整牌几何，不用轴向牌角框
+
+**决策**：新增 `model_training/card_engine.py`，把识别拆为：① 检测整牌旋转四边形；② 沿整牌短边/长边构造牌角平行四边形；③ 拉正后分类点数和花色。分类阶段默认尝试四个角候选并做 0°/90°/180°/270° TTA；几何阶段不依赖 TensorFlow。
+
+**理由**：原流水线只输出牌角 OBB，牌角框与整牌角度没有显式几何约束；牌一大、旋转一多，框就可能切到花色或邻牌。先拿到整牌边/角，再用平行边生成框，旋转和裁切才有可验证的几何前提。
+
+**约束**：① 当前第一阶段仅支持单张完整可见牌，白牌分割不适合多牌重叠，手牌必须另训整牌 OBB；② 不替换 Android 已验收的 `CardCornerDetector`/资产，也不构成 T4/T5 发布证据；③ 整牌检测器训练前，不用该模块生成训练真值；④ 合成单牌 CLI 与 9 项几何/分类单测只是链路验证，不是准确率验收。
+
+**状态**：Active（模块、单测、README、状态已落盘；未 commit）
+
+---
+
+## ADR-0037 · 2026-11-02 · 手牌第一阶段改为局部 L 形牌角，不检测整牌
+
+**决策**：`card_engine.py` 新增 `detect_card_corners()`：在一手牌中用 LSD 找任意方向的两条近似垂直短边，求交后枚举四个象限，按白牌象限确定顶边/左边，输出局部 `CardCorner(point, top, left)`；`build_corner_box_from_corner()` 用顶边和左边共同拟合正交方向（两条检测边的偏差各承担一半），生成真正的 96×128 长方形；`HandCornerEngine` 对候选逐个分类。**取代 ADR-0036 的“先检测完整整牌四边形”第一阶段**；`detect_single_card()`/`SingleCardEngine` 仅作为完整单牌 fallback。
+
+**理由**：手牌中大多数牌只露出左上角，整牌轮廓被相邻牌遮挡；画框只需要知道牌角处顶边和左边的两个方向，不需要整条边或整张牌。局部 L 形几何可直接从短线段得到，避免把“整牌检测失败”误认为“牌角不存在”。
+
+**约束**：① 牌边可任意方向，不按图像水平/垂直筛选；白牌象限和左手性 `cross(top,left)>0` 只定局部轴，同一张牌的其他可见角也会成为候选，需第三阶段排除；② `case10` 当前输出 80 个候选（达到默认上限），是候选集而非逐张计数或准确率，仍需第三阶段置信度、NMS/门控筛选；③ 尚未用真实分类器验证，不替换 Android 生产路径，也不构成 T4/T5 或发布证据；④ 15 项单测覆盖任意方向 L 角、两条检测边共同约束长方形朝向、四向 TTA 和旧单牌路径，不覆盖真实手牌全量召回。
+
+**修订**：牌角框构造已由 ADR-0038 取代；本 ADR 的第一阶段局部 L 形检测仍然有效。
+
+**状态**：Superseded by ADR-0038（牌角框构造部分；局部 L 形第一阶段仍 Active）
+
+---
+
+## ADR-0038 · 2026-11-02 · 手牌牌角框改为透视四边形 + 单应性拉正
+
+**决策**：`build_corner_box_from_corner()` 不再拟合 90° 矩形，而是把检测到的顶边、左边作为两条**精确邻边**构造透视四边形：`P0=角点`，`P1=P0+top*width`，`P3=P0+left*height`，`P2=P0+(1-perspective)*((P1-P0)+(P3-P0))`。默认 `perspective=0.08`；`0` 退化为平行四边形，取值限制为 `[0,0.5)` 以保持凸性。`warp_corner()` 用 `cv2.getPerspectiveTransform` 将该四边形单应性拉正到 96×128。**取代 ADR-0037 的矩形拟合部分**；第一阶段局部 L 形检测不变。
+
+**理由**：验收要求两条检测边严格重合。严格矩形的相邻边必须垂直，而非垂直的两条检测边无法同时成为矩形邻边；透视四边形保留两条原始边，由单应性负责把四边形拉正，分类器看到的仍是 96×128 长方形。
+
+**约束**：① 只有两条边时第四个角不唯一，默认固定轻微透视先验只沿对角线收缩远端 `P2`，不影响两条检测边；`--perspective` 可调，不代表从图像估计出了真实消失点；② `perspective=0` 仍是平行四边形，不满足“透视”但仍保留两条原始边；③ `perspective` 必须 `<0.5`，否则四边形退化/非凸；④ 16 项单测覆盖两条边方向严格保持、非平行四边形、单应性映射、四向 TTA 和旧单牌路径，不覆盖真实手牌全量召回；⑤ 不替换 Android，不构成 T4/T5 或发布证据。
+
+**状态**：Active（代码、测试、README、状态已落盘；未 commit）
+
+---
+
+## ADR-0040 · 2026-11-02 · T5.3p 公开真实图自动回归，不等于 T5.3 发布
+
+**决策**：新增 `public_benchmark.py` 与 `public_e2e.py`，用 RF100 Poker Cards + TeogopK Real 的公开整牌框构建确定性真实图 benchmark（RF100 train→train、valid→calibration、test→test；TeogopK 全 test），报告任务固定为 `T5.3p`，`formal_t5_3=false`、`corner_truth=false`、`release_eligible=false`。同时修正部署 detector 契约：LiteRT OBB 输出顺序为 `cx,cy,w,h,score,angle`，App 旧代码按 `angle,score` 解码；旧资产还是陈旧 640 训练版。
+
+**理由**：公开集没有 Joker、双副牌重复牌、27 张完整手牌或逐牌角真值，不能替代正式 T5.3；但它能全自动覆盖“检测器牌角 → 分类器 → 牌面多重集”的真实图链路，不依赖人工画框、`needs_review` 或签核。若不先修 OBB 通道顺序，评测会把角度当置信度，产生数千个假框，任何基线都不可信。
+
+**约束**：① T5.3p 只读公开 manifest，不得用 test 调参；② 不得把整牌框当牌角真值；③ 不纳入 X3，不改变 App 默认 `HEURISTIC`；④ `joker_exact` 在无 Joker 真值时必须为 `null`；⑤ detector 资产替换必须同时更新 manifest hash/size、`output_order`、Kotlin/Python 解码与回归测试。
+
+**结果（2026-11-02）**：test 221 场景 / 868 牌；基线 per-card 0.192483、full-scene 0.00905、review 0.27765、confident error 0.451299（FAIL）。检测器修正后 TFLite 与 T2.2v2 `.pt` 的框数逐图一致；分类器真实域准确率仍是下一瓶颈。
+
+**后续实验（同日，候选未发布）**：新增 `public_crops.py`，从 RF100 **train** 的 320 图按整牌 bbox 与距角距离匹配出 915 个伪角 crop；从 `T3.6-real-mix/best.keras` 以 `5e-5` 微调 12 epoch 后导出。默认门（0.5/0.02）下 calibration per-card **0.114078**、unknown 81.9%，旧分类器 **0.221698**、unknown 44.9%。新增 `public_gate.py` 只在 calibration 扫描门控，选中 **0.1/0.005**：calibration per-card **0.273553**；同一门应用到 test 得 **0.242358**（旧模型 calibration 选门 0.3/0.02 的 test **0.221239**）。但 full-scene、review **12.788%**、confident error **49.315%** 仍远未达 T5.3，故**不替换 App 分类器资产**；候选与工具保留，test 只用于最终复测，门控不得在 test 上回选。联合扫描 detector score 仍以 **0.6** 最优；`testcases/case13` 肉眼 sanity check 仅 **4 个检测 / 1 个 known**。进一步确认 T2.2v2 只训练于 **2,000 张合成图**；四向+翻转 TTA 在 0.6 仅 4→8，0.1 才 15 但伴随 4 个蓝底假框且顶部仍漏检。**停止在公开/合成域继续调阈值或 TTA**；下一步必须补真实密集手牌训练数据，否则不接 App。
+
+**状态**：Active（脚本、manifest、资产修复、单测与文档已落盘；未 commit）
+
+---
+
+## ADR-0039 · 2026-11-02 · 手牌候选按可见左上角与牌面墨迹门控
+
+**决策**：目视对比 `case10` 叠加图与 27 个手工牌角框后，在 `detect_card_corners()` 中增加可见左上角先验（`top.x>=0.8`、`left.y>=0.8`，并限制两条边的斜率），收紧白牌/亮度采样；在 `HandCornerEngine` 中增加裁框白牌比例 `>=0.60`、黑/红墨迹比例 `>=0.018` 的门控。**不改变 ADR-0038 的透视四边形和单应性拉正**。
+
+**理由**：叠加图里的主要误检来自桌面/木纹、朝外或 45° 的线对，以及空白牌边；这些候选的白牌/墨迹证据明显弱于真实点数/花色区域。先用低成本门控收缩候选集，再交给分类器。
+
+**约束**：① 当前只保留手牌中直立的左上角，极端旋转/倒置牌会被先验排除；② `case10` 从 80 个候选降到 54 个，但仍不是 27/27，目视真值 30px 内约 13/27，漏检和错配仍存在；③ 18 项单测覆盖透视四边形、单应性、左上角先验和墨迹门控，不覆盖真实手牌全量召回；④ 不替换 Android，不构成 T4/T5 或发布证据。
+
+**状态**：Active（代码、测试、README、状态已落盘；未 commit）
+
+---
+
+## ADR-0041 · 2026-11-03 · 牌角候选排序按“双长边支持”条件启用
+
+**决策**：`select_corner_predictions()` 默认继续按 `ink, white, score` 排序；仅当同一张图内至少有 **15** 个候选同时具备两条 `>=50px` 的检测边时，才使用 `ink + 0.25*white + 0.5*normalized_edge` 的质量分，否则完全退回默认排序。`HandCornerEngine` 仍保留 80 个候选、25px NMS、top-27 输出。**只改 Python 离线参考实现的候选排序（不参与 Kotlin/Android App 运行时），不改 ADR-0039 的几何、门控和 Android 路径。**
+
+**理由**：`auto_case53~82` 的 30 张生成图显示候选排序是主要瓶颈；无条件加入边长质量把生成图 top-27 从 393/810 提到约 488/810，但在真实已签核 case18/19/21 上从 32/82 掉到 26/82。真实图的真实牌角边通常更短、碎片更多，不能把生成长边当成通用证据。按整图双长边支持门控后，真实图保持 32/82，生成图仍提升到 471/810（+78）。
+
+**约束**：① 门控阈值是生成域/真实护栏联合结果，不是发布证据；② 单候选 `min>=50` 在 80 上限下真实图降到 29/82，已拒绝；③ 只测几何候选，不包含分类准确率、Android/T5.3；④ `case13` 未用于调参，`testcases` 生成图不进入真实 golden。
+
+**结果（2026-11-03）**：生成域 **393/810 → 471/810**；真实签核 **32/82（11/8/13）**；`test_card_engine.py` **28/28 PASS**；证据 `output/runs/20261103/corner-ranking/report.json` 与 `auto_case53-overlay.jpg`。
+
+**状态**：Active（代码、单测、README、状态已落盘；未 commit）
+
+---
+
+## ADR-0042 · 2026-11-03 · learned 牌角最终策略：基础 0.6 + 短场景 0.3 known-only 补漏
+
+**决策**：冻结 learned 牌角后处理为“基础阈值 0.6 + 短场景补漏”。`model_manifest.json` 新增 `fallback_score_threshold=0.3`；Kotlin `AdaptiveCornerPolicy` 仅在基础检测数少于 27 时运行 0.3 检测，低阈值候选与现有框按 IoU 0.5 去重，先分类且只有 known 才接纳，最终候选上限 27。`CardCornerDetector` 增加显式阈值入口，`LearnedCardRecognizer` 负责编排；默认引擎仍为 `HEURISTIC`。
+
+**理由**：`auto_case23~82` 的 60 张生成图共 1,620 个牌角，固定 0.6 为 **1609/1620**；短场景 0.3 补漏并过滤 unknown 后为 **1615/1620、0 误检**，留出 **807/810**、调参 **808/810**，分类 exact **1.0**。继续降低阈值只会引入误检；生成域已接近饱和。真实 case18/19/21 没有逐牌角 quad，公开真实图也没有 27 张逐角真值，因此无法再提供有效的同口径评测，不能把继续扫参当成优化。
+
+**约束**：① 该结果是生成域证据，不是 T5.3、真实 test 或发布证据；② `MainActivity`/默认引擎未切换到 learned，T5.3 仍 `NOT_RUN`；③ manifest 版本升到 `20261102.4`，模型文件 hash 不变；④ 若未来补到真实逐牌角/27 张签核数据，应重新评估 fallback 是否保留，而不是直接在旧数据上继续调参。
+
+**状态**：Active（Kotlin、manifest、JVM 测试、状态与任务文档已落盘；未 commit）
+
+---
+
+## ADR-0043 · 2026-11-03 · 停止本地识别引擎自动化优化并冻结最终策略
+
+**决策**：本地识别引擎优化到此为止。最终策略固定为基础 detector threshold `0.6`；仅当检测数少于 27 时用 `0.3` 补漏，低阈值候选按 IoU `0.5` 去重、仅接纳 known 分类，最终上限 27。该策略已落到 Kotlin `AdaptiveCornerPolicy` 与 `model_manifest.json`。不再进行阈值扫描、TTA、候选排序或合成域微调。
+
+**理由**：生成域已饱和，固定 0.6 为 **1609/1620**，最终策略 **1615/1620、0 误检**；留出 **807/810**、调参 **808/810**。剩余漏检只有 5 个，继续降阈值开始引入误检。真实 `case18/19/21` 没有逐牌角 quad，公开真实图也没有 27 张逐角真值；在缺少真实密集手牌/逐牌角签核的情况下，继续自动化搜索没有可验证收益，只会过拟合生成域。
+
+**清理**：`model_training/annotations.json` 删除 15 个无对应图片的 `IMG_20260809_*` key / 310 框，保留 9 图/242 框；删除 `model_training/output/obb_dataset_v2`、缓存和误建文件；清理 `output/` 下旧预览、临时预测、无日期 run、重复 sweep/check/crop 集及已放弃的 T5.3p 候选中间产物。保留最终 benchmark、模型/打包证据和当前训练数据。共释放约 **7.1 GB**。
+
+**约束**：① 默认引擎仍为 `HEURISTIC`，`MainActivity` 未切换，T5.3 仍 `NOT_RUN`；② 本次清理不改变评分 V4.2、已部署模型 hash 或最终策略；③ 只有新增真实密集手牌、逐牌角可见性签核和 `release-qa` 后，才重新评估 learned 默认切换或恢复优化。
+
+**状态**：Active（清理与冻结已落盘；未 commit）
+
+**后续（ADR-0044）**：本条中“默认引擎仍为 `HEURISTIC`、`MainActivity` 未切换”的约束已被取消；learned 现在默认启用，模型失败仍回退启发式。优化冻结和 T5.3 未完成事实不变。
+
+---
+
+## ADR-0044 · 2026-11-03 · 取消 T5.3 默认启用门禁，learned 成为默认引擎
+
+**决策**：① 取消“未过 T5.3 不得默认启用 learned”的约束；`RecognitionEngine.DEFAULT` 和 `CardRecognizer` 默认值改为 `LEARNED`。② `MainActivity` 通过 `ModelAssets.load()` 加载 APK 内模型，成功时把 `LearnedCardRecognizer` 与模型版本注入 `CardRecognizer`；加载失败则把原因带入 `learnedUnavailableReason`。③ 任何加载失败、manifest/hash 校验失败、推理异常、超时、牌角不足或可用牌少于 5 张仍回退启发式，并在本地识牌状态显示警告。④ T5.3 继续作为未完成的质量证据，不因本次启用而改写为 PASS，也不再把 T5.3 当作默认启用前置门禁。
+
+**理由**：用户明确要求 learned 路径真正参与识别，并取消 T5.3 默认门禁。此前 learned 只被编译、未被生产入口调用；`MainActivity` 构造默认 `HEURISTIC` 且 `learned=null`，`ModelAssets.load()` 没有调用者，导致 `AdaptiveCornerPolicy` 只在 JVM 测试中执行。
+
+**约束**：① 模型资产仍必须通过 `ModelManifest`/size/SHA-256 校验；不得绕过加载失败回退。② `VisualCardCodec` 条码快速路径仍优先于模型。③ `SHADOW` 语义不变：跑模型但不采用结果。④ T5.3、真实密集手牌、逐牌角可见性和 `release-qa` 仍未完成；不得把生成域 benchmark 或本次默认切换写成发布验收。⑤ 本次未在真机验证模型加载耗时、内存和识别效果；这些仍是未验证风险。
+
+**取代关系**：只取代 ADR-0042/0043 中“默认引擎保持 `HEURISTIC` / `MainActivity` 未切换”的部分；最终牌角策略、优化冻结和 T5.3 未完成事实不变。
+
+**状态**：Active（Kotlin 接线、默认值、测试与文档已落盘；未 commit）
+
+---
+
+## ADR-0045 · 2026-11-03 · 方案 A 补缺只在严格 A/B 证明收益后接入 HYBRID
+
+**决策**：新增 `model_training/hybrid_eval.py`，比较 learned 单独、heuristic 单独、`learned + heuristic 只补缺`。补缺只添加 learned 尚未产出的牌面副本，不替换 learned，不使用真值选择补哪张。严格 A/B 必须输入真实 Android heuristic 预测 JSONL；桌面 `card_engine.py` 只能作为明确标记的 proxy，不能授权 HYBRID。
+
+**理由**：用户希望通过 heuristic 补 learned 的漏牌，但必须先用同一批真实签核图验证 per-card、full-scene 和 confident error。9 张签核图的 proxy 诊断中，补缺把 per-card 从 **0.0992** 提到 **0.1322**，但 full-scene 仍为 **0**，confident error 从 **0.1724** 升到 **0.2558**；不满足接入条件。
+
+**约束**：① 报告固定 `formal_t5_3=false`、`release_eligible=false`；② proxy 不得写成 Android heuristic 或 A/B；③ 严格 A/B 缺失时状态为 `BLOCKED`，不得用 proxy 伪造通过；④ 补缺不得替换 learned 牌、不得用真值挑选候选；⑤ 只有 per-card 与 full-scene 同时提升且 confident error 未明显增加，才考虑实现 `HYBRID` 运行时。
+
+**状态**：Active（脚本、proxy 报告、单测与状态文档已落盘；严格 A/B 未执行；未 commit）
+
+**后续（ADR-0046）**：按用户指令，App 已落地“只补缺”的方案 A；这不是本 ADR 所述需要严格 A/B 才启用的 HYBRID/冲突仲裁。
+
+---
+
+## ADR-0046 · 2026-11-03 · App 采用方案 A 的补缺实现，不启用冲突仲裁
+
+**决策**：① `CardRecognizer` 在 learned 成功且牌数少于 27 时，再调用原 heuristic 路径；② 新增 `fillMissingCards()`，按 `(rank, suit)` 计数，只追加 learned 尚未产出的副本，最多两副（同牌面 2 张），不替换 learned 牌，不按真值挑选；③ 所有补入牌设置 `Card.needsReview=true`，手牌 chip 显示“需核对”，人工校正后清除；④ 补入数量计入 `RecognitionStats.unknown` 并产生警告；⑤ 保留 learned 失败回退 heuristic。
+
+**理由**：用户明确要求实际采用方案 A，仅补缺，不做冲突仲裁；learned 仍是主结果，heuristic 只在不足 27 张时补漏。
+
+**约束**：① 这不是 `HYBRID`，也不实现冲突仲裁或替换 learned 牌；② 两副上限和 27 张上限必须在补缺函数内保证；③ 本实现不构成 T5.3、真实 test 或发布验收；④ 本次只完成 JVM 测试、debug 构建和真机安装，未执行真机识图效果/耗时/内存验收；⑤ 未提交、未推送。
+
+**验证**：`./gradlew :app:testDebugUnitTest :app:assembleDebug` 成功；**568 tests / 0 failures / 0 errors**；`adb install -r` 成功，设备 **LIO-N29（Android 10 / API 29）**。新增 `MissingCardFillTest` 5 项。
+
+**状态**：Active（代码、测试、构建、真机安装已落盘；未 commit）
