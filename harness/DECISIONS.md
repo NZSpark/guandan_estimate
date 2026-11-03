@@ -571,3 +571,17 @@
 **验证**：`./gradlew :app:testDebugUnitTest :app:assembleDebug` 成功；**568 tests / 0 failures / 0 errors**；`adb install -r` 成功，设备 **LIO-N29（Android 10 / API 29）**。新增 `MissingCardFillTest` 5 项。
 
 **状态**：Active（代码、测试、构建、真机安装已落盘；未 commit）
+
+---
+
+## ADR-0047 · 2026-11-03 · 识别调度以“已回收数 == 计划数”为完成判据，`pump()` 为唯一派发点
+
+**决策**：① `RecognitionWorker` 增加 `isDrained`（队列空与在飞为 0 同一临界区判定），不再从外部组合读取 `inFlight`/`isExhausted`；② `CardRecognizer.heuristic()` 的 `pump()` 成为唯一派发点，`next()` 返回 null 即 `return`，不再落到循环后的完成判断；③ OCR 成功/失败回调只做 `release` + `settle()`，再在 `finished` 保护下调用一次 `pump()`；④ 完成判据由“在飞为 0”改为“已回收数 ≥ 计划数”，`settled` 只在 `release` 内自增。
+
+**理由**：原实现中 `inFlight`/`isExhausted` 为两次独立加锁读取，回调线程与主循环交错时同一 pass 会被重复派发，`release` 次数大于 `next` 次数导致计数失衡；完成条件依赖两个变量同时成立的时序，任何一方先读到不满足就递归重派，`finish()` 永不执行。改为回收计数判据后，完成状态只依赖单调递增的计数器，与派发时序解耦。
+
+**约束**：① 不得在回调中直接判定完成或重复派发；② `settled` 只能由 `release` 自增，禁止外部写入；③ 派发与回收必须在 `RecognitionWorker` 的锁内完成计数变更；④ 本次仅为时序缺陷修复，不改变识别算法、阈值或方案 A 补缺逻辑；⑤ 时序问题单测覆盖不到，真机验证为一次性回归证据，不构成 T5.3 或发布验收。
+
+**验证**：`./gradlew testDebugUnitTest` 通过（24 项）；`assembleDebug` + `adb install -r` 到 **LIO-N29（Android 10 / API 29）** 成功；真机导入图片识别完成 **27 张 + 2 条警告**并正常结束。用户确认人工验证通过。
+
+**状态**：Active（已提交并推送；未发布）

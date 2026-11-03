@@ -1,7 +1,15 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-11-03（learned 默认 + 方案 A 补缺已落到 App；debug 构建成功并安装到 LIO-N29；本地优化仍冻结；已提交并推送；`model_training/` 已移除；未发布。）
+> 最后更新：2026-11-03（修复识别调度死循环，单图真机验证通过；learned 默认 + 方案 A 补缺已落到 App；本地优化仍冻结；`model_training/` 已移除；未发布。）
+
+## 2026-11-03 修复识别调度死循环（P0）
+
+- **现象**：连续导入图片时，识别到第二张牌后卡住空转，不结束、不出结果。
+- **根因**：`CardRecognizer.heuristic()` 的 `pump()` 可重入但非重入安全——`inFlight`/`isExhausted` 为两次独立加锁读取，OCR 回调与主循环交错时重复派发同一个 pass，导致 `release` 多于 `next`、计数失衡；完成判据依赖 `isExhausted && inFlight == 0` 的时序，任一条件短暂不满足即递归重派，`finish()` 永不执行。
+- **修复**：① `RecognitionWorker` 新增 `isDrained`（队列空与在飞为 0 在同一临界区判定）；② `pump()` 收敛为唯一派发点，`next()` 返回 null 直接 return，回调只做 `release` + `settle()` + 受 `finished` 保护的 `pump()`；③ 完成判据改为“已回收数 ≥ 计划数”（`settled` 仅在 `release` 内自增）。
+- **验证**：`./gradlew testDebugUnitTest` 成功，24 项单测通过；`assembleDebug` + `adb install -r` 到 LIO-N29 成功；真机导入图片识别到 **27 张、2 条警告**（1 张低置信度需核对、heuristic 补入 ♣6），流程正常结束，未再卡住。用户确认真机验证通过。
+- **边界**：上述死循环属时序问题，单测无法覆盖 OCR 回调交错；本次仅以真机单图识别验证恢复，未做多图连续压力与性能/内存验收，T5.3 仍 `NOT_RUN`。
 
 ## 2026-11-03 本地识别引擎优化冻结
 

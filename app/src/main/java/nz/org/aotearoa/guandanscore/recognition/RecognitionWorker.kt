@@ -141,6 +141,10 @@ class RecognitionWorker(
         }
     }
 
+    /** 队列已空且所有已派发的 pass 都已回收；调度方据此判定完成，不再依赖调用时序。 */
+    val isDrained: Boolean
+        get() = synchronized(lock) { queue.isEmpty() && running == 0 }
+
     fun releaseAll(passes: Iterable<RenderedPass>) = passes.forEach(::release)
 
     private fun render(plan: PassPlan): RenderedPass = when (plan.kind) {

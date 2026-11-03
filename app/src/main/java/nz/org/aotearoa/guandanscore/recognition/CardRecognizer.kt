@@ -274,26 +274,32 @@ class CardRecognizer(
             done(finalize(found, bitmap, extraIssues, trace, System.currentTimeMillis() - started))
         }
 
+        // 单点调度：只有这里会派发新 pass。回调里不再递归调用 pump，避免同一个 pass 被
+        // 并发派发两次、inFlight/isExhausted 判断相互竞争导致永远无法 finish。
+        val settled = worker.planned
+        fun settle() {
+            if (worker.settled >= settled) finish()
+        }
+
         fun pump() {
             if (finished) return
-            while (worker.inFlight < worker.maxInFlight &&
-                !worker.isExhausted &&
-                !worker.shouldStop(found.size)
-            ) {
-                val pass = worker.next() ?: break
+            while (!worker.isExhausted && !worker.shouldStop(found.size)) {
+                val pass = worker.next() ?: return
                 client.process(InputImage.fromBitmap(pass.bitmap, 0))
                     .addOnSuccessListener { text ->
                         collect(text, pass, found)
                         worker.release(pass)
-                        if (worker.isExhausted && worker.inFlight == 0) finish() else pump()
+                        settle()
+                        if (!finished) pump()
                     }
                     .addOnFailureListener { error ->
                         errors += error
                         worker.release(pass)
-                        if (worker.isExhausted && worker.inFlight == 0) finish() else pump()
+                        settle()
+                        if (!finished) pump()
                     }
             }
-            if (!finished && worker.isExhausted && worker.inFlight == 0) finish()
+            settle()
         }
         pump()
     }
