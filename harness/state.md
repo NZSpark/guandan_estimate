@@ -1,7 +1,7 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-11-03（learned 默认 + 方案 A 补缺已落到 App；debug 构建成功并安装到 LIO-N29；本地优化仍冻结；未提交、未发布。）
+> 最后更新：2026-11-03（learned 默认 + 方案 A 补缺已落到 App；debug 构建成功并安装到 LIO-N29；本地优化仍冻结；已提交并推送；`model_training/` 已移除；未发布。）
 
 ## 2026-11-03 本地识别引擎优化冻结
 
@@ -19,7 +19,7 @@
 
 ## 2026-11-03 方案 A：learned + heuristic 补缺（非发布）
 
-- 新增 `model_training/hybrid_eval.py`：learned 主结果；heuristic 只补 learned 未产出的牌面副本，不替换 learned，不用真值决定补哪张。
+- 离线补缺评估脚本已完成（`hybrid_eval.py`）；按用户要求 `model_training/` 已从仓库移除，证据保留在 `output/runs/20261103/hybrid-eval-*/report.json`（`output/` 被忽略）。
 - 严格 A/B 需要真实 Android heuristic JSONL，当前没有，状态 `BLOCKED`；桌面 `card_engine.py` 仅作明确标记的 proxy，不能授权 HYBRID。
 - 9 张签核真实图 proxy 诊断（8 training + 1 validation）：learned per-card **0.0992**、heuristic proxy **0.0496**、补缺 **0.1322**；full-scene 均 **0**，confident error **0.1724 → 0.2558**。因此当前 **DO_NOT_ENABLE**，不接入 HYBRID。
 - 证据：`output/runs/20261103/hybrid-eval-proxy/report.json`、`hybrid-eval-strict/report.json`、`hybrid-eval-learned-only/report.json`；报告固定 `formal_t5_3=false`、`release_eligible=false`。
@@ -51,5 +51,6 @@
 ## 当前任务
 
 - 本地识别引擎：**FROZEN**，不再做自动化参数/排序/TTA 优化。
+- `model_training/` 训练/评估工具链已移除；App 构建不依赖该目录，已提交模型资产在 `app/src/main/assets/models/`。
 - 评分 V4.2 已落地；当前分支 `airecognize`。
 - learned 已是默认；方案 A 的补缺路径已落到 App 并安装到真机。T5.3 继续作为质量证据，当前仍 `NOT_RUN`；严格 A/B 仍缺真实 Android heuristic 预测，proxy 不支持 HYBRID/冲突仲裁。只有补充真实密集手牌、逐牌角可见性和 `release-qa` 签核后，才重新评估优化是否解冻。
