@@ -1,6 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 设计系统 Token（doc/ui_design.md §8.2）。新增颜色一律先加到这里。 -->
     <color name="green_900">#123B2A</color>
     <color name="green_700">#216A4B</color>
     <color name="cream">#FAF7EF</color>
     <color name="gold">#D8A441</color>
+
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F0EEE7</color>
+    <color name="text_primary">#1B1F1C</color>
+    <color name="text_secondary">#59645E</color>
+    <color name="error">#B3261E</color>
+    <color name="success">#216A4B</color>
+    <color name="outline">#D7D3C8</color>
+
+    <!-- 牌面文字：红心/方块红，黑桃/梅花深色。 -->
+    <color name="card_red">#B3261E</color>
+    <color name="card_black">#1B1B1F</color>
 </resources>

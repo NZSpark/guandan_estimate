@@ -2,23 +2,132 @@ package nz.org.aotearoa.guandanscore.recognition
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.graphics.PointF
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import nz.org.aotearoa.guandanscore.imaging.VisualCardCodec
 import nz.org.aotearoa.guandanscore.model.*
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlin.math.hypot
 
-data class RecognitionResult(val cards: List<Card>, val warnings: List<String>)
+/** T4.5: 警告分级。INFO 只记录不打断，WARNING 需要人工核对，ERROR 表示该路径失败。 */
+enum class IssueLevel { INFO, WARNING, ERROR }
 
-class CardRecognizer(context: Context) {
+data class RecognitionIssue(val level: IssueLevel, val text: String)
+
+/** T4.5: 分阶段计数，供 UI 显示“待核对数量”而不是只给一句模糊提醒。 */
+data class RecognitionStats(
+    val engine: RecognitionEngine = RecognitionEngine.DEFAULT,
+    val detected: Int = 0,
+    val classified: Int = 0,
+    val unknown: Int = 0,
+    val merged: Int = 0,
+    val elapsedMillis: Long = 0,
+    val modelVersion: String? = null,
+    val learnedStatus: String = "off",
+    val learnedReason: String? = null,
+)
+
+enum class RecognitionDisplayState { SUCCESS, PARTIAL, FAILED }
+
+data class RecognitionSummary(
+    val state: RecognitionDisplayState,
+    val cardCount: Int,
+    val reviewCount: Int,
+    val message: String,
+)
+
+data class RecognitionResult(
+    val cards: List<Card>,
+    val warnings: List<String>,
+    val issues: List<RecognitionIssue> = warnings.map { RecognitionIssue(IssueLevel.WARNING, it) },
+    val stats: RecognitionStats = RecognitionStats(),
+) {
+    /** 需要人工核对的张数（低置信度 + 缺失张数）。 */
+    val reviewCount: Int get() = stats.unknown
+}
+
+/** T4.5: 结果 → UI 状态的唯一映射，避免 UI 自己再判一次“成功/部分/失败”。 */
+fun RecognitionResult.summary(): RecognitionSummary {
+    val actionable = warnings.filter { it.isNotBlank() }
+    val state = when {
+        cards.isEmpty() && actionable.isNotEmpty() -> RecognitionDisplayState.FAILED
+        actionable.isNotEmpty() -> RecognitionDisplayState.PARTIAL
+        else -> RecognitionDisplayState.SUCCESS
+    }
+    val message = when (state) {
+        RecognitionDisplayState.FAILED -> actionable.joinToString("；")
+        RecognitionDisplayState.PARTIAL -> buildString {
+            append("识别 ${cards.size} 张，有 ${actionable.size} 条警告")
+            if (reviewCount > 0) append("，$reviewCount 张需核对")
+        }
+        RecognitionDisplayState.SUCCESS -> "识别 ${cards.size} 张"
+    }
+    return RecognitionSummary(state, cards.size, reviewCount, message)
+}
+
+/** 模型路径的决策记录，写进 [RecognitionStats] 便于现场排查。 */
+internal data class LearnedTrace(val status: String, val reason: String?, val outcome: LearnedOutcome? = null)
+
+/** 方案 A：learned 为主，heuristic 只补 learned 尚未产出的牌面副本。 */
+internal data class MissingCardFill(
+    val cards: List<Card>,
+    val added: List<Card>,
+)
+
+internal fun fillMissingCards(
+    primary: List<Card>,
+    secondary: List<Card>,
+    maxCards: Int = 27,
+): MissingCardFill {
+    val limit = maxCards.coerceAtLeast(0)
+    val cards = primary.take(limit).toMutableList()
+    val counts = cards.groupingBy { it.rank to it.suit }.eachCount().toMutableMap()
+    val available = secondary.groupingBy { it.rank to it.suit }.eachCount()
+    val added = mutableListOf<Card>()
+    for (candidate in secondary) {
+        if (cards.size >= limit) break
+        val key = candidate.rank to candidate.suit
+        val have = counts[key] ?: 0
+        val canAdd = minOf(2, available[key] ?: 0)
+        if (have >= canAdd) continue
+        val filled = candidate.copy(id = cards.size, needsReview = true)
+        cards += filled
+        added += filled
+        counts[key] = have + 1
+    }
+    return MissingCardFill(cards, added)
+}
+
+/**
+ * T4.4: 识别入口。
+ *
+ * - 条码路径永远最优先，命中即结束；
+ * - [engine] 默认 [RecognitionEngine.DEFAULT]（当前为 LEARNED）；
+ * - LEARNED 时模型加载失败/推理超时/牌角不足都会回退到启发式并记录原因；
+ * - SHADOW 只跑模型做对照，正式结果仍走启发式，不改变 UI。
+ */
+class CardRecognizer(
+    context: Context,
+    private val engine: RecognitionEngine = RecognitionEngine.DEFAULT,
+    private val learned: LearnedCardRecognizer? = null,
+    private val modelVersion: String? = null,
+    private val learnedTimeoutMillis: Long = 3_000L,
+    /** 模型加载失败原因；learned 为 null 时写入回退提示和统计。 */
+    private val learnedUnavailableReason: String? = null,
+) {
     private val client = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val templates = CardTemplateMatcher(context)
+    private val learnedExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "learned-inference").apply { isDaemon = true }
+    }
+    private val dispatch = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "learned-dispatch").apply { isDaemon = true }
+    }
     private data class Candidate(
         val rank: Rank,
         val suit: Suit,
@@ -28,93 +137,210 @@ class CardRecognizer(context: Context) {
         val exact: Boolean,
         val confidence: Double
     )
-    private data class Pass(
-        val bitmap: Bitmap,
-        val map: (Float, Float) -> PointF,
-        val areaScale: Float = 1f,
-        val temporary: Boolean
-    )
 
+    /**
+     * T0.2: pass 不再一次性建满 18 个 Bitmap，而是由 [RecognitionWorker] 按需渲染、
+     * 在 OCR 回调里立即回收；同时在飞行中的 pass 数量受 [RecognitionWorker.maxInFlight] 限制，
+     * 找到 27 张后提前结束。
+     */
     fun recognize(bitmap: Bitmap, done: (RecognitionResult) -> Unit, failed: (Exception) -> Unit) {
         VisualCardCodec.decode(bitmap)?.let {
-            done(RecognitionResult(it, listOf("已通过图片校验码准确读取 27 张牌")))
+            done(
+                RecognitionResult(
+                    cards = it,
+                    warnings = listOf("已通过图片校验码准确读取 27 张牌"),
+                    stats = RecognitionStats(
+                        engine = engine,
+                        detected = it.size,
+                        classified = it.size,
+                        modelVersion = modelVersion,
+                        learnedStatus = "barcode",
+                    ),
+                )
+            )
             return
         }
-        val passes = buildPasses(bitmap)
+        if (!EnginePolicy.runsModel(engine)) {
+            heuristic(bitmap, done, failed, emptyList(), LearnedTrace("off", "启发式路径"))
+            return
+        }
+        if (learned == null) {
+            val reason = learnedUnavailableReason ?: "模型未加载"
+            heuristic(
+                bitmap, done, failed,
+                listOf(RecognitionIssue(IssueLevel.WARNING, "模型路径回退：$reason")),
+                LearnedTrace("fallback", reason),
+            )
+            return
+        }
+        dispatch.execute {
+            val outcome = runLearned(bitmap)
+            when {
+                !EnginePolicy.usesModelResult(engine) -> heuristic(
+                    bitmap, done, failed,
+                    listOf(RecognitionIssue(IssueLevel.INFO, "shadow：${describe(outcome)}")),
+                    LearnedTrace("shadow", describe(outcome), outcome),
+                )
+
+                outcome is LearnedOutcome.Success && outcome.cards.size < 27 ->
+                    fillFromHeuristic(bitmap, outcome, done)
+
+                outcome is LearnedOutcome.Success -> done(learnedResult(outcome))
+
+                EnginePolicy.fallbackReason(engine, outcome) != null -> heuristic(
+                    bitmap, done, failed,
+                    listOf(RecognitionIssue(IssueLevel.WARNING, "模型路径回退：${describe(outcome)}")),
+                    LearnedTrace("fallback", describe(outcome), outcome),
+                )
+
+                else -> heuristic(bitmap, done, failed, emptyList(), LearnedTrace("off", "启发式路径"))
+            }
+        }
+    }
+
+    /** 方案 A：模型结果不足 27 张时，用 heuristic 只补缺，不替换 learned 牌。 */
+    private fun fillFromHeuristic(
+        bitmap: Bitmap,
+        outcome: LearnedOutcome.Success,
+        done: (RecognitionResult) -> Unit,
+    ) {
+        heuristic(
+            bitmap,
+            { heuristicResult ->
+                val fill = fillMissingCards(outcome.cards, heuristicResult.cards)
+                val addedLabels = fill.added.take(8).joinToString("、") { it.display }
+                val addedText = if (fill.added.size > 8) "$addedLabels 等 ${fill.added.size} 张" else addedLabels
+                val extraWarnings = if (fill.added.isEmpty()) emptyList() else listOf(
+                    "heuristic 补入 ${fill.added.size} 张需核对：$addedText"
+                )
+                val extraIssues = buildList {
+                    add(RecognitionIssue(IssueLevel.INFO, "模型识别 ${outcome.cards.size}/27，尝试 heuristic 补缺"))
+                    if (fill.added.isNotEmpty()) add(RecognitionIssue(IssueLevel.WARNING, extraWarnings.single()))
+                }
+                done(
+                    learnedResult(
+                        outcome,
+                        cards = fill.cards,
+                        extraWarnings = extraWarnings,
+                        extraIssues = extraIssues,
+                        unknownExtra = fill.added.size,
+                        mergedExtra = heuristicResult.stats.merged,
+                        elapsedExtra = heuristicResult.stats.elapsedMillis,
+                        learnedStatus = "used+heuristic_fill",
+                        learnedReason = "补入 ${fill.added.size} 张",
+                    )
+                )
+            },
+            { error ->
+                val reason = error.localizedMessage ?: error.javaClass.simpleName
+                done(
+                    learnedResult(
+                        outcome,
+                        extraWarnings = listOf("heuristic 补缺失败：$reason；仅保留模型结果"),
+                        extraIssues = listOf(
+                            RecognitionIssue(IssueLevel.WARNING, "heuristic 补缺失败：$reason；仅保留模型结果")
+                        ),
+                        learnedStatus = "used+heuristic_fill_failed",
+                        learnedReason = reason,
+                    )
+                )
+            },
+            listOf(RecognitionIssue(IssueLevel.INFO, "模型识别 ${outcome.cards.size}/27，尝试 heuristic 补缺")),
+            LearnedTrace("fill", "模型识别 ${outcome.cards.size}/27，尝试补缺", outcome),
+        )
+    }
+
+    /** T4.6: 启发式路径（原有 OCR + 模板匹配），模型任何故障都回到这里。 */
+    private fun heuristic(
+        bitmap: Bitmap,
+        done: (RecognitionResult) -> Unit,
+        failed: (Exception) -> Unit,
+        extraIssues: List<RecognitionIssue>,
+        trace: LearnedTrace,
+    ) {
+        val started = System.currentTimeMillis()
+        val worker = RecognitionWorker(bitmap)
         val found = mutableListOf<Candidate>()
         val errors = mutableListOf<Exception>()
-        var remaining = passes.size
-        fun finishOne() {
-            remaining--
-            if (remaining != 0) return
-            passes.filter { it.temporary }.forEach { it.bitmap.recycle() }
-            if (found.isEmpty() && errors.size == passes.size) { failed(errors.first()); return }
-            done(finalize(found, bitmap))
+        var finished = false
+
+        fun finish() {
+            if (finished) return
+            finished = true
+            if (found.isEmpty() && errors.size >= worker.planned) {
+                failed(errors.first())
+                return
+            }
+            done(finalize(found, bitmap, extraIssues, trace, System.currentTimeMillis() - started))
         }
-        passes.forEach { pass ->
-            client.process(InputImage.fromBitmap(pass.bitmap, 0)).addOnSuccessListener { text ->
-                text.textBlocks.flatMap { it.lines }.flatMap { it.elements }.forEach { e ->
-                    val box = e.boundingBox ?: return@forEach
-                    if (box.height() !in 10..(pass.bitmap.height * .25).toInt()) return@forEach
-                    val normalized = normalize(e.text)
-                    val ocrRank = Rank.parse(normalized)
-                    val template = templates.match(pass.bitmap, box)
-                    val rank = when {
-                        ocrRank == null && template != null && template.confidence >= .48 -> template.rank
-                        ocrRank != null && template != null && template.confidence >= .72 -> template.rank
-                        else -> ocrRank
-                    } ?: return@forEach
-                    val p = pass.map(box.centerX().toFloat(), box.centerY().toFloat())
-                    val suit = if (rank.value > 14) Suit.JOKER else explicitSuit(e.text)
-                        ?: template?.takeIf { it.rank == rank && it.suit != Suit.JOKER && it.confidence >= .46 }?.suit
-                        ?: classifySuit(pass.bitmap, box.centerX(), box.bottom, box.height())
-                    val sourceArea = (box.width() * box.height() / pass.areaScale).toInt()
-                    val exact = normalized == rank.label || normalized == "SJ" || normalized == "BJ"
-                    val confidence = when {
-                        exact && template?.rank == rank -> .98
-                        exact -> .86
-                        template?.rank == rank -> template.confidence
-                        else -> .55
+
+        // 单点调度：只有这里会派发新 pass。回调里不再递归调用 pump，避免同一个 pass 被
+        // 并发派发两次、inFlight/isExhausted 判断相互竞争导致永远无法 finish。
+        val settled = worker.planned
+        fun settle() {
+            if (worker.settled >= settled) finish()
+        }
+
+        fun pump() {
+            if (finished) return
+            while (!worker.isExhausted && !worker.shouldStop(found.size)) {
+                val pass = worker.next() ?: return
+                client.process(InputImage.fromBitmap(pass.bitmap, 0))
+                    .addOnSuccessListener { text ->
+                        collect(text, pass, found)
+                        worker.release(pass)
+                        settle()
+                        if (!finished) pump()
                     }
-                    found += Candidate(rank, suit, p.x, p.y, sourceArea, exact, confidence)
-                }
-                finishOne()
-            }.addOnFailureListener { errors += it; finishOne() }
+                    .addOnFailureListener { error ->
+                        errors += error
+                        worker.release(pass)
+                        settle()
+                        if (!finished) pump()
+                    }
+            }
+            settle()
         }
+        pump()
     }
 
     fun recognizeGenerated(bitmap: Bitmap): List<Card>? = VisualCardCodec.decode(bitmap)
 
-    private fun buildPasses(source: Bitmap): List<Pass> {
-        val out = mutableListOf(Pass(source, { x,y -> PointF(x,y) }, temporary = false))
-        listOf(-60f,-40f,-20f,20f,40f,60f,90f,180f).forEach { degrees -> out += rotatedPass(source,degrees) }
-        // A crop alone does not add detail: ML Kit still sees the same tiny glyph pixels. Upscale
-        // each overlapping tile so ranks in a wide fan (notably 750x498 test photos) reach a useful
-        // OCR size. Coordinates and areas are converted back to source-image space afterwards.
-        val cropW = (source.width*.55f).toInt(); val cropH = (source.height*.55f).toInt()
-        val zoom = if (minOf(source.width, source.height) < 900) 2.4f else 1.8f
-        for (fy in listOf(0f,.225f,.45f)) for (fx in listOf(0f,.225f,.45f)) {
-            val left = (source.width*fx).toInt().coerceAtMost(source.width-cropW)
-            val top = (source.height*fy).toInt().coerceAtMost(source.height-cropH)
-            val crop = Bitmap.createBitmap(source,left,top,cropW,cropH)
-            val enlarged = Bitmap.createScaledBitmap(crop, (cropW*zoom).toInt(), (cropH*zoom).toInt(), true)
-            crop.recycle()
-            out += Pass(enlarged, { x,y -> PointF(x/zoom+left,y/zoom+top) }, zoom*zoom, true)
+    private fun collect(text: Text, pass: RenderedPass, found: MutableList<Candidate>) {
+        text.textBlocks.flatMap { it.lines }.flatMap { it.elements }.forEach { e ->
+            val box = e.boundingBox ?: return@forEach
+            if (box.height() !in 10..(pass.bitmap.height * .25).toInt()) return@forEach
+            val normalized = normalize(e.text)
+            val ocrRank = Rank.parse(normalized)
+            val template = templates.match(pass.bitmap, box)
+            val rank = when {
+                ocrRank == null && template != null && template.confidence >= .48 -> template.rank
+                ocrRank != null && template != null && template.confidence >= .72 -> template.rank
+                else -> ocrRank
+            } ?: return@forEach
+            val p: PointF = pass.map(box.centerX().toFloat(), box.centerY().toFloat())
+            val suit = if (rank.value > 14) Suit.JOKER else explicitSuit(e.text)
+                ?: template?.takeIf { it.rank == rank && it.suit != Suit.JOKER && it.confidence >= .46 }?.suit
+                ?: classifySuit(pass.bitmap, box.centerX(), box.bottom, box.height())
+            val sourceArea = (box.width() * box.height() / pass.areaScale).toInt()
+            val exact = normalized == rank.label || normalized == "SJ" || normalized == "BJ"
+            val confidence = when {
+                exact && template?.rank == rank -> .98
+                exact -> .86
+                template?.rank == rank -> template.confidence
+                else -> .55
+            }
+            found += Candidate(rank, suit, p.x, p.y, sourceArea, exact, confidence)
         }
-        return out
     }
 
-    private fun rotatedPass(source:Bitmap,degrees:Float):Pass {
-        val transform=Matrix().apply { setRotate(degrees,source.width/2f,source.height/2f) }
-        val bounds=RectF(0f,0f,source.width.toFloat(),source.height.toFloat()).also(transform::mapRect)
-        transform.postTranslate(-bounds.left,-bounds.top)
-        val output=Bitmap.createBitmap(bounds.width().toInt()+1,bounds.height().toInt()+1,Bitmap.Config.ARGB_8888)
-        Canvas(output).apply { drawColor(android.graphics.Color.WHITE); drawBitmap(source,transform,Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)) }
-        val inverse=Matrix().also { transform.invert(it) }
-        return Pass(output,{x,y-> val pts=floatArrayOf(x,y); inverse.mapPoints(pts); PointF(pts[0],pts[1])},temporary=true)
-    }
-
-    private fun finalize(raw: List<Candidate>, bitmap: Bitmap): RecognitionResult {
+    private fun finalize(
+        raw: List<Candidate>,
+        bitmap: Bitmap,
+        extraIssues: List<RecognitionIssue> = emptyList(),
+        trace: LearnedTrace = LearnedTrace("off", null),
+        elapsedMillis: Long = 0L,
+    ): RecognitionResult {
         val radius = minOf(bitmap.width,bitmap.height)*.038f
         val clusters = mutableListOf<MutableList<Candidate>>()
         raw.sortedWith(compareByDescending<Candidate> { it.exact }.thenByDescending { it.area }).forEach { c ->
@@ -166,7 +392,83 @@ class CardRecognizer(context: Context) {
             add("\u7b2c\u4e09\u6b65\u82b1\u8272\u8bc6\u522b\uff1a${cards.size-uncertainSuits} \u5f20\u8f83\u53ef\u4fe1\uff0c$uncertainSuits \u5f20\u9700\u6838\u5bf9")
             addAll(warnings.drop(3))
         }
-        return RecognitionResult(cards,stagedWarnings)
+        val review = uncertainSuits + (27 - cards.size)
+        val issues = buildList {
+            extraIssues.forEach { add(it) }
+            stagedWarnings.forEach { add(RecognitionIssue(IssueLevel.WARNING, it)) }
+            if (review > 0) add(RecognitionIssue(IssueLevel.WARNING, "需核对 $review 张"))
+        }
+        return RecognitionResult(
+            cards = cards,
+            warnings = stagedWarnings + extraIssues.filter { it.level != IssueLevel.INFO }.map { it.text },
+            issues = issues,
+            stats = RecognitionStats(
+                engine = engine,
+                detected = located.size,
+                classified = cards.size,
+                unknown = review,
+                merged = (raw.size - clusters.size).coerceAtLeast(0),
+                elapsedMillis = elapsedMillis,
+                modelVersion = modelVersion,
+                learnedStatus = trace.status,
+                learnedReason = trace.reason,
+            ),
+        )
+    }
+
+    private fun runLearned(bitmap: Bitmap): LearnedOutcome {
+        val recognizer = learned ?: return LearnedOutcome.Unavailable("模型未就绪")
+        val future = learnedExecutor.submit<LearnedOutcome> { recognizer.recognize(bitmap) }
+        return try {
+            future.get(learnedTimeoutMillis, TimeUnit.MILLISECONDS)
+        } catch (error: TimeoutException) {
+            future.cancel(true)
+            LearnedOutcome.Unavailable("推理超时 ${learnedTimeoutMillis}ms")
+        } catch (error: Exception) {
+            LearnedOutcome.Unavailable("推理异常：${error.javaClass.simpleName}: ${error.message}")
+        }
+    }
+
+    private fun describe(outcome: LearnedOutcome): String = when (outcome) {
+        is LearnedOutcome.Success ->
+            "模型识别 ${outcome.cards.size} 张（检测 ${outcome.detections}，分类 ${outcome.classified}，未知 ${outcome.unknown}）"
+        is LearnedOutcome.Unavailable -> outcome.reason
+    }
+
+    private fun learnedResult(
+        outcome: LearnedOutcome.Success,
+        cards: List<Card> = outcome.cards,
+        extraWarnings: List<String> = emptyList(),
+        extraIssues: List<RecognitionIssue> = emptyList(),
+        unknownExtra: Int = 0,
+        mergedExtra: Int = 0,
+        elapsedExtra: Long = 0,
+        learnedStatus: String = "used",
+        learnedReason: String? = null,
+    ): RecognitionResult {
+        val headline = "模型识别：${outcome.cards.size} 张（检测 ${outcome.detections}，分类 ${outcome.classified}）"
+        val actionable = buildList {
+            if (outcome.unknown > 0) add("${outcome.unknown} 张置信度低需核对")
+            if (outcome.merged > 0) add("合并 ${outcome.merged} 个重复检测")
+        }
+        val warnings = actionable + extraWarnings
+        return RecognitionResult(
+            cards = cards,
+            warnings = warnings,
+            issues = listOf(RecognitionIssue(IssueLevel.INFO, headline)) +
+                actionable.map { RecognitionIssue(IssueLevel.WARNING, it) } + extraIssues,
+            stats = RecognitionStats(
+                engine = engine,
+                detected = outcome.detections,
+                classified = cards.size,
+                unknown = outcome.unknown + unknownExtra,
+                merged = outcome.merged + mergedExtra,
+                elapsedMillis = outcome.elapsedMillis + elapsedExtra,
+                modelVersion = modelVersion,
+                learnedStatus = learnedStatus,
+                learnedReason = learnedReason,
+            ),
+        )
     }
 
     private fun normalize(s: String): String {

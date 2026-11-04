@@ -169,72 +169,12 @@ class AiRecognitionClient {
         error("AI 没有返回识别文本")
     }
 
-    internal fun parseCards(text: String): List<Card> {
-        val start = text.indexOf('{')
-        if (start >= 0) {
-            val end = text.lastIndexOf('}')
-            if (end > start) {
-                try {
-                    val clean = text.substring(start, end + 1)
-                    val array = JSONObject(clean).optJSONArray("cards")
-                    if (array != null) {
-                        val parsed = parseCardsFromArray(array)
-                        if (parsed.isNotEmpty()) return parsed
-                    }
-                } catch (_: Exception) {
-                    // Truncated or slightly invalid JSON, fall back to resilient extractor
-                }
-            }
-        }
-        val fallback = parseCardsResilient(text)
-        if (fallback.isNotEmpty()) return fallback
-        error("AI 返回内容未能解析出有效的手牌数据")
-    }
+    // 解析逻辑已抽取到 AiCardResponseParser，此处保留委托以维持既有调用点与测试。
+    private val parser = AiCardResponseParser()
 
-    private fun parseCardsFromArray(array: JSONArray): List<Card> {
-        require(array.length() <= 27) { "AI 返回超过27张牌" }
-        return (0 until array.length()).mapNotNull { id ->
-            val item = array.optJSONObject(id) ?: return@mapNotNull null
-            val rawRank = item.optString("rank")
-            val rank = Rank.parse(rawRank) ?: parseFallbackRank(rawRank) ?: return@mapNotNull null
-            val suit = parseSuit(item.optString("suit")) ?: return@mapNotNull null
-            Card(id, rank, if (rank.value > 14) Suit.JOKER else suit.takeUnless { it == Suit.JOKER } ?: Suit.SPADE)
-        }
-    }
+    internal fun parseCards(text: String): List<Card> = parser.parse(text)
 
-    internal fun parseCardsResilient(text: String): List<Card> {
-        val pattern = Regex("""\{[^{}]*?"(?:rank|suit)"[^{}]*?\}""", RegexOption.DOT_MATCHES_ALL)
-        val matches = pattern.findAll(text)
-        val cards = mutableListOf<Card>()
-        for (m in matches) {
-            if (cards.size >= 27) break
-            try {
-                val obj = JSONObject(m.value)
-                val rawRank = obj.optString("rank")
-                val rank = Rank.parse(rawRank) ?: parseFallbackRank(rawRank) ?: continue
-                val suit = parseSuit(obj.optString("suit")) ?: continue
-                cards += Card(cards.size, rank, if (rank.value > 14) Suit.JOKER else suit.takeUnless { it == Suit.JOKER } ?: Suit.SPADE)
-            } catch (_: Exception) {
-                continue
-            }
-        }
-        return cards
-    }
-
-    private fun parseSuit(raw: String): Suit? = when (raw.trim().uppercase()) {
-        "C", "CLUB", "CLUBS" -> Suit.CLUB
-        "D", "DIAMOND", "DIAMONDS" -> Suit.DIAMOND
-        "H", "HEART", "HEARTS" -> Suit.HEART
-        "S", "SPADE", "SPADES" -> Suit.SPADE
-        "JOKER" -> Suit.JOKER
-        else -> null
-    }
-
-    private fun parseFallbackRank(raw: String): Rank? = when (raw.trim().uppercase()) {
-        "SMALL_JOKER", "SMALL JOKER", "BLACK_JOKER", "BLACK JOKER" -> Rank.SMALL_JOKER
-        "BIG_JOKER", "BIG JOKER", "RED_JOKER", "RED JOKER" -> Rank.BIG_JOKER
-        else -> null
-    }
+    internal fun parseCardsResilient(text: String): List<Card> = parser.parseResilient(text)
 
     private fun errorMessage(response: String) = try {
         val json = JSONObject(response)
@@ -244,6 +184,6 @@ class AiRecognitionClient {
     }
 
     companion object {
-        const val PROMPT = """识别照片中的掼蛋手牌。第一步定位并统计可见扑克牌；第二步识别每张牌的点数；第三步重点观察点数正下方的小花色图形来识别花色。只返回JSON，不要Markdown：{"count":整数,"cards":[{"rank":"2|3|4|5|6|7|8|9|10|J|Q|K|A|SJ|BJ","suit":"C|D|H|S|JOKER"}]}。不要猜测被完全遮挡的牌，不要重复同一物理位置。最多27张。"""
+        const val PROMPT = AiCardResponseParser.PROMPT
     }
 }

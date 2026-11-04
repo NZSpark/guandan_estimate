@@ -1,0 +1,618 @@
+package nz.org.aotearoa.guandanscore.recognition.site
+
+import nz.org.aotearoa.guandanscore.recognition.GeminiScripts
+
+/**
+ * 注入 DeepSeek 页面的 JavaScript 单一事实来源。
+ *
+ * 与 [GeminiScripts] 完全独立：DeepSeek 的输入框是 React 受控 `textarea`、
+ * 发送按钮是 `div[role=button]`、主提交路径是 Enter keydown，和 Gemini 的
+ * `rich-textarea [contenteditable]` + 发送按钮点击不是一套东西。
+ *
+ * 规则：
+ * - 静态字符串；动态参数用 [GeminiScripts.quote] JSON 编码。
+ * - 每个脚本返回可解析 JSON，带 `ok` 与失败时的 `why`。
+ * - 不读 Cookie / 令牌 / 图片 Base64。
+ * - 读回答用 `textContent`，不用 `innerText`（虚拟列表离屏行为空）。
+ *
+ * 选择器见 [DeepSeekSelectors]（已按 2026-10-28 真机实测回填）。
+ */
+object DeepSeekScripts {
+
+    private fun q(raw: String): String = GeminiScripts.quote(raw)
+
+    /** 只读诊断：各选择器命中数 + 页面基础状态。 */
+    fun diagnose(): String = """
+        (function() {
+          function count(sel) {
+            try { return document.querySelectorAll(sel).length; } catch (e) { return -1; }
+          }
+          var input = null;
+          try { input = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
+          var inputTag = input ? input.tagName.toLowerCase() : '';
+          return JSON.stringify({
+            ok: true,
+            href: location.href,
+            readyState: document.readyState,
+            innerHeight: window.innerHeight,
+            inputCount: count(${q(DeepSeekSelectors.input())}),
+            inputTag: inputTag,
+            inputEditable: !!(input && (input.isContentEditable || inputTag === 'textarea')),
+            sendCount: count(${q(DeepSeekSelectors.send())}),
+            responseCount: count(${q(DeepSeekSelectors.response())}),
+            fileInputCount: count(${q(DeepSeekSelectors.fileInput())}),
+            loginIndicatorCount: count(${q(DeepSeekSelectors.login())}),
+            passwordCount: count(${q(DeepSeekSelectors.password())}),
+            generatingCount: count(${q(DeepSeekSelectors.generating())}),
+            attachmentCount: count(${q(DeepSeekSelectors.attachment())}),
+            editableCount: count('div[contenteditable="true"]')
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * 读回答快照。
+     *
+     * 用 `textContent`：虚拟列表的离屏行 `innerText` 为空，会把“有答案”误判成“无答案”。
+     * 生成中信号缺失时 generating 为 false（不得作为完成前提）。
+     */
+    fun snapshot(): String = """
+        (function() {
+          var nodes;
+          try { nodes = document.querySelectorAll(${q(DeepSeekSelectors.response())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          var last = nodes && nodes.length > 0 ? nodes[nodes.length - 1] : null;
+          var text = last ? (last.textContent || '').trim() : '';
+          var generating = 0, password = 0, loginUi = 0, attach = 0;
+          try { generating = document.querySelectorAll(${q(DeepSeekSelectors.generating())}).length; } catch (e) {}
+          try { password = document.querySelectorAll(${q(DeepSeekSelectors.password())}).length; } catch (e) {}
+          try { loginUi = document.querySelectorAll(${q(DeepSeekSelectors.login())}).length; } catch (e) {}
+          // AI-042：发送前的输入区现状与可读会话标识（只读，不修改页面）。
+          var inputEl = null;
+          try { inputEl = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
+          // 附件必须**限定在 composer 内**：上一条消息的图片缩略图也是 blob:，
+          // 全局计数会在第二轮把历史图片误判成“待发送附件”（真机已复现）。
+          // 向上找到包含隐藏 input[type=file] 的最近容器，就是 composer root。
+          if (inputEl) {
+            // 真机 levels 实测（2026-10-30）：composer 附件在输入框上方第 3~5 层；
+            // 已发送消息里的图片从第 6 层才出现。固定取第 3 层，把历史图片排除在外。
+            var box = inputEl;
+            for (var bi = 0; bi < 3 && box.parentElement; bi++) box = box.parentElement;
+            try { attach = box.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length; } catch (e) {}
+          }
+          var inputText = inputEl ? (inputEl.value === undefined ? (inputEl.textContent || '') : inputEl.value) : '';
+          // 诊断：各祖先层附件命中数，用于把 composer 与历史消息区分开。
+          var levels = [];
+          if (inputEl) {
+            var lb = inputEl;
+            for (var li = 0; li < 8 && lb && lb.parentElement; li++) {
+              lb = lb.parentElement;
+              try { levels.push(lb.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length); }
+              catch (e) { levels.push(-1); }
+            }
+          }
+          var sessionId = '';
+          try {
+            var sm = (location.pathname || '').match(/\/a\/chat\/s\/([^\/?#]+)/);
+            sessionId = sm ? sm[1] : '';
+          } catch (e) {}
+          return JSON.stringify({
+            ok: true,
+            responseCount: nodes ? nodes.length : 0,
+            lastAnswerText: text,
+            generating: generating > 0,
+            passwordCount: password,
+            loginIndicatorCount: loginUi,
+            inputText: inputText,
+            attachmentCount: attach,
+            attached: attach > 0,
+            attachmentLevels: levels.join('|'),
+            sessionId: sessionId,
+            href: location.href
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * AI-008D：DeepSeek 页面结构深度探测（只读）。
+     *
+     * 在 [diagnose] 的计数之外，回答几个驱动层必须依赖的事实：
+     * - 输入框是否**唯一**且是**最内层**（外层 wrapper 也会命中选择器，写错会填到壳上）；
+     * - 发送按钮的**可点击判据**（`disabled` / `aria-disabled` / 尺寸为 0 都不能点）；
+     * - 回答节点的**容器标识**（class 前缀、层级深度），供快照脚本稳定定位；
+     * - 是否存在 **Shadow DOM**（有则 `querySelectorAll` 会漏，必须改遍历方式）。
+     */
+    fun deepProbe(): String = """
+        (function() {
+          function all(sel) {
+            try { return Array.prototype.slice.call(document.querySelectorAll(sel)); } catch (e) { return []; }
+          }
+          function box(el) {
+            if (!el) return null;
+            var r = el.getBoundingClientRect();
+            return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left), y: Math.round(r.top) };
+          }
+          function cls(el) {
+            if (!el) return '';
+            var c = el.className;
+            if (typeof c === 'object' && c && c.baseVal != null) c = c.baseVal;
+            return (c || '').toString().split(/\\s+/).filter(function (s) { return s.length > 0; }).slice(0, 4).join(' ');
+          }
+
+          var inputs = all(${q(DeepSeekSelectors.input())});
+          var input = inputs.length > 0 ? inputs[0] : null;
+          // 最内层判定：输入框内部不应再包含可编辑节点。
+          var innerEditable = 0;
+          if (input) {
+            try { innerEditable = input.querySelectorAll('[contenteditable="true"], textarea').length; } catch (e) {}
+          }
+
+          var sendEl = all(${q(DeepSeekSelectors.send())});
+          var send = sendEl.length > 0 ? sendEl[0] : null;
+          var sendBox = box(send);
+          var sendDisabled = !!(send && (send.disabled === true ||
+            (send.getAttribute && send.getAttribute('aria-disabled') === 'true')));
+          var sendClickable = !!send && !sendDisabled && sendBox !== null && sendBox.w > 0 && sendBox.h > 0;
+
+          var responses = all(${q(DeepSeekSelectors.response())});
+          var lastResponse = responses.length > 0 ? responses[responses.length - 1] : null;
+          var depth = 0, walk = lastResponse;
+          while (walk && walk.parentElement && depth < 32) { walk = walk.parentElement; depth++; }
+
+          // Shadow DOM：直接扫所有已知宿主 + 递归 open shadowRoot 计数。
+          var shadowHosts = 0;
+          (function scan(root) {
+            if (!root || !root.querySelectorAll) return;
+            var hosts = root.querySelectorAll('*');
+            for (var i = 0; i < hosts.length; i++) {
+              if (hosts[i].shadowRoot) { shadowHosts++; if (shadowHosts < 50) scan(hosts[i].shadowRoot); }
+            }
+          })(document);
+
+          return JSON.stringify({
+            ok: true,
+            href: location.href,
+            readyState: document.readyState,
+            innerHeight: window.innerHeight,
+            innerWidth: window.innerWidth,
+            dpr: window.devicePixelRatio || 1,
+            inputCount: inputs.length,
+            inputUnique: inputs.length === 1,
+            inputTag: input ? input.tagName.toLowerCase() : '',
+            inputId: input ? (input.id || '') : '',
+            inputClass: cls(input),
+            inputEditable: !!(input && (input.isContentEditable || (input.tagName || '').toLowerCase() === 'textarea')),
+            inputInnerEditableCount: innerEditable,
+            inputIsInnermost: innerEditable === 0,
+            inputBox: box(input),
+            sendCount: sendEl.length,
+            sendTag: send ? send.tagName.toLowerCase() : '',
+            sendAriaLabel: send ? (send.getAttribute('aria-label') || '') : '',
+            sendDisabled: sendDisabled,
+            sendBox: sendBox,
+            sendClickable: sendClickable,
+            responseCount: responses.length,
+            responseTag: lastResponse ? lastResponse.tagName.toLowerCase() : '',
+            responseClass: cls(lastResponse),
+            responseDepth: depth,
+            shadowHostCount: shadowHosts,
+            hasShadowDom: shadowHosts > 0
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * AI-009D：探测 `input[type=file]` 与上传按钮（只读，不触发选择器）。
+     *
+     * 只读 `accept` / `multiple` / 数量等属性；**不**在这里点 `.click()`，
+     * 因为实测 JS click 不满足 user activation，永远不会有 `onShowFileChooser`。
+     * 真实触发证据必须来自宿主侧 `onShowFileChooser` 日志。
+     */
+    fun fileInputProbe(): String = """
+        (function() {
+          var files = [];
+          try { files = Array.prototype.slice.call(document.querySelectorAll('input[type="file"]')); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          var items = files.map(function (f, i) {
+            var r = null;
+            try { r = f.getBoundingClientRect(); } catch (e) {}
+            return {
+              index: i,
+              // accept 实测有 2000+ 字符，logcat 单行会截断；只输出长度与是否含图片类型。
+              acceptLength: (f.getAttribute('accept') || '').length,
+              acceptHasImage: /image\//.test(f.getAttribute('accept') || '') || /\.(png|jpe?g|webp|gif|bmp)/i.test(f.getAttribute('accept') || ''),
+              acceptHead: (f.getAttribute('accept') || '').slice(0, 40),
+              multiple: f.multiple === true,
+              capture: f.getAttribute('capture') || '',
+              hidden: f.hidden === true || (r !== null && (r.width === 0 || r.height === 0)),
+              disabled: f.disabled === true
+            };
+          });
+          // 上传按钮候选：与输入区同一水平带内的小按钮（仅计数与标签，不点击）。
+          var labels = [];
+          try {
+            var input = document.querySelector(${q(DeepSeekSelectors.input())});
+            if (input) {
+              var ir = input.getBoundingClientRect();
+              var box = input;
+              for (var i = 0; i < 8 && box.parentElement; i++) box = box.parentElement;
+              var cands = box.querySelectorAll('div[role="button"], button');
+              for (var j = 0; j < cands.length; j++) {
+                var c = cands[j];
+                var cr = c.getBoundingClientRect();
+                if (cr.width <= 0 || cr.height <= 0) continue;
+                if (cr.top < ir.top - 60 || cr.top > ir.bottom + 60) continue;
+                var lab = (c.getAttribute('aria-label') || c.getAttribute('title') || '').toLowerCase();
+                labels.push(lab || (c.className || '').toString().slice(0, 40));
+              }
+            }
+          } catch (e) {}
+          return JSON.stringify({
+            ok: true,
+            fileInputCount: files.length,
+            fileInputs: items,
+            composerButtons: labels
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * AI-011D：探测是否存在可用的「停止生成」控件。
+     *
+     * 不只查 [DeepSeekSelectors.GENERATING]，还按**行为特征**扫描：
+     * 1. 预设选择器命中数；
+     * 2. 可见的 `button` / `div[role=button]` 中 aria-label/title/文本含 stop/停止/中止/cancel 的；
+     * 3. 发送按钮位置上是否在生成期被替换为方形「停止」图标（通过容器内 svg 数量粗判）。
+     *
+     * 只读，不点击任何按钮。0 命中时必须写明「不得作为结束判定前提」。
+     */
+    fun stopControlProbe(): String = """
+        (function() {
+          var out = { ok: true, presetCount: 0, labelHits: [], visibleButtonCount: 0, note: '' };
+          try { out.presetCount = document.querySelectorAll(${q(DeepSeekSelectors.generating())}).length; } catch (e) {}
+          var re = /(^|[\\s_-])(stop|abort|cancel|interrupt)([\\s_-]|$)|停止|中止|取消生成/i;
+          try {
+            var btns = document.querySelectorAll('button, div[role="button"]');
+            for (var i = 0; i < btns.length; i++) {
+              var b = btns[i];
+              var r = b.getBoundingClientRect();
+              if (r.width <= 0 || r.height <= 0) continue;
+              out.visibleButtonCount++;
+              var label = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim();
+              if (label && re.test(label)) {
+                out.labelHits.push({
+                  label: label.slice(0, 40),
+                  w: Math.round(r.width),
+                  h: Math.round(r.height),
+                  tag: b.tagName.toLowerCase(),
+                  cls: (b.className || '').toString().slice(0, 60)
+                });
+              }
+            }
+          } catch (e) {}
+          out.note = (out.presetCount === 0 && out.labelHits.length === 0)
+            ? 'no-stop-control: must-not-be-used-as-completion-signal'
+            : 'stop-control-candidate-found: verify-before-use';
+          return JSON.stringify(out);
+        })()
+    """.trimIndent()
+
+    /** 登录检测：必须同时有密码框与登录 UI。 */
+    fun loginCheck(): String = """
+        (function() {
+          var password = 0, loginUi = 0;
+          try { password = document.querySelectorAll(${q(DeepSeekSelectors.password())}).length; } catch (e) {}
+          try { loginUi = document.querySelectorAll(${q(DeepSeekSelectors.login())}).length; } catch (e) {}
+          return JSON.stringify({ ok: true, passwordCount: password, loginIndicatorCount: loginUi });
+        })()
+    """.trimIndent()
+
+    /**
+     * 填 prompt + 提交，**同一个 JS turn 内**完成（AI-172）。
+     *
+     * 与 Gemini 的关键差异：
+     * 1. `textarea.value = text` 不会通知 React（受控组件），必须走 prototype setter
+     *    再派发 `input` + `change`，否则发送按钮保持禁用。
+     * 2. 主提交路径是 **Enter keydown**；点发送按钮只跳新会话 URL、不发请求。
+     * 3. Enter 之后再兜底点一次发送按钮（若仍启用）。
+     *
+     * 为什么必须单 turn：`input` 事件后 DeepSeek 会重渲染 composer 并重新禁用发送按钮，
+     * 拆成「填文本」和「点发送」两次往返，第二次必撞 disabled（`all_disabled`）。
+     *
+     * 返回的是**诊断字段**，不是成败结论：真实成功仍需 `awaitSubmitStarted` 用快照确认。
+     * `sendDisabled=true` 表示页面上只有禁用的发送按钮，此时不得判为已提交。
+     */
+    fun fillAndSend(prompt: String): String = """
+        (function(text) {
+          var el;
+          try { el = document.querySelector(${q(DeepSeekSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+
+          el.focus();
+          var isTextarea = el.tagName && el.tagName.toLowerCase() === 'textarea';
+          try {
+            if (isTextarea) {
+              var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+              setter.call(el, text);
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              if (el.value !== text) {
+                try { el.select(); document.execCommand('insertText', false, text); } catch (e) {}
+              }
+            } else if (el.isContentEditable) {
+              el.textContent = text;
+              el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+            } else {
+              return JSON.stringify({ ok: false, why: 'unsupported-input-type' });
+            }
+          } catch (e) {
+            return JSON.stringify({ ok: false, why: 'fill-failed' });
+          }
+
+          var filled = (el.value === undefined ? el.textContent : el.value) === text;
+
+          // AI-173 / AI-175：发送按钮可用是提交的正面证据，不能只看“事件派发没抛异常”。
+          // 冷启动时 composer 已存在但 React 还没渲染出发送按钮；此时派发 Enter
+          // 不会产生任何请求，却会被当成“已提交”（真机复现：6s 后判 STALE_PAGE）。
+          var sendCount = 0;
+          function findSend() {
+            var list;
+            try { list = document.querySelectorAll(${q(DeepSeekSelectors.send())}); }
+            catch (e) { return null; }
+            sendCount = list.length;
+            for (var i = 0; i < list.length; i++) {
+              var b = list[i];
+              var r = b.getBoundingClientRect();
+              var cls = (b.className || '').toString();
+              var dis = b.disabled === true ||
+                        b.getAttribute('aria-disabled') === 'true' ||
+                        cls.indexOf('ds-button--disabled') >= 0;
+              if (!dis && r.width > 0 && r.height > 0) return b;
+            }
+            return null;
+          }
+          var btn = findSend();
+          var enterSent = false, clicked = false;
+          if (btn) {
+            // 主路径：Enter keydown（实测可提交）。
+            var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+            try {
+              el.dispatchEvent(new KeyboardEvent('keydown', opts));
+              el.dispatchEvent(new KeyboardEvent('keyup', opts));
+              enterSent = true;
+            } catch (e) {}
+            // 兜底：若 Enter 后输入框仍保留文本，再点一次启用的发送按钮。
+            // 文本已被清空时不再点击，避免跳到空的新会话。
+            var beforeClick = (el.value === undefined ? (el.textContent || '') : el.value);
+            if (String(beforeClick || '').trim().length > 0) {
+              try { btn.click(); clicked = true; } catch (e) {}
+            }
+          }
+
+          var valueNow = (el.value === undefined ? (el.textContent || '') : el.value);
+          return JSON.stringify({
+            ok: true,
+            inputFilled: filled,
+            valueEmpty: String(valueNow || '').trim().length === 0,
+            length: text.length,
+            sentEnter: enterSent,
+            sendClicked: clicked,
+            sendClickable: !!btn,
+            sendCount: sendCount,
+            sendDisabled: sendCount > 0 && !btn,
+            url: location.href
+          });
+        })(${q(prompt)})
+    """.trimIndent()
+
+    /**
+     * AI-173：只读发送按钮状态。
+     *
+     * 点击前用它轮询，避免对 disabled 按钮点击并当成成功。
+     */
+    fun sendState(): String = """
+        (function() {
+          var list = [];
+          try { list = Array.prototype.slice.call(document.querySelectorAll(${q(DeepSeekSelectors.send())})); } catch (e) {}
+          var usable = null;
+          for (var i = 0; i < list.length; i++) {
+            var b = list[i];
+            var r = b.getBoundingClientRect();
+            var dis = b.disabled === true ||
+                      b.getAttribute('aria-disabled') === 'true' ||
+                      (b.className || '').toString().indexOf('ds-button--disabled') >= 0;
+            if (!dis && r.width > 0 && r.height > 0) { usable = b; break; }
+          }
+          var input = null;
+          try { input = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
+          var value = input ? (input.value === undefined ? (input.textContent || '') : input.value) : '';
+          return JSON.stringify({
+            ok: true,
+            sendCount: list.length,
+            sendDisabled: list.length > 0 && !usable,
+            sendClickable: !!usable,
+            valueEmpty: String(value || '').trim().length === 0,
+            url: location.href
+          });
+        })()
+    """.trimIndent()
+
+    /** @deprecated 用 [fillAndSend]（AI-172 命名）；保留旧名以兼容既有调用点。 */
+    @Deprecated("use fillAndSend", ReplaceWith("fillAndSend(prompt)"))
+    fun fillAndSubmit(prompt: String): String = fillAndSend(prompt)
+
+    /**
+     * 合成 paste 注入图片。
+     *
+     * 实测：DeepSeek 会接受并显示预览，但 `dispatchEvent` 返回 false。
+     * **不能**用返回值判成败；调用方必须再用 [verifyAttachment] 确认。
+     */
+    fun pasteImage(fileName: String, mimeType: String, base64: String): String = """
+        (function(name, mime, b64) {
+          var el;
+          try { el = document.querySelector(${q(DeepSeekSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!el) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          var bytes;
+          try {
+            var binary = atob(b64);
+            bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          } catch (e) { return JSON.stringify({ ok: false, why: 'decode-failed' }); }
+          var file;
+          try { file = new File([bytes], name, { type: mime }); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'file-construct-failed' }); }
+          var dt = new DataTransfer();
+          dt.items.add(file);
+          el.focus();
+          var ev;
+          try {
+            ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true, composed: true });
+          } catch (e) { return JSON.stringify({ ok: false, why: 'clipboard-event-unsupported' }); }
+          var accepted = el.dispatchEvent(ev);
+          // accepted=false 是正常现象（DeepSeek 仍会处理）。不要据此判失败。
+          return JSON.stringify({ ok: true, dispatched: true, accepted: accepted, bytes: bytes.length });
+        })(${q(fileName)}, ${q(mimeType)}, ${q(base64)})
+    """.trimIndent()
+
+    /**
+     * 校验附件预览是否真的出现。
+     *
+     * AI-042/AI-082：只在 composer 范围内计数。全局 `img[src^='blob:']` 会把
+     * **上一条已发送消息里的图片**也算进来，导致第二轮跳过上传、甚至把旧图当新图。
+     * composer 的判定是「从输入框向上、最近的包含 `input[type=file]` 的祖先」。
+     */
+    fun verifyAttachment(): String = """
+        (function() {
+          var input = null;
+          try { input = document.querySelector(${q(DeepSeekSelectors.input())}); }
+          catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (!input) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          // 与快照同一范围：第 3 层开始是 composer 附件；第 6 层会命中历史消息图片。
+          var box = input;
+          for (var i = 0; i < 3 && box.parentElement; i++) box = box.parentElement;
+          var n = 0;
+          try { n = box.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length; } catch (e) {
+            return JSON.stringify({ ok: false, why: 'selector-error' });
+          }
+          // 诊断：各祖先层的附件命中数，用于确认 composer 的真实边界。
+          var levels = [];
+          var b = input;
+          for (var li = 0; li < 8 && b && b.parentElement; li++) {
+            b = b.parentElement;
+            try { levels.push(b.querySelectorAll(${q(DeepSeekSelectors.attachment())}).length); }
+            catch (e) { levels.push(-1); }
+          }
+          return JSON.stringify({
+            ok: true, attachmentCount: n, attached: n > 0, scoped: true,
+            levels: levels.join('|')
+          });
+        })()
+    """.trimIndent()
+
+    /**
+     * 触发页面自身的上传入口。
+     *
+     * 实测：JS `input[type=file].click()` **不会**触发 `onShowFileChooser`
+     * （`user activation` 限制）。因此本脚本只用于诊断，驱动层必须改用
+     * 原生触摸（[locateUploadIcon] 的坐标）。
+     */
+    fun uploadTrigger(): String = """
+        (function() {
+          var fs;
+          try { fs = document.querySelectorAll('input[type="file"]'); } catch (e) { return JSON.stringify({ ok: false, why: 'selector-error' }); }
+          if (fs && fs.length > 0) {
+            try { fs[0].click(); } catch (e) {}
+            return JSON.stringify({ ok: false, why: 'js-click-needs-user-activation', fileInputs: fs.length });
+          }
+          return JSON.stringify({ ok: false, why: 'no-file-input' });
+        })()
+    """.trimIndent()
+
+    /**
+     * 计算附件图标（回形针）的视口坐标，供驱动层用原生触摸点击。
+     *
+     * 这是 FILE_CHOOSER 路径唯一可行的触发方式：必须由真实触摸产生 user activation。
+     * 返回 `{ok, x, y, w, h, innerHeight, dpr}`，坐标是 CSS 像素（与 WebView 视口一致）。
+     */
+    fun locateUploadIcon(): String = """
+        (function() {
+          var input = null;
+          try { input = document.querySelector(${q(DeepSeekSelectors.input())}); } catch (e) {}
+          if (!input) return JSON.stringify({ ok: false, why: 'composer-not-found' });
+          var box = input;
+          for (var i = 0; i < 8 && box && box.parentElement; i++) { box = box.parentElement; }
+          if (!box) return JSON.stringify({ ok: false, why: 'no-container' });
+          var ir = input.getBoundingClientRect();
+
+          function center(r) {
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+                     w: Math.round(r.width), h: Math.round(r.height), left: r.left, top: r.top };
+          }
+          function labelOf(el) {
+            var a = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-tooltip'));
+            var t = (el.textContent || '').trim();
+            return ((a || '') + ' ' + (t.length <= 12 ? t : '')).toLowerCase();
+          }
+
+          // 1) 锚点：发送按钮。没有锚点就无法区分工具栏里的各个开关。
+          var sendEl = null;
+          try { sendEl = document.querySelector(${q(DeepSeekSelectors.send())}); } catch (e) {}
+          var send = null;
+          if (sendEl) {
+            var sr = sendEl.getBoundingClientRect();
+            if (sr.width > 0 && sr.height > 0) send = center(sr);
+          }
+
+          var cands = box.querySelectorAll('div.ds-button, div[role="button"], button');
+          var labelled = null, leftOfSend = null;
+          for (var j = 0; j < cands.length; j++) {
+            var c = cands[j];
+            var r = c.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            if (r.width > 60 || r.height > 60) continue;
+            var cls = (c.className || '').toString();
+            if (cls.indexOf('ds-button__icon') >= 0) continue;  // 内层图标，取外层按钮
+            if (cls.indexOf('ds-toggle-button') >= 0) continue; // 主题/侧栏开关，绝不上传
+            if (cls.indexOf('--primary') >= 0) continue;        // 发送键本身
+            // 只取输入框同一水平带内的按钮。
+            if (r.top < ir.top - 60 || r.top > ir.bottom + 60) continue;
+            var info = center(r);
+            var lab = labelOf(c);
+            if (lab.indexOf('attach') >= 0 || lab.indexOf('upload') >= 0 ||
+                lab.indexOf('上传') >= 0 || lab.indexOf('附件') >= 0) {
+              if (!labelled || info.left > labelled.left) labelled = info;
+            }
+            if (send) {
+              // 发送键左侧、且垂直对齐（同一行）的最近按钮。
+              if (info.left < send.left && Math.abs(info.top - send.top) <= 24) {
+                if (!leftOfSend || info.left > leftOfSend.left) leftOfSend = info;
+              }
+            }
+          }
+
+          var best = labelled || leftOfSend;
+          if (!best) {
+            return JSON.stringify({ ok: false, why: 'icon-not-found', send: send,
+                                    candidates: cands.length });
+          }
+          return JSON.stringify({ ok: true, x: best.x, y: best.y, w: best.w, h: best.h,
+                                  via: labelled ? 'label' : 'left-of-send',
+                                  innerHeight: window.innerHeight,
+                                  dpr: window.devicePixelRatio || 1 });
+        })()
+    """.trimIndent()
+
+    /**
+     * 华为 WebView 布局修复。
+     * 规则：innerHeight < 100 时**禁止**写高度（会把页面压成 1px，M3）。
+     */
+    fun pageFix(): String = """
+        (function() {
+          var h = window.innerHeight;
+          if (!h || h < 100) return JSON.stringify({ ok: false, why: 'viewport-zero', innerHeight: h || 0 });
+          return JSON.stringify({ ok: true, innerHeight: h });
+        })()
+    """.trimIndent()
+}

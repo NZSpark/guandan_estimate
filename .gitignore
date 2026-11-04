@@ -18,3 +18,13 @@ promp.md
 /*.png
 /*.jpg
 !AotearoaGuandanLogo.png
+long_loop.sh
+.long_loop_logs/
+env.local.sh
+.freebuff/
+model_training/.venv/
+
+.venv*/
+/output/
+model_training/datasets/
+yolo11n-obb.pt

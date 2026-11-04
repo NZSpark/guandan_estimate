@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "version": "20261102.4",
+  "detector": {
+    "asset": "models/card_corner.tflite",
+    "sha256": "a17d8e10a35c470cae277661ccf8d6572635c7fd6f1dcb47d87fdbe36d24f0c6",
+    "size_bytes": 10869952,
+    "input_width": 960,
+    "input_height": 960,
+    "input_layout": "NCHW",
+    "channel_stride": 6,
+    "output_order": "cx,cy,w,h,score,angle",
+    "anchors": 18900,
+    "score_threshold": 0.6,
+    "fallback_score_threshold": 0.3,
+    "nms_iou": 0.5,
+    "min_corner_px": 8.0,
+    "edge_margin_px": 2,
+    "labels": [
+      "card_corner"
+    ]
+  },
+  "classifier": {
+    "asset": "models/classifier.tflite",
+    "sha256": "4b7b7b4df2b0b1846d05c1f48d748ce4285b0d7eef77e0559c0b59844385bbe7",
+    "size_bytes": 1921636,
+    "crop_width": 96,
+    "crop_height": 128,
+    "rank_labels": [
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "J",
+      "Q",
+      "K",
+      "A",
+      "SJ",
+      "BJ"
+    ],
+    "suit_labels": [
+      "CLUB",
+      "DIAMOND",
+      "HEART",
+      "SPADE",
+      "JOKER"
+    ],
+    "temperature": 2.0,
+    "min_confidence": 0.5,
+    "min_margin": 0.02,
+    "normalization": "rgb/255"
+  }
+}

@@ -1,1 +1,11 @@
-<paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="photos" path="photos/" /></paths>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- AI-132 / 旧上传路径：cacheDir/photos/ -->
+    <cache-path name="photos" path="photos/" />
+    <!--
+      PageDriver.prepareFileChooserUpload 写到 cacheDir/ai-upload/。
+      未在此声明时 FileProvider.getUriForFile 会抛
+      IllegalArgumentException: Failed to find configured root（2026-10-30 真机暴露）。
+    -->
+    <cache-path name="ai_upload" path="ai-upload/" />
+    <cache-path name="probe" path="probe/" />
+</paths>
