@@ -147,9 +147,16 @@ gradlew.bat testDebugUnitTest assembleDebug
 产物与安装：
 
 ```bash
+# Release 安装包与安装说明
+release/GuanDanScore-1.0-release.apk
+adb install -r release/GuanDanScore-1.0-release.apk
+
+# Debug 构建产物
 app/build/outputs/apk/debug/app-debug.apk
 adb install -r -t app/build/outputs/apk/debug/app-debug.apk
 ```
+
+详细安装与配置指南见 [用户手册（doc/usermanual.md）](./doc/usermanual.md)。
 
 真机验收基线：HUAWEI LIO-N29 / Android 10 / WebView 114.0.5.302（网页源的上传、提交与轮询都在该环境实测）。改动识别或 UI 路径时，除单测外应加跑 `assembleDebug`。
 
