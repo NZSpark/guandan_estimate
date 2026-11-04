@@ -27,7 +27,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="手工拆牌"
+            android:text="手工组牌"
             android:textAppearance="@style/TextAppearance.GuanDan.SectionTitle" />
 
         <com.google.android.material.button.MaterialButton
@@ -76,7 +76,7 @@
                         android:id="@+id/optimalTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="最优拆牌"
+                        android:text="最优组牌"
                         android:textAppearance="@style/TextAppearance.GuanDan.Label" />
 
                     <TextView
@@ -122,7 +122,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="手工拆牌"
+                        android:text="手工组牌"
                         android:textAppearance="@style/TextAppearance.GuanDan.Label" />
 
                     <TextView

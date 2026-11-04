@@ -1,7 +1,7 @@
 package nz.org.aotearoa.guandanscore.scoring
 
 /**
- * 一次手工拆牌中的一组：引用手牌下标 + 选定的牌型解释。
+ * 一次手工组牌中的一组：引用手牌下标 + 选定的牌型解释。
  * 不携带分值：分值由 MeldEvaluator 按牌型规则重新解析，避免 UI 侧伪造分数。
  */
 data class MeldGroup(val indices: List<Int>, val type: MeldType)

@@ -144,7 +144,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         optimalExpanded = false
-        // 拆牌变化后旧「已生成」拆牌图不再对应当前结果。
+        // 组牌变化后旧「已生成」组牌图不再对应当前结果。
         outputBitmap = null
         setState(
             state.copy(
@@ -370,7 +370,7 @@ class MainActivity : AppCompatActivity() {
             ScoreState.Running -> {
                 ui.resultCard.visibility = View.GONE
                 ui.calculateState.visibility = View.VISIBLE
-                ui.calculateState.text = "正在寻找最优拆牌…"
+                ui.calculateState.text = "正在寻找最优组牌…"
                 ui.calculateState.setTextColor(getColor(R.color.text_primary))
                 ui.levelHint.visibility = View.GONE
                 ui.adjustMelds.visibility = View.GONE
@@ -415,7 +415,7 @@ class MainActivity : AppCompatActivity() {
             append(" · T_max ${result.tMax} · ${result.stage}")
             append(
                 when {
-                    origin is ScoreOrigin.Adjusted -> " · 手工拆牌"
+                    origin is ScoreOrigin.Adjusted -> " · 手工组牌"
                     result.exhaustive -> " · 已穷举最优"
                     else -> " · 近似最优"
                 }
@@ -446,12 +446,12 @@ class MainActivity : AppCompatActivity() {
         ui.sortedImage.text = if (result.cardCount == 27) {
             "生成并保存${ScoreText.imageLabel(origin)}"
         } else {
-            "需 27 张手牌才能生成拆牌图"
+            "需 27 张手牌才能生成组牌图"
         }
 
         ui.adjustMelds.visibility = if (result.cardCount in 2..27) View.VISIBLE else View.GONE
         ui.adjustMelds.isEnabled = true
-        ui.adjustMelds.text = if (origin is ScoreOrigin.Adjusted) "继续编辑手工拆牌" else "手工拆牌"
+        ui.adjustMelds.text = if (origin is ScoreOrigin.Adjusted) "继续编辑手工组牌" else "手工组牌"
 
         if (origin is ScoreOrigin.Adjusted) {
             val base = origin.base
@@ -460,7 +460,7 @@ class MainActivity : AppCompatActivity() {
             ui.scoreOrigin.text = ScoreText.origin(base, result)
             ui.optimalDetail.visibility = View.VISIBLE
             ui.restoreOptimal.visibility = View.VISIBLE
-            ui.optimalDetail.text = if (optimalExpanded) "收起最优拆牌" else "查看最优拆牌"
+            ui.optimalDetail.text = if (optimalExpanded) "收起最优组牌" else "查看最优组牌"
             ui.optimalBreakdown.visibility = if (optimalExpanded) View.VISIBLE else View.GONE
             ui.optimalBreakdown.text = ScoreText.optimalBreakdown(base)
         } else {
@@ -487,7 +487,7 @@ class MainActivity : AppCompatActivity() {
         val partition = runCatching {
             PartitionCodec.encodePartition(state.level, state.hand, groups)
         }.getOrElse {
-            toast(it.message ?: "手工拆牌数据无效")
+            toast(it.message ?: "手工组牌数据无效")
             return
         }
         val snapshot = PartitionCodec.encodeSnapshot(base.toSnapshot())
@@ -555,7 +555,7 @@ class MainActivity : AppCompatActivity() {
         val visible = ui.breakdown.visibility == View.VISIBLE
         ui.breakdown.visibility = if (visible) View.GONE else View.VISIBLE
         ui.scoreExplain.visibility = if (visible) View.GONE else View.VISIBLE
-        ui.toggleBreakdown.text = if (visible) "查看逐组拆牌明细" else "收起拆牌明细"
+        ui.toggleBreakdown.text = if (visible) "查看组牌明细" else "收起组牌明细"
     }
 
     // ---------------------------------------------------------------- 输入

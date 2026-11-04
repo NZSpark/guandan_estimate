@@ -11,9 +11,9 @@
 | 排查识图 / AI Provider / 模板匹配 | `memory/recognition-pipeline.md` | `recognition/` 四个文件、`testcases/` | `skills/ai-recognition-debug` |
 | 优化本地识图 / 性能与准确率 | `doc/local_engine.md` | `memory/recognition-pipeline.md`、`recognition/`、`testcases/` | `skills/ai-recognition-debug` |
 | 修改 AI 源管理 / 配置档 / 健康检查 | `doc/ai_configure.md` | `ui/AiSettings*`、`recognition/source/HealthCheckGate.kt`、`doc/multi_ai_update.md` | — |
-| 修改拍照取图 / 图片渲染 / 拆牌图 | `memory/project-overview.md` | `imaging/`、`MainActivity.kt`、`res/layout/activity_main.xml` | — |
-| 实现手工拆牌 / 分区编辑 / 最优对照 | `doc/patterns_tasks.md` | `doc/patterns_design.md`、`doc/ui_design.md` §5.4、`scoring/` | — |
-| 训练 / 接入离线牌角模型 | `model_training/README.md` | `memory/recognition-pipeline.md`、`model_training/*.py` | `skills/ai-recognition-debug` |
+| 修改拍照取图 / 图片渲染 / 组牌图 | `memory/project-overview.md` | `imaging/`、`MainActivity.kt`、`res/layout/activity_main.xml` | — |
+| 实现手工组牌 / 分区编辑 / 最优对照 | `doc/patterns_tasks.md` | `doc/patterns_design.md`、`doc/ui_design.md` §5.4、`scoring/` | — |
+| 排查本地 learned 模型加载 / 回退 | `doc/local_engine.md` | `memory/recognition-pipeline.md`、`app/src/main/assets/models/`、`recognition/` | `skills/ai-recognition-debug` |
 | 构建、跑测试、出 APK | `memory/build-and-test.md` | `README.md` 构建环境节 | — |
 | 理解项目全貌 / 新人接手 | `memory/project-overview.md` | `README.md` | — |
 | 整理记忆、去重、归档 | 本文件、`DECISIONS.md` | `archive/README.md` | `skills/harness-cleanup` |
@@ -48,7 +48,7 @@ skills/
 | `doc/手牌综合牌力评估方法.md` | SPI / NSPI / 动态评级 / 散牌惩罚 |
 | `doc/tasks.md` | 任务总索引：专项清单、当前进度、真机基线与硬约束 |
 | `README.md` | 面向用户的功能说明、指标摘要、构建与隐私声明 |
-| `model_training/README.md` | 标注、训练、导出、接入流程 |
+
 
 ## Token 预算
 

@@ -15,10 +15,10 @@ import nz.org.aotearoa.guandanscore.scoring.MeldType
 import java.util.Locale
 
 /**
- * 手工拆牌页（doc/patterns_design.md）。
+ * 手工组牌页（doc/patterns_design.md）。
  *
  * 页面只编辑分区、只渲染 PartitionEvaluator 的结果；不搜索最优、不复制计分公式。
- * 左侧「最优拆牌」来自进入页面的只读快照，右侧「手工拆牌」随当前分区实时变化。
+ * 左侧「最优组牌」来自进入页面的只读快照，右侧「手工组牌」随当前分区实时变化。
  */
 class MeldAdjustActivity : AppCompatActivity() {
     private lateinit var ui: ActivityMeldAdjustBinding
@@ -33,11 +33,11 @@ class MeldAdjustActivity : AppCompatActivity() {
         val partitionRaw = intent.getStringExtra(PartitionCodec.EXTRA_PARTITION)
         val baseRaw = intent.getStringExtra(PartitionCodec.EXTRA_BASE)
         if (partitionRaw.isNullOrBlank() || baseRaw.isNullOrBlank()) {
-            toastAndFinish("手工拆牌数据缺失")
+            toastAndFinish("手工组牌数据缺失")
             return
         }
         val payload = runCatching { PartitionCodec.decodePartition(partitionRaw) }.getOrElse {
-            toastAndFinish(it.message ?: "手工拆牌数据无效")
+            toastAndFinish(it.message ?: "手工组牌数据无效")
             return
         }
         entryPartition = partitionRaw
@@ -217,7 +217,7 @@ class MeldAdjustActivity : AppCompatActivity() {
 
     private fun confirmReset() {
         AlertDialog.Builder(this)
-            .setTitle("重置手工拆牌？")
+            .setTitle("重置手工组牌？")
             .setMessage("将回到进入页面时的分区，当前修改与撤销记录会丢失。")
             .setPositiveButton("重置") { _, _ ->
                 state = MeldAdjustEditor.reset(state)
@@ -233,7 +233,7 @@ class MeldAdjustActivity : AppCompatActivity() {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("放弃本次手工拆牌？")
+            .setTitle("放弃本次手工组牌？")
             .setPositiveButton("放弃") { _, _ -> finish() }
             // 「保留」在架构里只有一种落地方式：把当前分区作为结果交回主界面。
             .setNegativeButton("保留并返回") { _, _ -> applyAndFinish() }
@@ -265,7 +265,7 @@ class MeldAdjustActivity : AppCompatActivity() {
         val selection = savedInstanceState.getIntegerArrayList(KEY_SELECTION)?.toSet().orEmpty()
         when (val outcome = MeldAdjustEditor.restoreDraft(state, raw, selection)) {
             is MeldEditOutcome.Ok -> state = outcome.state
-            is MeldEditOutcome.Rejected -> toast("手工拆牌草稿已失效，已恢复初始方案")
+            is MeldEditOutcome.Rejected -> toast("手工组牌草稿已失效，已恢复初始方案")
         }
     }
 

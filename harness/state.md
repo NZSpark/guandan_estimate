@@ -1,7 +1,7 @@
 # State —— 当前状态
 
 > 只保留恢复工作所必需的信息。任务完成即就地改写，不追加历史流水。
-> 最后更新：2026-11-03（修复识别调度死循环，单图真机验证通过；learned 默认 + 方案 A 补缺已落到 App；本地优化仍冻结；`model_training/` 已移除；未发布。）
+> 最后更新：2026-11-05（组牌 UI 与文档术语统一；OpenJDK 17 显式配置后全量单测与 Debug 构建通过；工作区检查通过。）
 
 ## 2026-11-03 修复识别调度死循环（P0）
 
@@ -58,7 +58,9 @@
 
 ## 当前任务
 
+- 本轮 UI/文档术语统一：用户可见的相关功能名称统一为“组牌”，涉及 Android 主界面、手工组牌编辑流程、用户手册、设计/任务文档与 Harness 记忆；不改变牌型搜索、评分公式或识别算法。
+- `doc/ui_design.md` 已同步为当前事实：`model_training/` 训练/评估工具链已从仓库移除，不再引用其 README 作为可执行入口；模型资产仍在 `app/src/main/assets/models/` 并随 App 打包。`doc/local_engine_tasks.md` 中对旧 README 的提及属于历史任务涉及文件记录，保留其历史语境。
+- 验证：显式使用 `/opt/homebrew/opt/openjdk@17` 后，`./gradlew testDebugUnitTest assembleDebug` 执行成功（`BUILD SUCCESSFUL`）；两个主界面布局 XML 均可解析，`git diff --check` 通过。该结果不代表 T5.3、真实照片验收或 release-qa 已完成。
 - 本地识别引擎：**FROZEN**，不再做自动化参数/排序/TTA 优化。
-- `model_training/` 训练/评估工具链已移除；App 构建不依赖该目录，已提交模型资产在 `app/src/main/assets/models/`。
-- 评分 V4.2 已落地；当前分支 `airecognize`。
+- 评分 V4.2 已落地；当前分支 `airecognize`。本轮不修改评分公式。
 - learned 已是默认；方案 A 的补缺路径已落到 App 并安装到真机。T5.3 继续作为质量证据，当前仍 `NOT_RUN`；严格 A/B 仍缺真实 Android heuristic 预测，proxy 不支持 HYBRID/冲突仲裁。只有补充真实密集手牌、逐牌角可见性和 `release-qa` 签核后，才重新评估优化是否解冻。

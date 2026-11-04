@@ -23,7 +23,7 @@
 | P1 | 花色分类固定 RGB 阈值 + 宽度轮廓，最后可回退到黑桃 | 花色错、出现不合法的同花色重复 | 输出「不确定」、HSV/自适应阈值、保留模板投票 |
 | P1 | 所有本地结果都带 warning，UI 的 `Success` 分支实际不可达 | 27/27 也显示「有警告」，准确解码也被标成部分成功 | 区分 info/warning，修正阶段文案与 `drop(3)` 索引 |
 | P2 | `VisualCardCodec` 只做固定位置单行采样，无纠错 | 缩放/裁剪/JPEG 后可能读不到 | 增加定位/多行多数投票，或明确限定只用于本 App 原图 |
-| P2 | `HandImageRenderer` 缓存全尺寸牌面（750×1044） | 多次随机/拆牌图后内存累积 | 按目标尺寸解码，使用 `LruCache` 或复用池 |
+| P2 | `HandImageRenderer` 缓存全尺寸牌面（750×1044） | 多次随机/组牌图后内存累积 | 按目标尺寸解码，使用 `LruCache` 或复用池 |
 
 ## 2. 代码地图与调用链
 
@@ -50,7 +50,7 @@ MainActivity.load(uri)                         // 主线程
 | `app/src/main/java/nz/org/aotearoa/guandanscore/recognition/CardRecognizer.kt` | 本地识别总控：快速路径、pass 构建、OCR 候选、聚类、点数/花色收敛 |
 | `app/src/main/java/nz/org/aotearoa/guandanscore/recognition/CardTemplateMatcher.kt` | 54 张标准牌面的牌角模板签名与 Jaccard 匹配 |
 | `app/src/main/java/nz/org/aotearoa/guandanscore/imaging/VisualCardCodec.kt` | 生成图底部的 191-bit 校验码，绘制/解码 |
-| `app/src/main/java/nz/org/aotearoa/guandanscore/imaging/HandImageRenderer.kt` | 随机手牌/拆牌图渲染，使用标准牌面素材 |
+| `app/src/main/java/nz/org/aotearoa/guandanscore/imaging/HandImageRenderer.kt` | 随机手牌/组牌图渲染，使用标准牌面素材 |
 | `app/src/main/java/nz/org/aotearoa/guandanscore/MainActivity.kt` | 图片解码、调用识别、把结果映射到 `LocalRecognitionState` |
 | `testcases/` | 现有照片素材；`doc/ai_baseline.md` 已给出 case3/case4 的人工牌面 |
 
@@ -58,7 +58,7 @@ MainActivity.load(uri)                         // 主线程
 
 ### 3.1 快速路径：生成图校验码
 
-`CardRecognizer.recognize()` 先调用 `VisualCardCodec.decode()`（`CardRecognizer.kt:38-42`）。命中时直接返回 27 张牌，不启动 ML Kit。这是最可靠、最省资源的路径，适合「随机生成 27 张」和 App 自己保存的拆牌图。
+`CardRecognizer.recognize()` 先调用 `VisualCardCodec.decode()`（`CardRecognizer.kt:38-42`）。命中时直接返回 27 张牌，不启动 ML Kit。这是最可靠、最省资源的路径，适合「随机生成 27 张」和 App 自己保存的组牌图。
 
 `VisualCardCodec` 的结构：
 
@@ -287,12 +287,12 @@ decoder.setTargetSize(info.size.width / scale, info.size.height / scale)
 
 【已确认】`cardImages` 是 `MutableMap<String, Bitmap>`（`HandImageRenderer.kt:20`），`drawCard()` 用 `BitmapFactory.decodeStream` 解码完整 750×1044 PNG（`:93-99`），然后缩放到约 177×246 的目标矩形。按 ARGB_8888 计算，单张约 3.1MB；27 张约 84MB，最多 54 张约 169MB，且 Activity 存活期间不释放。
 
-这虽然不属于 OCR 主链路，但会在「随机手牌 → 生成拆牌图 → 再随机」时持续抬高进程内存，和 P0-1 的峰值叠加。
+这虽然不属于 OCR 主链路，但会在「随机手牌 → 生成组牌图 → 再随机」时持续抬高进程内存，和 P0-1 的峰值叠加。
 
 **建议**：
 
 - 按目标尺寸解码（`inSampleSize` / `inScaled` / 先解码到约 2× 目标尺寸），或使用 `LruCache` 限制缓存字节数；
-- 随机手牌和拆牌图共用同一个受限缓存；
+- 随机手牌和组牌图共用同一个受限缓存；
 - 若只生成 1800×1200 图，没必要保留 750×1044 原图；需要高分辨率输出时再按需解码。
 
 ### P2-3：生命周期与死代码

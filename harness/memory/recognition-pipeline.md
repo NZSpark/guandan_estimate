@@ -1,6 +1,6 @@
 # 识别管线与 AI Provider（recognition-pipeline）
 
-> 只记约束、契约与排错入口；功能描述见 `README.md`，训练流程见 `model_training/README.md`。
+> 只记约束、契约与排错入口；功能描述见 `README.md`，本地模型现状见 `doc/local_engine.md` 与 `harness/state.md`。
 
 ## 三条识别路径
 
@@ -13,13 +13,15 @@
 
 三条路径结果都必须进入同一套 UI 校正流程，**不允许**任何一条跳过人工确认直接计算。
 
-## 本地三阶段
+## 本地 learned 识别
 
-1. 牌张定位与计数（确定 N 与每个牌角框）。
-2. 点数识别（OCR）。
-3. 点数下方花色图形识别（`CardTemplateMatcher` 模板匹配）。
+- 正式 App 默认使用 `LEARNED`：`MainActivity` 通过 `ModelAssets.load()` 加载 `app/src/main/assets/models/` 内的检测器、分类器和 manifest，并注入 `CardRecognizer`。
+- learned 模型加载、推理、超时或牌角不足时回退启发式；learned 成功但少于 27 张时，方案 A 只补 learned 未输出的牌面副本，不替换已有结果。补入牌设 `Card.needsReview=true`，必须人工核对。
+- 两副牌的同一 `(rank, suit)` 最多两张，整手最多 27 张；补缺逻辑必须同时遵守这两个上限。
+- `model_training/` 训练/评估工具链已从仓库移除；不要引用其 README 或命令作为当前可执行入口。现有模型资产仍随 App 打包。
+- 本地识别质量验收不能夸大：T4.7 真机 runner、T5.3 真实 test 与 release-qa 仍未完成；桌面生成域 benchmark 不替代真实照片验收。
 
-被相邻牌或手指遮挡的牌角无法从单张照片可靠恢复 —— 这是**物理限制**，不要试图用规则“猜”补全，应提示用户核对。
+被相邻牌或手指完全遮挡的牌角无法从单张照片可靠恢复 —— 这是**物理限制**，不要用规则猜牌，应提示用户核对或补录。
 
 ## AI Provider 契约
 
@@ -28,14 +30,6 @@
 - 多 Provider 配置由 `AiSettingsStore` 管理：`load/loadAll/save/select/delete`，API Key 用 Android Keystore 加密后存本地。
 - **Key 绝不入库**；生产更推荐自有后端代理。
 - 新增 Provider 时：先扩展 `AiPresets`，再在 `AiRecognitionClient` 加协议分支，最后补 `AiRecognitionClientTest`。
-
-## 离线模型（`model_training/`）
-
-- 与 Android 构建完全解耦；依赖不进 APK。
-- 两阶段：OBB 旋转目标检测（边界+角度）→ 透视拉正后点数/花色分类。
-- 关键指标 `validation_exact_card_accuracy`（点+花色同时正确）。
-- 产物：`card_corner_classifier.tflite` + `model_manifest.json`，经 `install_model.ps1` 放入 `app/src/main/assets/models/`。
-- **接入闸门**：独立验证达标 + 15 点数 5 花色样本充足 + API 29 真机耗时/内存/稳定性验证，之后才启用 LiteRT 推理路径。
 
 ## WebView 分层（ADR-0005 / ADR-0013 / ADR-0014）
 
@@ -49,7 +43,7 @@
 | 编排 | `WebViewAiSource` | 是（经 PageOps） | 互斥、取消、基线、上传回退、回答等待 |
 | HTTP | `HttpApiSource` | 是（Bitmap） | 保留原 `AiRecognitionClient` 协议 |
 
-**当前状态**：这是生产路径；Gemini 专用的旧 `AiRecognitionService` / `GeminiUpstream` 已删除。当前 49 个测试类 / 460 项单测全绿（手工拆牌新增 10 类）。
+**当前状态**：这是生产路径；Gemini 专用的旧 `AiRecognitionService` / `GeminiUpstream` 已删除。当前 49 个测试类 / 460 项单测全绿（手工组牌新增 10 类）。
 
 关键不变量：
 

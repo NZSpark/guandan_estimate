@@ -7,7 +7,7 @@ import nz.org.aotearoa.guandanscore.model.Suit
 /**
  * 牌型解释与打分的唯一生成器。
  *
- * 优化器与手工拆牌都从这里取候选；禁止在 UI 或新的评估器中复制牌型公式。
+ * 优化器与手工组牌都从这里取候选；禁止在 UI 或新的评估器中复制牌型公式。
  * 返回的 [Meld.mask] 使用传入手牌的下标位序（`1 shl index`）。
  */
 internal object MeldEvaluator {

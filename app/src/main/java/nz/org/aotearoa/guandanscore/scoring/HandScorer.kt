@@ -65,7 +65,7 @@ data class HandResult(
 }
 
 /**
- * 最优拆牌：多策略贪心保底 + 逐层束搜索 + 可中断的精确覆盖 DP。
+ * 最优组牌：多策略贪心保底 + 逐层束搜索 + 可中断的精确覆盖 DP。
  *
  * 精确 DP 是 NP-hard 的精确覆盖；达到状态/时间上限时不再用「剩余单张」收尾，
  * 而是保留贪心/束搜索找到的完整方案。穷举完成即证明全局最优并提前返回。
@@ -162,7 +162,7 @@ class HandScorer(
                         chosen = ci
                     }
                 }
-                check(chosen >= 0) { "拆牌失败：存在无法覆盖的牌" }
+                check(chosen >= 0) { "组牌失败：存在无法覆盖的牌" }
                 picks[rounds++] = chosen
                 num += net[chosen]
                 mask = mask or candidates[chosen].mask
@@ -396,7 +396,7 @@ class HandScorer(
                     break
                 }
                 val ci = states.pick[r]
-                check(ci >= 0) { "拆牌重建失败" }
+                check(ci >= 0) { "组牌重建失败" }
                 picks[at++] = ci
                 mask = mask or candidates[ci].mask
                 r--
@@ -430,7 +430,7 @@ class HandScorer(
             }
         }
 
-        check(bestRounds > 0) { "拆牌失败：没有可用的分区" }
+        check(bestRounds > 0) { "组牌失败：没有可用的分区" }
         val melds = bestPicks!!.map { candidates[it] }
         lastStats = SearchStats(
             states = dpStates,

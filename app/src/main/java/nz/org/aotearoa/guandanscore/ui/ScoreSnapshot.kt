@@ -3,7 +3,7 @@ package nz.org.aotearoa.guandanscore.ui
 import nz.org.aotearoa.guandanscore.scoring.HandResult
 
 /**
- * 最优拆牌的只读摘要，传给手工拆牌页做对照。
+ * 最优组牌的只读摘要，传给手工组牌页做对照。
  *
  * 刻意不携带 melds：子页面只能展示最优分值，不能伪造或改写最优分组。
  */

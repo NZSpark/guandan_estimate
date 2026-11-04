@@ -35,7 +35,7 @@ class ScoreTextTest {
     @Test
     fun `origin line keeps both absolute values`() {
         val line = ScoreText.origin(result(138.2, 12), result(130.18, 13))
-        assertEquals("手工拆牌 · 最优 138.20 → 130.18（较最优 -8.02 · 多 1 轮）", line)
+        assertEquals("手工组牌 · 最优 138.20 → 130.18（较最优 -8.02 · 多 1 轮）", line)
     }
 
     @Test
@@ -46,15 +46,15 @@ class ScoreTextTest {
 
     @Test
     fun `optimal title distinguishes approximate results`() {
-        assertEquals("最优拆牌", ScoreText.optimalTitle(true))
-        assertEquals("最优拆牌（近似 · 未穷举）", ScoreText.optimalTitle(false))
+        assertEquals("最优组牌", ScoreText.optimalTitle(true))
+        assertEquals("最优组牌（近似 · 未穷举）", ScoreText.optimalTitle(false))
     }
 
     @Test
     fun `image label follows the result origin`() {
         val base = result(138.2, 12)
-        assertEquals("最优拆牌图", ScoreText.imageLabel(ScoreOrigin.Optimal))
-        assertEquals("手工拆牌图", ScoreText.imageLabel(ScoreOrigin.Adjusted(base)))
+        assertEquals("最优组牌图", ScoreText.imageLabel(ScoreOrigin.Optimal))
+        assertEquals("手工组牌图", ScoreText.imageLabel(ScoreOrigin.Adjusted(base)))
     }
 
     @Test

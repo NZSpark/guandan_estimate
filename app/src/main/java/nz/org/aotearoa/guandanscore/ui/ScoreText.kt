@@ -4,10 +4,10 @@ import nz.org.aotearoa.guandanscore.scoring.HandResult
 import java.util.Locale
 import kotlin.math.abs
 
-/** 主界面与手工拆牌页共用的分数文案；纯函数，便于 JVM 测试。 */
+/** 主界面与手工组牌页共用的分数文案；纯函数，便于 JVM 测试。 */
 object ScoreText {
     fun optimalTitle(exhaustive: Boolean): String =
-        if (exhaustive) "最优拆牌" else "最优拆牌（近似 · 未穷举）"
+        if (exhaustive) "最优组牌" else "最优组牌（近似 · 未穷举）"
 
     fun delta(delta: Double, optimalRounds: Int, manualRounds: Int): String {
         val roundText = when {
@@ -23,9 +23,9 @@ object ScoreText {
         return if (roundText.isBlank()) prefix else "$prefix · $roundText"
     }
 
-    /** 主界面来源行：手工拆牌 · 最优 X → Y（差值 · 轮数差）。 */
+    /** 主界面来源行：手工组牌 · 最优 X → Y（差值 · 轮数差）。 */
     fun origin(base: HandResult, manual: HandResult): String = buildString {
-        append("手工拆牌 · 最优 ")
+        append("手工组牌 · 最优 ")
         append(String.format(Locale.US, "%.2f", base.spi))
         append(" → ")
         append(String.format(Locale.US, "%.2f", manual.spi))
@@ -36,7 +36,7 @@ object ScoreText {
     }
 
     fun imageLabel(origin: ScoreOrigin): String =
-        if (origin is ScoreOrigin.Adjusted) "手工拆牌图" else "最优拆牌图"
+        if (origin is ScoreOrigin.Adjusted) "手工组牌图" else "最优组牌图"
 
     fun optimalBreakdown(base: HandResult): String =
         base.melds.sortedByDescending { it.score }.joinToString("\n") { it.label }

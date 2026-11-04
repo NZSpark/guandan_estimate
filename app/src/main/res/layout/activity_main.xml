@@ -47,7 +47,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="照片识牌 · 最优拆牌 · 牌力分析"
+                    android:text="照片识牌 · 最优组牌 · 牌力分析"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -481,7 +481,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/touch_min"
                     android:layout_marginTop="@dimen/space_2"
-                    android:text="查看逐组拆牌明细" />
+                    android:text="查看组牌明细" />
 
                 <TextView
                     android:id="@+id/breakdown"
@@ -524,7 +524,7 @@
                         android:layout_width="0dp"
                         android:layout_height="@dimen/touch_min"
                         android:layout_weight="1"
-                        android:text="查看最优拆牌" />
+                        android:text="查看最优组牌" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/restoreOptimal"
@@ -550,7 +550,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/button_height"
                     android:layout_marginTop="@dimen/space_3"
-                    android:text="手工拆牌"
+                    android:text="手工组牌"
                     android:visibility="gone" />
 
                 <com.google.android.material.button.MaterialButton
@@ -560,7 +560,7 @@
                     android:layout_height="@dimen/button_height"
                     android:layout_marginTop="@dimen/space_4"
                     android:enabled="false"
-                    android:text="生成并保存最优拆牌图" />
+                    android:text="生成并保存最优组牌图" />
 
                 <TextView
                     android:id="@+id/outputState"

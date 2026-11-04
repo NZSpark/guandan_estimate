@@ -62,7 +62,7 @@ internal fun Meld.isLowWaste(level: Rank): Boolean {
 }
 
 /**
- * V4.2 该拆牌单元对 SPI 分子的贡献（百分位整数）：F×α，孤立散牌另扣 15。
+ * V4.2 该组牌单元对 SPI 分子的贡献（百分位整数）：F×α，孤立散牌另扣 15。
  * 综合评估 §4.3 未设张数豁免：残局（N<10）同样按出牌单元计 P（见 §八 示例 2）。
  */
 internal fun netValue100(meld: Meld, level: Rank): Int =

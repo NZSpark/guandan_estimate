@@ -6,7 +6,7 @@ import nz.org.aotearoa.guandanscore.scoring.HandResult
 import nz.org.aotearoa.guandanscore.scoring.PartitionEvaluator
 
 /**
- * 手工拆牌返回结果的唯一入口。
+ * 手工组牌返回结果的唯一入口。
  *
  * 只接收子页面回传的 groups + 入口手牌/级牌；分值一律由 [PartitionEvaluator] 重算，
  * 不信任 Intent 里的 SPI/分子。Android Activity 只负责 Toast 与状态切换。
@@ -17,7 +17,7 @@ sealed interface MeldAdjustApplyResult {
 }
 
 object MeldAdjustApply {
-    const val INVALID = "手工拆牌结果无效，已保留原方案"
+    const val INVALID = "手工组牌结果无效，已保留原方案"
     const val HAND_CHANGED = "手牌已变化，请返回重新计算"
     const val LEVEL_CHANGED = "级牌已变化，请返回重新计算"
 

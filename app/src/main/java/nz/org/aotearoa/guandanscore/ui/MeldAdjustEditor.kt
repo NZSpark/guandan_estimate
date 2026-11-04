@@ -10,7 +10,7 @@ import nz.org.aotearoa.guandanscore.scoring.MeldType
 import nz.org.aotearoa.guandanscore.scoring.PartitionEvaluator
 import nz.org.aotearoa.guandanscore.scoring.validatePartition
 
-/** 手工拆牌的纯逻辑状态；不依赖 Android，可直接在 JVM 单测中驱动。 */
+/** 手工组牌的纯逻辑状态；不依赖 Android，可直接在 JVM 单测中驱动。 */
 data class MeldAdjustState(
     val hand: List<Card>,
     val level: Rank,
@@ -33,7 +33,7 @@ sealed interface MeldEditOutcome {
 enum class SplitMode { SINGLES, PRESET }
 
 /**
- * 手工拆牌事件状态机。
+ * 手工组牌事件状态机。
  *
  * 所有成功编辑都会让分区保持在「合法牌型 + 每张牌恰好一次」的状态；
  * 非法输入返回 [MeldEditOutcome.Rejected]，不把异常抛给 UI。
@@ -143,7 +143,7 @@ object MeldAdjustEditor {
             )
         } catch (e: Exception) {
             // JSONException 等解析错误也必须回退，不能把损坏草稿抛给 Activity。
-            MeldEditOutcome.Rejected(state, e.message ?: "手工拆牌草稿已失效，已恢复初始方案")
+            MeldEditOutcome.Rejected(state, e.message ?: "手工组牌草稿已失效，已恢复初始方案")
         }
 
     private fun applyGroups(state: MeldAdjustState, newGroups: List<MeldGroup>): MeldEditOutcome {
